@@ -1,0 +1,128 @@
+[project]
+name = "aetheris"
+version = "0.1.0"
+description = "Aetheris Health AI — Enterprise Hospital Management Platform"
+readme = "README.md"
+requires-python = ">=3.13"
+license = { text = "Proprietary" }
+authors = [
+    { name = "Aetheris Health", email = "dev@aetheris.health" },
+]
+
+dependencies = [
+    # Web framework
+    "fastapi>=0.115.0,<1.0.0",
+    "uvicorn[standard]>=0.34.0,<1.0.0",
+
+    # Database
+    "sqlalchemy>=2.0.36,<3.0.0",
+    "asyncpg>=0.30.0,<1.0.0",
+    "alembic>=1.14.0,<2.0.0",
+    "greenlet>=3.1.0,<4.0.0",
+
+    # Validation & settings
+    "pydantic>=2.10.0,<3.0.0",
+    "pydantic-settings>=2.7.0,<3.0.0",
+    "pydantic-extra-types>=2.10.0,<3.0.0",
+
+    # Logging
+    "structlog>=24.4.0,<25.0.0",
+
+    # Caching & queues
+    "redis>=5.2.0,<6.0.0",
+
+    # HTTP client (for AI providers, external APIs)
+    "httpx>=0.28.0,<1.0.0",
+
+    # Metrics
+    "prometheus-client>=0.21.0,<1.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0,<9.0.0",
+    "pytest-asyncio>=0.25.0,<1.0.0",
+    "pytest-cov>=6.0.0,<7.0.0",
+    "ruff>=0.8.0,<1.0.0",
+    "mypy>=1.14.0,<2.0.0",
+    "pre-commit>=4.1.0,<5.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=75.0.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["app"]
+include = ["app*"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "I",   # isort
+    "N",   # pep8-naming
+    "W",   # pycodestyle warnings
+    "UP",  # pyupgrade
+    "B",   # flake8-bugbear
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+]
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "B008",  # function call in default argument (FastAPI Depends uses this)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "lf"
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+warn_unused_configs = true
+disallow_any_unimported = false
+disallow_any_expr = false
+disallow_any_decorated = false
+disallow_any_explicit = false
+
+[[tool.mypy.overrides]]
+module = [
+    "alembic.*",
+    "alembic.context",
+    "asyncpg.*",
+    "pydantic_extra_types.*",
+]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+python_files = ["test_*.py"]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:alembic.*",
+]
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "app/tests/*",
+    "app/**/test_*.py",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "if TYPE_CHECKING:",
+    "def __repr__",
+    "raise NotImplementedError",
+]
