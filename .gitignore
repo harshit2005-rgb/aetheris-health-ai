@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+.venv/
+venv/
+env/
+
+# Environment Variables
+.env
+.env.*
+
+# Build & Packaging
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# Python Cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Database
+*.db
+*.sqlite3
+
+# Node (Frontend)
+node_modules/
+.next/
+dist/
+
+# Misc
+coverage/

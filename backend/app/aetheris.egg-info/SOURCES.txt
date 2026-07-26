@@ -1,6 +1,0 @@
-pyproject.toml
-app/aetheris.egg-info/PKG-INFO
-app/aetheris.egg-info/SOURCES.txt
-app/aetheris.egg-info/dependency_links.txt
-app/aetheris.egg-info/requires.txt
-app/aetheris.egg-info/top_level.txt
