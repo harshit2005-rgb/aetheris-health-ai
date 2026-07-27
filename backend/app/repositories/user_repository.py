@@ -63,10 +63,7 @@ class UserRepository(BaseRepository[User]):
         :param email: The user's email address.
         :returns: The user instance, or ``None``.
         """
-        stmt = (
-            self._query()
-            .where(User.hospital_id == hospital_id, User.email == email)
-        )
+        stmt = self._query().where(User.hospital_id == hospital_id, User.email == email)
         result = await self._session.execute(stmt)
         return result.unique().scalar_one_or_none()
 

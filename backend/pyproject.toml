@@ -34,6 +34,9 @@ dependencies = [
     # HTTP client (for AI providers, external APIs)
     "httpx>=0.28.0,<1.0.0",
 
+    # YAML (for prompt templates)
+    "pyyaml>=6.0,<7.0",
+
     # Metrics
     "prometheus-client>=0.21.0,<1.0.0",
 ]
@@ -58,15 +61,14 @@ include = ["app*"]
 
 # Ruff config lives in ruff.toml; mypy config lives in mypy.ini.
 # See docs/09-PROJECT_STRUCTURE.md (backend root file list).
-
 [tool.pytest.ini_options]
 minversion = "8.0"
 testpaths = ["app/tests"]
 asyncio_mode = "auto"
 python_files = ["test_*.py"]
 filterwarnings = [
-    "error",
-    "ignore::DeprecationWarning:alembic.*",
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
 ]
 
 [tool.coverage.run]

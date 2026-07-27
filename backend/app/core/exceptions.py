@@ -47,8 +47,17 @@ class ConfigurationError(AetherisError):
     traffic.
     """
 
-    def __init__(self, message: str = "Application configuration error.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=500, error_code=ErrorCode.CONFIGURATION_ERROR)
+    def __init__(
+        self,
+        message: str = "Application configuration error.",
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            detail=detail,
+            status_code=500,
+            error_code=ErrorCode.CONFIGURATION_ERROR,
+        )
 
 
 class NotFoundError(AetherisError):
@@ -57,8 +66,12 @@ class NotFoundError(AetherisError):
     Maps to HTTP 404.
     """
 
-    def __init__(self, message: str = "Resource not found.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=404, error_code=ErrorCode.RESOURCE_NOT_FOUND)
+    def __init__(
+        self, message: str = "Resource not found.", detail: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(
+            message=message, detail=detail, status_code=404, error_code=ErrorCode.RESOURCE_NOT_FOUND
+        )
 
 
 class ValidationError(AetherisError):
@@ -68,8 +81,12 @@ class ValidationError(AetherisError):
     by FastAPI's built-in exception handler.)
     """
 
-    def __init__(self, message: str = "Validation failed.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=422, error_code=ErrorCode.VALIDATION_ERROR)
+    def __init__(
+        self, message: str = "Validation failed.", detail: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(
+            message=message, detail=detail, status_code=422, error_code=ErrorCode.VALIDATION_ERROR
+        )
 
 
 class BusinessRuleError(AetherisError):
@@ -81,8 +98,15 @@ class BusinessRuleError(AetherisError):
     - Applying a discount above the allowed threshold.
     """
 
-    def __init__(self, message: str = "Business rule violation.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=400, error_code=ErrorCode.BUSINESS_RULE_VIOLATION)
+    def __init__(
+        self, message: str = "Business rule violation.", detail: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(
+            message=message,
+            detail=detail,
+            status_code=400,
+            error_code=ErrorCode.BUSINESS_RULE_VIOLATION,
+        )
 
 
 class PermissionDeniedError(AetherisError):
@@ -91,8 +115,12 @@ class PermissionDeniedError(AetherisError):
     Maps to HTTP 403.
     """
 
-    def __init__(self, message: str = "Permission denied.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=403, error_code=ErrorCode.PERMISSION_DENIED)
+    def __init__(
+        self, message: str = "Permission denied.", detail: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(
+            message=message, detail=detail, status_code=403, error_code=ErrorCode.PERMISSION_DENIED
+        )
 
 
 class AuthenticationError(AetherisError):
@@ -101,8 +129,15 @@ class AuthenticationError(AetherisError):
     Maps to HTTP 401. Used by the auth module (Sprint 2+).
     """
 
-    def __init__(self, message: str = "Authentication required.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=401, error_code=ErrorCode.AUTHENTICATION_REQUIRED)
+    def __init__(
+        self, message: str = "Authentication required.", detail: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(
+            message=message,
+            detail=detail,
+            status_code=401,
+            error_code=ErrorCode.AUTHENTICATION_REQUIRED,
+        )
 
 
 class ConflictError(AetherisError):
@@ -114,8 +149,12 @@ class ConflictError(AetherisError):
     - Duplicate invoice number.
     """
 
-    def __init__(self, message: str = "Resource conflict.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=409, error_code=ErrorCode.RESOURCE_CONFLICT)
+    def __init__(
+        self, message: str = "Resource conflict.", detail: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(
+            message=message, detail=detail, status_code=409, error_code=ErrorCode.RESOURCE_CONFLICT
+        )
 
 
 class RateLimitError(AetherisError):
@@ -124,8 +163,14 @@ class RateLimitError(AetherisError):
     Maps to HTTP 429.
     """
 
-    def __init__(self, message: str = "Rate limit exceeded. Try again later.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=429, error_code=ErrorCode.RATE_LIMITED)
+    def __init__(
+        self,
+        message: str = "Rate limit exceeded. Try again later.",
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message, detail=detail, status_code=429, error_code=ErrorCode.RATE_LIMITED
+        )
 
 
 class ServiceUnavailableError(AetherisError):
@@ -134,5 +179,14 @@ class ServiceUnavailableError(AetherisError):
     Maps to HTTP 503.
     """
 
-    def __init__(self, message: str = "Service temporarily unavailable.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=503, error_code=ErrorCode.SERVICE_UNAVAILABLE)
+    def __init__(
+        self,
+        message: str = "Service temporarily unavailable.",
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            detail=detail,
+            status_code=503,
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )
