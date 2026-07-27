@@ -1,12 +1,14 @@
-"""Aetheris Core — Application configuration, security, logging, and foundational types.
+"""Aetheris Core — configuration, security, logging, and foundational types.
 
 This package contains cross-cutting concerns used by every other layer:
 
-- :attr:`config`: Pydantic Settings loaded from environment variables.
-- :attr:`constants`: Global constants, enums, and status codes.
-- :attr:`exceptions`: Base exception hierarchy for the entire application.
-- :attr:`logging`: Structured logging setup (structlog).
-- :attr:`lifecycle`: Application startup/shutdown event handlers.
+- :mod:`~app.core.config` — Pydantic Settings loaded from environment variables
+- :mod:`~app.core.constants` — global constants and enums
+- :mod:`~app.core.error_codes` — the ``error_code`` catalog
+- :mod:`~app.core.envelope` — standard response envelope builders
+- :mod:`~app.core.exceptions` — base exception hierarchy
+- :mod:`~app.core.logging` — structured logging setup (structlog)
+- :mod:`~app.core.lifecycle` — application startup/shutdown handlers
 """
 
 from app.core.config import settings
@@ -16,6 +18,8 @@ from app.core.constants import (
     APP_ENV_STAGING,
     DATABASE_MODEL_NAMING_CONVENTION,
 )
+from app.core.envelope import error_envelope, paginated_envelope, success_envelope
+from app.core.error_codes import ErrorCode
 from app.core.exceptions import (
     AetherisError,
     BusinessRuleError,
@@ -31,6 +35,10 @@ __all__ = [
     "APP_ENV_PRODUCTION",
     "APP_ENV_STAGING",
     "DATABASE_MODEL_NAMING_CONVENTION",
+    "ErrorCode",
+    "error_envelope",
+    "paginated_envelope",
+    "success_envelope",
     "AetherisError",
     "BusinessRuleError",
     "ConfigurationError",

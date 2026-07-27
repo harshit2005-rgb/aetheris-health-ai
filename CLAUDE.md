@@ -90,7 +90,7 @@ Break these and the PR is rejected. No exceptions.
 See `docs/10-DEVELOPMENT_GUIDE.md` Section on "Adding a Module." Summary:
 
 1. Read the module spec in `docs/modules/XX-<name>.md` fully
-2. Create the migration in `backend/alembic/versions/`
+2. Create the migration in `backend/migrations/versions/`
 3. Create the model in `backend/app/models/`
 4. Create the repository in `backend/app/repositories/`
 5. Create the service in `backend/app/services/`
@@ -153,7 +153,7 @@ Do not modify without asking:
 - `backend/app/core/security.py` (auth logic)
 - `backend/app/core/tenancy.py` (multi-tenant filter)
 - `backend/app/repositories/base.py` (base repository — enforces tenancy)
-- Any file under `backend/alembic/versions/` that's already been merged
+- Any file under `backend/migrations/versions/` that's already been merged
 - `docker-compose.yml`, `.github/workflows/`
 - `.env.example` (schema of env vars)
 - Any file in `docs/` — flag suggested changes, don't apply them

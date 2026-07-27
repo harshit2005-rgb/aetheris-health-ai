@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from app.core.config import settings
-from app.shared.database import create_session_factory, dispose_engine, initialize_database
+from app.database import create_session_factory, dispose_engine, initialize_database
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator

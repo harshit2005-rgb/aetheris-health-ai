@@ -13,16 +13,18 @@ These endpoints are **public** (no authentication required).
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import text
 
+# NOTE: ``AsyncSession`` must be imported at runtime, not under TYPE_CHECKING.
+# FastAPI resolves endpoint signatures against the module's real globals, so a
+# TYPE_CHECKING-only import raises NameError at route registration.
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from app.api.dependencies import get_db_session
 from app.core.config import settings
-
-if TYPE_CHECKING:
-    from sqlalchemy.ext.asyncio import AsyncSession
 
 router = APIRouter(tags=["health"])
 
