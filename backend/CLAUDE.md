@@ -21,24 +21,31 @@ You are in the backend of Aetheris Health AI. The root `../CLAUDE.md` is in effe
 
 ## Directory Layout
 
+Canonical map: [`docs/09-PROJECT_STRUCTURE.md`](../docs/09-PROJECT_STRUCTURE.md).
+
 ```
 backend/
 ├── app/
 │   ├── api/v1/            # FastAPI routers
-│   ├── core/              # config, security, DI, tenancy, exceptions
-│   ├── models/            # SQLAlchemy models
-│   ├── repositories/      # data access (one file per aggregate)
-│   ├── services/          # business logic (one file per aggregate)
+│   ├── api/dependencies/  # DI composition root (db, repositories, services, auth, ai)
+│   ├── core/              # config, security, error codes, envelope, exceptions, logging
+│   ├── database/          # declarative base, async engine, session factory
+│   ├── models/            # SQLAlchemy models (one module per aggregate)
+│   ├── repositories/      # data access (<domain>_repository.py per aggregate)
+│   ├── services/          # business logic (<domain>_service.py per aggregate)
 │   ├── schemas/           # Pydantic DTOs
 │   ├── ai/                # AI platform layer (providers, prompts, tools)
-│   ├── tasks/             # background jobs
+│   ├── middleware/        # request id, logging, rate limit, CORS
+│   ├── utils/             # pure helpers
+│   ├── background/        # background jobs (worker, scheduler, jobs/)
+│   ├── seeds/             # idempotent seed data
+│   ├── mcp/               # MCP tool wrappers (v2.1+)
+│   ├── tests/             # unit/, repository/, api/, integration/, ai_eval/
 │   └── main.py            # FastAPI app factory
-├── alembic/versions/      # migrations (append-only after merge)
-├── tests/
-│   ├── unit/
-│   ├── integration/
-│   └── factories/
-└── pyproject.toml
+├── migrations/versions/   # Alembic migrations (append-only after merge)
+├── pyproject.toml         # packaging, pytest, coverage
+├── ruff.toml              # linter/formatter config
+└── mypy.ini               # type checker config
 ```
 
 ---
@@ -104,6 +111,19 @@ Coverage floor: 70% overall, 100% on `app/core/security.py` and `app/services/bi
 
 ## Common Pitfalls
 
+- **Every `relationship()` must pass `foreign_keys=`.** The audit mixins put
+  `created_by` / `updated_by` / `deleted_by` foreign keys to `users.id` on
+  nearly every table, so almost any relationship involving `users` has more
+  than one FK path and SQLAlchemy raises `AmbiguousForeignKeysError` at mapper
+  configuration — which fails at import time, not at query time. Name the join
+  column explicitly: `foreign_keys="UserRole.user_id"`. We do this on *all*
+  relationships, not just the currently-ambiguous ones, so adding a second FK
+  later can't silently change a join.
+- **Annotations that FastAPI reads must be runtime imports, not
+  `if TYPE_CHECKING:`.** FastAPI resolves endpoint and dependency signatures
+  against the module's real globals, so a TYPE_CHECKING-only import raises
+  `NameError` when the route registers. `ruff --fix` will try to move them —
+  `app/api/**` is exempted from the `TC` rules in `ruff.toml` to prevent that.
 - Forgetting `await` on async calls (returns a coroutine, not a value)
 - Using `session.query()` (that's 1.x style) — use `select()` + `session.execute()`
 - Committing inside a repository — services own transactions

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from app.core.error_codes import ErrorCode
+
 
 class AetherisError(Exception):
     """Base exception for all application-level errors.
@@ -28,7 +30,7 @@ class AetherisError(Exception):
         message: str = "An unexpected error occurred.",
         detail: dict[str, Any] | None = None,
         status_code: int = 500,
-        error_code: str = "INTERNAL_ERROR",
+        error_code: ErrorCode = ErrorCode.INTERNAL_ERROR,
     ) -> None:
         self.message = message
         self.detail = detail or {}
@@ -46,7 +48,7 @@ class ConfigurationError(AetherisError):
     """
 
     def __init__(self, message: str = "Application configuration error.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=500, error_code="CONFIGURATION_ERROR")
+        super().__init__(message=message, detail=detail, status_code=500, error_code=ErrorCode.CONFIGURATION_ERROR)
 
 
 class NotFoundError(AetherisError):
@@ -56,7 +58,7 @@ class NotFoundError(AetherisError):
     """
 
     def __init__(self, message: str = "Resource not found.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=404, error_code="RESOURCE_NOT_FOUND")
+        super().__init__(message=message, detail=detail, status_code=404, error_code=ErrorCode.RESOURCE_NOT_FOUND)
 
 
 class ValidationError(AetherisError):
@@ -67,7 +69,7 @@ class ValidationError(AetherisError):
     """
 
     def __init__(self, message: str = "Validation failed.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=422, error_code="VALIDATION_ERROR")
+        super().__init__(message=message, detail=detail, status_code=422, error_code=ErrorCode.VALIDATION_ERROR)
 
 
 class BusinessRuleError(AetherisError):
@@ -80,7 +82,7 @@ class BusinessRuleError(AetherisError):
     """
 
     def __init__(self, message: str = "Business rule violation.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=400, error_code="BUSINESS_RULE_VIOLATION")
+        super().__init__(message=message, detail=detail, status_code=400, error_code=ErrorCode.BUSINESS_RULE_VIOLATION)
 
 
 class PermissionDeniedError(AetherisError):
@@ -90,7 +92,7 @@ class PermissionDeniedError(AetherisError):
     """
 
     def __init__(self, message: str = "Permission denied.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=403, error_code="PERMISSION_DENIED")
+        super().__init__(message=message, detail=detail, status_code=403, error_code=ErrorCode.PERMISSION_DENIED)
 
 
 class AuthenticationError(AetherisError):
@@ -100,7 +102,7 @@ class AuthenticationError(AetherisError):
     """
 
     def __init__(self, message: str = "Authentication required.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=401, error_code="AUTHENTICATION_REQUIRED")
+        super().__init__(message=message, detail=detail, status_code=401, error_code=ErrorCode.AUTHENTICATION_REQUIRED)
 
 
 class ConflictError(AetherisError):
@@ -113,7 +115,7 @@ class ConflictError(AetherisError):
     """
 
     def __init__(self, message: str = "Resource conflict.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=409, error_code="RESOURCE_CONFLICT")
+        super().__init__(message=message, detail=detail, status_code=409, error_code=ErrorCode.RESOURCE_CONFLICT)
 
 
 class RateLimitError(AetherisError):
@@ -123,7 +125,7 @@ class RateLimitError(AetherisError):
     """
 
     def __init__(self, message: str = "Rate limit exceeded. Try again later.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=429, error_code="RATE_LIMITED")
+        super().__init__(message=message, detail=detail, status_code=429, error_code=ErrorCode.RATE_LIMITED)
 
 
 class ServiceUnavailableError(AetherisError):
@@ -133,4 +135,4 @@ class ServiceUnavailableError(AetherisError):
     """
 
     def __init__(self, message: str = "Service temporarily unavailable.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=503, error_code="SERVICE_UNAVAILABLE")
+        super().__init__(message=message, detail=detail, status_code=503, error_code=ErrorCode.SERVICE_UNAVAILABLE)

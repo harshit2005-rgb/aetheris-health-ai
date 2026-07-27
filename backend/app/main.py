@@ -29,12 +29,13 @@ logger = structlog.get_logger(__name__)
 
 
 def create_app() -> FastAPI:
-    # Configure structured logging before any app-level logging occurs.
-    configure_logging()
     """Create and configure the FastAPI application.
 
     :returns: A fully configured :class:`FastAPI` instance.
     """
+    # Configure structured logging before any app-level logging occurs.
+    configure_logging()
+
     app = FastAPI(
         title=settings.APP_NAME,
         version="0.1.0",
@@ -123,6 +124,8 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
     Maps :class:`AetherisError` subclasses to structured JSON responses.
     """
+    from app.core.envelope import error_envelope
+    from app.core.error_codes import ErrorCode
     from app.core.exceptions import AetherisError
     from app.core.logging import get_logger
 
@@ -142,15 +145,12 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
         return JSONResponse(
             status_code=exc.status_code,
-            content={
-                "success": False,
-                "message": exc.message,
-                "errors": exc.detail if exc.detail else None,
-                "error_code": exc.error_code,
-                "metadata": {
-                    "request_id": getattr(request.state, "request_id", None),
-                },
-            },
+            content=error_envelope(
+                exc.message,
+                error_code=exc.error_code,
+                errors=exc.detail,
+                request_id=getattr(request.state, "request_id", None),
+            ),
         )
 
     @app.exception_handler(Exception)
@@ -167,15 +167,11 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
         return JSONResponse(
             status_code=500,
-            content={
-                "success": False,
-                "message": "An unexpected error occurred.",
-                "errors": None,
-                "error_code": "INTERNAL_ERROR",
-                "metadata": {
-                    "request_id": getattr(request.state, "request_id", None),
-                },
-            },
+            content=error_envelope(
+                "An unexpected error occurred.",
+                error_code=ErrorCode.INTERNAL_ERROR,
+                request_id=getattr(request.state, "request_id", None),
+            ),
         )
 
     logger.debug("exception_handlers_registered")

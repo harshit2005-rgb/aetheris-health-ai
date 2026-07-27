@@ -53,58 +53,15 @@ requires = ["setuptools>=75.0.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["app"]
+where = ["."]
 include = ["app*"]
 
-[tool.ruff]
-target-version = "py313"
-line-length = 100
-
-[tool.ruff.lint]
-select = [
-    "E",   # pycodestyle errors
-    "F",   # pyflakes
-    "I",   # isort
-    "N",   # pep8-naming
-    "W",   # pycodestyle warnings
-    "UP",  # pyupgrade
-    "B",   # flake8-bugbear
-    "SIM", # flake8-simplify
-    "TCH", # flake8-type-checking
-]
-ignore = [
-    "E501",  # line too long (handled by formatter)
-    "B008",  # function call in default argument (FastAPI Depends uses this)
-]
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-line-ending = "lf"
-
-[tool.mypy]
-python_version = "3.13"
-strict = true
-warn_unused_ignores = true
-warn_redundant_casts = true
-warn_unused_configs = true
-disallow_any_unimported = false
-disallow_any_expr = false
-disallow_any_decorated = false
-disallow_any_explicit = false
-
-[[tool.mypy.overrides]]
-module = [
-    "alembic.*",
-    "alembic.context",
-    "asyncpg.*",
-    "pydantic_extra_types.*",
-]
-ignore_missing_imports = true
+# Ruff config lives in ruff.toml; mypy config lives in mypy.ini.
+# See docs/09-PROJECT_STRUCTURE.md (backend root file list).
 
 [tool.pytest.ini_options]
 minversion = "8.0"
-testpaths = ["tests"]
+testpaths = ["app/tests"]
 asyncio_mode = "auto"
 python_files = ["test_*.py"]
 filterwarnings = [
