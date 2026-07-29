@@ -19,7 +19,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.api.v1 import health_router
+from app.api.v1 import auth_router, health_router, user_router
 from app.core.config import settings
 from app.core.constants import API_DOCS_URL, API_OPENAPI_URL, API_REDOC_URL, API_V1_PREFIX
 from app.core.lifecycle import lifespan
@@ -113,8 +113,17 @@ def _register_routers(app: FastAPI) -> None:
         prefix=API_V1_PREFIX,
     )
 
-    # Future modules will be added here:
-    # app.include_router(auth_router, prefix=API_V1_PREFIX)
+    # Auth routes — public endpoints + authenticated endpoints
+    app.include_router(
+        auth_router,
+        prefix=API_V1_PREFIX,
+    )
+
+    # User management routes
+    app.include_router(
+        user_router,
+        prefix=API_V1_PREFIX,
+    )
 
     logger.debug("routers_registered")
 

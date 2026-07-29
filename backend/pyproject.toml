@@ -28,6 +28,15 @@ dependencies = [
     # Logging
     "structlog>=24.4.0,<25.0.0",
 
+    # Auth
+    "passlib[argon2]>=1.7.4,<2.0.0",
+    "pyjwt>=2.10.0,<3.0.0",
+    "bcrypt>=4.2.0,<5.0.0",
+    "pyotp>=2.9.0,<3.0.0",
+
+    # Cryptography
+    "cryptography>=44.0.0,<45.0.0",
+
     # Caching & queues
     "redis>=5.2.0,<6.0.0",
 
@@ -67,6 +76,8 @@ python_files = ["test_*.py"]
 filterwarnings = [
     "error",
     "ignore::DeprecationWarning:alembic.*",
+    "ignore::DeprecationWarning:argon2.*",
+    "ignore::DeprecationWarning:passlib.*",
 ]
 
 [tool.coverage.run]
