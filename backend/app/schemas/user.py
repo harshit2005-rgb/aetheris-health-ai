@@ -6,8 +6,8 @@ See ``docs/modules/02-user-management.md`` §9 for the API contract.
 
 from __future__ import annotations
 
-import uuid
-from datetime import datetime
+import uuid  # noqa: TC003 — used in Pydantic field annotations
+from datetime import datetime  # noqa: TC003 — used in Pydantic field annotations
 
 from pydantic import BaseModel, EmailStr, Field
 

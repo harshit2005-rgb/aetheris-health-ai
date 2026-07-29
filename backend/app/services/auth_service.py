@@ -9,7 +9,7 @@ from __future__ import annotations
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING
 
 import structlog
 
@@ -30,9 +30,13 @@ from app.core.security import (
     verify_totp_code,
 )
 from app.models.user import User, UserStatus
-from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
-from app.repositories.refresh_token_repository import RefreshTokenRepository
-from app.repositories.user_repository import UserRepository
+
+if TYPE_CHECKING:
+    from typing import Any
+
+    from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
+    from app.repositories.refresh_token_repository import RefreshTokenRepository
+    from app.repositories.user_repository import UserRepository
 
 logger = structlog.get_logger(__name__)
 

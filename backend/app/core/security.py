@@ -13,15 +13,17 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import jwt as pyjwt
 import pyotp
 from passlib.context import CryptContext
 
 from app.core.config import settings
+
+if TYPE_CHECKING:
+    import uuid
 
 # ── Password Hashing (Argon2id) ─────────────────────────────────────────────
 # CryptContext manages scheme deprecation and migration transparently.
@@ -45,7 +47,7 @@ def hash_password(password: str) -> str:
     :param password: The plaintext password.
     :returns: The password hash string (includes algorithm, salt, and parameters).
     """
-    return _pwd_context.hash(password)
+    return str(_pwd_context.hash(password))
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -59,7 +61,7 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     :param hashed_password: The stored password hash.
     :returns: ``True`` if the password matches.
     """
-    return _pwd_context.verify(plain_password, hashed_password)
+    return bool(_pwd_context.verify(plain_password, hashed_password))
 
 
 def password_needs_rehash(hashed_password: str) -> bool:
@@ -68,7 +70,7 @@ def password_needs_rehash(hashed_password: str) -> bool:
     :param hashed_password: The stored password hash.
     :returns: ``True`` if the hash was created with a deprecated scheme.
     """
-    return _pwd_context.needs_update(hashed_password)
+    return bool(_pwd_context.needs_update(hashed_password))
 
 
 # ── JWT Token Management ────────────────────────────────────────────────────

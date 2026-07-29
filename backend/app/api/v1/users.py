@@ -6,7 +6,6 @@ See ``docs/modules/02-user-management.md`` §9 for the full API contract.
 from __future__ import annotations
 
 import uuid
-
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
