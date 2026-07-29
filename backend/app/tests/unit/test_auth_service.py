@@ -12,7 +12,12 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.core.exceptions import AuthenticationError, BusinessRuleError
+from app.core.exceptions import (
+    AccountLockedError,
+    AccountSuspendedError,
+    AuthenticationError,
+    BusinessRuleError,
+)
 from app.core.security import hash_password
 from app.models.user import User, UserStatus
 
@@ -167,26 +172,35 @@ class TestLogin:
     async def test_login_suspended_account(
         self: Any, auth_service: Any, mock_user_repo: Any
     ) -> None:
-        """Suspended account returns generic error."""
+        """Suspended account returns 403 ACCOUNT_SUSPENDED with no unlock time."""
         user = _make_user({"status": UserStatus.SUSPENDED})
         mock_user_repo.get_by_email_cross_tenant.return_value = user
 
-        with pytest.raises(AuthenticationError, match="Invalid credentials."):
+        with pytest.raises(AccountSuspendedError) as exc_info:
             await auth_service.login(
                 email="test@hospital.test",
                 password="TestPass@123",
             )
+
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.error_code == "ACCOUNT_SUSPENDED"
+        assert "unlock_at" not in exc_info.value.detail
 
     async def test_login_locked_account(self: Any, auth_service: Any, mock_user_repo: Any) -> None:
-        """Locked account returns generic error."""
-        user = _make_user({"locked_until": datetime.now(UTC) + timedelta(hours=1)})
+        """Locked account returns 403 ACCOUNT_LOCKED carrying the unlock instant."""
+        unlock_at = datetime.now(UTC) + timedelta(hours=1)
+        user = _make_user({"locked_until": unlock_at})
         mock_user_repo.get_by_email_cross_tenant.return_value = user
 
-        with pytest.raises(AuthenticationError, match="Invalid credentials."):
+        with pytest.raises(AccountLockedError) as exc_info:
             await auth_service.login(
                 email="test@hospital.test",
                 password="TestPass@123",
             )
+
+        assert exc_info.value.status_code == 403
+        assert exc_info.value.error_code == "ACCOUNT_LOCKED"
+        assert exc_info.value.detail["unlock_at"].endswith("Z")
 
 
 # ── Token Refresh Tests ────────────────────────────────────────────────────

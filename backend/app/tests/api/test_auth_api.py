@@ -13,18 +13,19 @@ row back can.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app.api.dependencies.db import get_db_session
 from app.core.security import hash_password
 from app.main import create_app
 from app.models.refresh_token import RefreshToken
-from app.models.user import User
+from app.models.user import User, UserStatus
 
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
@@ -181,7 +182,32 @@ class TestFailedLoginLockout:
         assert attempts >= settings.MAX_FAILED_LOGIN_ATTEMPTS
         assert locked_until is not None
 
-    async def test_a_locked_account_cannot_log_in_with_the_correct_password(
+    async def test_a_locked_account_returns_403_with_the_unlock_time(
+        self, api: AsyncClient, account: dict[str, Any]
+    ) -> None:
+        # docs/modules/01-authentication.md §5.2: a lockout is reported as 403
+        # ACCOUNT_LOCKED with the unlock time, not as generic invalid
+        # credentials — the user needs to know when they can retry.
+        from app.core.config import settings
+
+        for _ in range(settings.MAX_FAILED_LOGIN_ATTEMPTS):
+            await api.post(
+                "/api/v1/auth/login",
+                json={"email": account["email"], "password": "WrongPassw0rd!"},
+            )
+
+        response = await api.post(
+            "/api/v1/auth/login", json={"email": account["email"], "password": PASSWORD}
+        )
+
+        assert response.status_code == 403
+        body = response.json()
+        assert body["success"] is False
+        assert body["error_code"] == "ACCOUNT_LOCKED"
+        assert body["message"] == "Account is locked."
+        assert "unlock_at" in body["errors"]
+
+    async def test_the_unlock_time_is_an_iso_8601_utc_instant_in_the_future(
         self, api: AsyncClient, account: dict[str, Any]
     ) -> None:
         from app.core.config import settings
@@ -196,7 +222,34 @@ class TestFailedLoginLockout:
             "/api/v1/auth/login", json={"email": account["email"], "password": PASSWORD}
         )
 
-        assert response.status_code != 200
+        unlock_at = response.json()["errors"]["unlock_at"]
+        # docs/06-API_STANDARDS.md §17: ISO 8601 with an explicit zone. A naive
+        # timestamp would leave the client guessing which clock it refers to.
+        assert unlock_at.endswith("Z"), unlock_at
+        parsed = datetime.fromisoformat(unlock_at.replace("Z", "+00:00"))
+        assert parsed.tzinfo is not None
+        now = datetime.now(UTC)
+        assert now < parsed <= now + timedelta(minutes=settings.ACCOUNT_LOCKOUT_MINUTES + 1)
+
+    async def test_a_suspended_account_returns_403_without_an_unlock_time(
+        self, api: AsyncClient, db_session: AsyncSession, account: dict[str, Any]
+    ) -> None:
+        # Suspension is lifted by an administrator, not by the clock, so there
+        # is no unlock time to report (§5.2 specifies none).
+        await db_session.execute(
+            update(User).where(User.id == account["id"]).values(status=UserStatus.SUSPENDED)
+        )
+        await db_session.flush()
+
+        response = await api.post(
+            "/api/v1/auth/login", json={"email": account["email"], "password": PASSWORD}
+        )
+
+        assert response.status_code == 403
+        body = response.json()
+        assert body["error_code"] == "ACCOUNT_SUSPENDED"
+        assert body["message"] == "Account is suspended."
+        assert body["errors"] is None
 
 
 class TestRefreshRotation:
