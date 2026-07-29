@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import structlog
 from fastapi import FastAPI, Request
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.v1 import auth_router, health_router, user_router
@@ -75,39 +74,62 @@ def create_app() -> FastAPI:
 def _register_middleware(app: FastAPI) -> None:
     """Register ASGI middleware on the application.
 
-    Order matters: middleware is applied in reverse order of registration
-    (last registered = first executed).
-    """
-    # CORS — must be one of the outermost middleware layers
-    if settings.CORS_ORIGINS:
-        app.add_middleware(
-            CORSMiddleware,
-            allow_origins=settings.CORS_ORIGINS,
-            allow_credentials=True,
-            allow_methods=["*"],
-            allow_headers=["*"],
-            expose_headers=[
-                "X-Request-ID",
-                "X-RateLimit-Limit",
-                "X-RateLimit-Remaining",
-                "X-RateLimit-Reset",
-            ],
-        )
-        logger.debug("cors_middleware_configured", origins=settings.CORS_ORIGINS)
+    Order matters: middleware is applied in reverse order of registration.
+    The **last** registered middleware wraps everything and runs **first**
+    on each request (outermost layer).
 
-    # Additional middleware will be added in future sprints:
-    # - Request ID middleware (Sprint 2)
-    # - Structured logging middleware (Sprint 2)
-    # - Rate limiting middleware (Sprint 3)
-    # - Authentication middleware (Sprint 2 + 3)
+    Execution order (outermost → innermost):
+    1. ExceptionHandler (catches errors from all inner layers)
+    2. Auth (extracts user context from JWT)
+    3. RequestLogging
+    4. RequestID
+    5. RateLimit
+    6. CORS
+    """
+    from app.middleware.auth import AuthMiddleware
+    from app.middleware.cors import add_cors_middleware
+    from app.middleware.exception_handler import ExceptionHandlerMiddleware
+    from app.middleware.logging import RequestLoggingMiddleware
+    from app.middleware.rate_limit import RateLimitMiddleware
+    from app.middleware.request_id import RequestIDMiddleware
+
+    # 6. Exception handler — outermost, wraps everything
+    app.add_middleware(ExceptionHandlerMiddleware)
+
+    # 5. Auth
+    app.add_middleware(AuthMiddleware)
+
+    # 4. Request logging (captures request_id from state)
+    app.add_middleware(RequestLoggingMiddleware)
+
+    # 3. Request ID (sets request.state.request_id for inner layers)
+    app.add_middleware(RequestIDMiddleware)
+
+    # 2. Rate limiting
+    app.add_middleware(RateLimitMiddleware)
+
+    # 1. CORS — innermost, closest to route handler
+    add_cors_middleware(app)
+
+    logger.debug("middleware_registered")
 
 
 def _register_routers(app: FastAPI) -> None:
     """Register all API routers on the application.
 
-    Each router is mounted at ``API_V1_PREFIX + router_prefix``.
+    Routers mounted **without** a prefix (root-level routes):
+    - :mod:`app.api.root_health` — K8s health probes (``/healthz``, ``/readyz``, ``/version``)
+
+    Routers mounted at ``API_V1_PREFIX``:
+    - :mod:`app.api.v1.health` — versioned health endpoint suite
+    - Future modules (auth, patients, etc.)
     """
-    # Health endpoints — public, no auth required
+    from app.api.root_health import router as root_health_router
+
+    # Root-level routes for K8s probes and Sprint 0 compliance.
+    app.include_router(root_health_router)
+
+    # Versioned API routes under /api/v1/
     app.include_router(
         health_router,
         prefix=API_V1_PREFIX,

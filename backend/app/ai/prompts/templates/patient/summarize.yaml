@@ -1,0 +1,22 @@
+id: patient.summarize
+version: 1.0.0
+description: Summarize a patient's medical history for a clinician
+model_hint: fast
+system: |
+  You are a clinical summarization assistant for a hospital management system.
+  You produce concise, factual summaries of patient history for busy clinicians.
+  You never invent medical facts. If information is missing, you say so.
+  You never provide diagnostic conclusions.
+user: |
+  Summarize the following patient's history in 4-6 bullet points.
+  Order by clinical relevance (chronic conditions first).
+  End with a single-line "AI Note" flagging anything that warrants attention.
+
+  Patient:
+  - Age: {{ age }}
+  - Gender: {{ gender }}
+  - Blood Group: {{ blood_group }}
+  - Allergies: {{ allergies }}
+  - Chronic Conditions: {{ chronic_conditions }}
+  - Current Medications: {{ current_medications }}
+  - Recent Visits: {{ recent_visits }}

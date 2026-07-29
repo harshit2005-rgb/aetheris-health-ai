@@ -52,19 +52,24 @@ class RefreshToken(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         comment="UUID of the token owner.",
     )
     token_hash: Mapped[str] = mapped_column(
-        String(128), nullable=False,
+        String(128),
+        nullable=False,
         comment="SHA-256 hash of the opaque refresh token. Used for O(1) lookup.",
     )
     expires_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), nullable=False,
+        DateTime(timezone=True),
+        nullable=False,
         comment="Token expiration timestamp (UTC). Default 7 days from issuance.",
     )
     is_revoked: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False,
+        Boolean,
+        nullable=False,
+        default=False,
         comment="Whether this token has been revoked.",
     )
     revoked_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
         comment="Timestamp when this token was revoked.",
     )
     rotated_by_token_id: Mapped[uuid.UUID | None] = mapped_column(
@@ -74,11 +79,13 @@ class RefreshToken(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         comment="UUID of the replacement token. NULL = current token. Enables rotation chain tracking.",
     )
     device_info: Mapped[str | None] = mapped_column(
-        String(255), nullable=True,
+        String(255),
+        nullable=True,
         comment="User-agent or device description at issuance.",
     )
     ip_address: Mapped[str | None] = mapped_column(
-        INET, nullable=True,
+        INET,
+        nullable=True,
         comment="IP address at token issuance.",
     )
 
@@ -110,7 +117,5 @@ class RefreshToken(UUIDPrimaryKeyMixin, TimestampMixin, Base):
 
     def __repr__(self) -> str:
         return (
-            f"<RefreshToken id={self.id!s:.8} "
-            f"user={self.user_id!s:.8} "
-            f"revoked={self.is_revoked}>"
+            f"<RefreshToken id={self.id!s:.8} user={self.user_id!s:.8} revoked={self.is_revoked}>"
         )

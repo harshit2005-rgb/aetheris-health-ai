@@ -70,31 +70,40 @@ class User(UUIDPrimaryKeyMixin, CommonColumnsMixin, Base):
     )
     status: Mapped[UserStatus] = mapped_column(
         SQLEnum(UserStatus, name="user_status", create_type=True),
-        nullable=False, default=UserStatus.ACTIVE,
+        nullable=False,
+        default=UserStatus.ACTIVE,
         comment="Current account status (active, suspended, invited).",
     )
     last_login_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
         comment="Timestamp of last successful login.",
     )
     password_changed_at: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
         comment="Timestamp of last password change.",
     )
     failed_login_attempts: Mapped[int] = mapped_column(
-        Integer, nullable=False, default=0,
+        Integer,
+        nullable=False,
+        default=0,
         comment="Consecutive failed login attempts.",
     )
     locked_until: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True,
+        DateTime(timezone=True),
+        nullable=True,
         comment="Account is locked until this timestamp.",
     )
     mfa_enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False,
+        Boolean,
+        nullable=False,
+        default=False,
         comment="Whether MFA/TOTP is enabled.",
     )
     mfa_secret: Mapped[str | None] = mapped_column(
-        Text, nullable=True,
+        Text,
+        nullable=True,
         comment="Encrypted TOTP secret. NULL if MFA is not set up.",
     )
 

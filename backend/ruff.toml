@@ -22,6 +22,7 @@ select = [
 ignore = [
     "E501",  # line too long (handled by formatter)
     "B008",  # function call in default argument (FastAPI Depends uses this)
+    "UP046", # Generic[T] subclass pattern (incompatible with Pydantic PEP 695)
 ]
 
 [lint.per-file-ignores]
@@ -30,6 +31,12 @@ ignore = [
 # which is exactly what the TC rules autofix does — raises NameError when the
 # route is registered. Keep the imports at runtime here.
 "app/api/**/*.py" = ["TC"]
+# Infrastructure files (middleware, utils, ai) also use Starlette/FastAPI
+# annotations in their method signatures. Since these are base classes and
+# protocol definitions, the annotations must be importable at runtime.
+"app/middleware/**/*.py" = ["TC"]
+"app/utils/**/*.py" = ["TC"]
+"app/ai/**/*.py" = ["TC"]
 
 [format]
 quote-style = "double"

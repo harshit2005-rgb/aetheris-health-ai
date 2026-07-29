@@ -43,15 +43,19 @@ class Role(UUIDPrimaryKeyMixin, CommonColumnsMixin, Base):
         comment="UUID of the hospital this role belongs to. NULL for system roles.",
     )
     name: Mapped[str] = mapped_column(
-        String(100), nullable=False,
+        String(100),
+        nullable=False,
         comment="Display name (e.g. 'Doctor', 'Receptionist').",
     )
     description: Mapped[str | None] = mapped_column(
-        Text, nullable=True,
+        Text,
+        nullable=True,
         comment="Human-readable description of the role.",
     )
     is_system: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=False,
+        Boolean,
+        nullable=False,
+        default=False,
         comment="System roles cannot be deleted or modified.",
     )
 

@@ -57,7 +57,10 @@ class Hospital(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         String(3), nullable=False, default="INR", comment="ISO 4217 currency code (e.g. INR, USD)."
     )
     timezone: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="Asia/Kolkata", comment="IANA timezone (e.g. Asia/Kolkata)."
+        String(50),
+        nullable=False,
+        default="Asia/Kolkata",
+        comment="IANA timezone (e.g. Asia/Kolkata).",
     )
     locale: Mapped[str] = mapped_column(
         String(10), nullable=False, default="en-IN", comment="Locale for formatting and i18n."
@@ -66,11 +69,16 @@ class Hospital(UUIDPrimaryKeyMixin, TimestampMixin, Base):
         Text, nullable=True, comment="URL to the hospital logo (stored in object storage)."
     )
     settings: Mapped[dict[str, Any]] = mapped_column(
-        JSONB, nullable=False, default=dict, server_default="{}",
+        JSONB,
+        nullable=False,
+        default=dict,
+        server_default="{}",
         comment="Hospital configuration (feature flags, hours, policies).",
     )
     is_active: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True,
+        Boolean,
+        nullable=False,
+        default=True,
         comment="Whether the hospital is active. Deactivate rather than delete.",
     )
 
