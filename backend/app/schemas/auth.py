@@ -6,7 +6,7 @@ See ``docs/modules/01-authentication.md`` §9 for the API contract.
 
 from __future__ import annotations
 
-import uuid
+import uuid  # noqa: TC003 — used in Pydantic field annotations
 
 from pydantic import BaseModel, EmailStr, Field
 
