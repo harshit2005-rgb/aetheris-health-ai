@@ -170,17 +170,16 @@ class UserRepository(BaseRepository[User]):
         :param role_id: The role's UUID.
         :returns: ``True`` if the user has the role.
         """
-        stmt = (
-            select(UserRole)
-            .where(
-                UserRole.user_id == user_id,
-                UserRole.role_id == role_id,
-            )
+        stmt = select(UserRole).where(
+            UserRole.user_id == user_id,
+            UserRole.role_id == role_id,
         )
         result = await self._session.execute(stmt)
         return result.unique().scalar_one_or_none() is not None
 
-    async def add_role(self, user_id: uuid.UUID, role_id: uuid.UUID, assigned_by: uuid.UUID | None = None) -> UserRole:
+    async def add_role(
+        self, user_id: uuid.UUID, role_id: uuid.UUID, assigned_by: uuid.UUID | None = None
+    ) -> UserRole:
         """Assign a role to a user.
 
         :param user_id: The user's UUID.
@@ -204,12 +203,9 @@ class UserRepository(BaseRepository[User]):
         :param role_id: The role's UUID.
         :returns: ``True`` if a role was removed, ``False`` if it wasn't assigned.
         """
-        stmt = (
-            select(UserRole)
-            .where(
-                UserRole.user_id == user_id,
-                UserRole.role_id == role_id,
-            )
+        stmt = select(UserRole).where(
+            UserRole.user_id == user_id,
+            UserRole.role_id == role_id,
         )
         result = await self._session.execute(stmt)
         user_role = result.unique().scalar_one_or_none()

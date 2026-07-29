@@ -129,15 +129,32 @@ class Settings(BaseSettings):
         description="RSA public key for JWT verification (PEM). If None, uses HS256 with APP_SECRET_KEY.",
     )
     JWT_ISSUER: str = Field(default="aetheris", description="JWT issuer claim (iss)")
-    JWT_ACCESS_TTL_SECONDS: int = Field(default=900, ge=60, le=86400, description="Access token TTL in seconds (default 15 min)")
-    JWT_REFRESH_TTL_SECONDS: int = Field(default=604800, ge=3600, le=2592000, description="Refresh token TTL in seconds (default 7 days)")
-    JWT_LEEWAY_SECONDS: int = Field(default=60, description="Clock skew leeway for JWT validation (seconds)")
+    JWT_ACCESS_TTL_SECONDS: int = Field(
+        default=900, ge=60, le=86400, description="Access token TTL in seconds (default 15 min)"
+    )
+    JWT_REFRESH_TTL_SECONDS: int = Field(
+        default=604800,
+        ge=3600,
+        le=2592000,
+        description="Refresh token TTL in seconds (default 7 days)",
+    )
+    JWT_LEEWAY_SECONDS: int = Field(
+        default=60, description="Clock skew leeway for JWT validation (seconds)"
+    )
 
     # ── Auth Policy ─────────────────────────────────────────────────────────
-    PASSWORD_MIN_LENGTH: int = Field(default=12, ge=8, le=128, description="Minimum password length")
-    MAX_FAILED_LOGIN_ATTEMPTS: int = Field(default=5, ge=1, le=20, description="Max failed attempts before lockout")
-    ACCOUNT_LOCKOUT_MINUTES: int = Field(default=30, ge=1, le=1440, description="Account lockout duration in minutes")
-    PASSWORD_RESET_TOKEN_TTL_MINUTES: int = Field(default=30, ge=5, le=1440, description="Password reset token lifetime in minutes")
+    PASSWORD_MIN_LENGTH: int = Field(
+        default=12, ge=8, le=128, description="Minimum password length"
+    )
+    MAX_FAILED_LOGIN_ATTEMPTS: int = Field(
+        default=5, ge=1, le=20, description="Max failed attempts before lockout"
+    )
+    ACCOUNT_LOCKOUT_MINUTES: int = Field(
+        default=30, ge=1, le=1440, description="Account lockout duration in minutes"
+    )
+    PASSWORD_RESET_TOKEN_TTL_MINUTES: int = Field(
+        default=30, ge=5, le=1440, description="Password reset token lifetime in minutes"
+    )
 
     # ── Rate Limiting ──────────────────────────────────────────────────────
     RATE_LIMIT_ANON_PER_MIN: int = Field(
