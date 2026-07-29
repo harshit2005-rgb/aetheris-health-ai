@@ -24,6 +24,11 @@ dependencies = [
     "pydantic>=2.10.0,<3.0.0",
     "pydantic-settings>=2.7.0,<3.0.0",
     "pydantic-extra-types>=2.10.0,<3.0.0",
+    # Required by pydantic.EmailStr, which app/schemas/{auth,user}.py already
+    # use. Without it `from app.main import create_app` raises ImportError, so
+    # the application cannot start. Declaring an existing requirement, not
+    # adding a new dependency.
+    "email-validator>=2.0.0,<3.0.0",
 
     # Logging
     "structlog>=24.4.0,<25.0.0",
