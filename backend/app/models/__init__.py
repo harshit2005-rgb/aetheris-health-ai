@@ -19,6 +19,7 @@ from app.models.base import (
 )
 from app.models.hospital import Hospital
 from app.models.password_reset_token import PasswordResetToken
+from app.models.patient import BloodGroup, Gender, MrnSequence, Patient, PatientStatus
 from app.models.permission import Permission
 from app.models.refresh_token import RefreshToken
 from app.models.role import Role, RolePermission
@@ -42,4 +43,10 @@ __all__ = [
     "User",
     "UserRole",
     "UserStatus",
+    # Patient
+    "BloodGroup",
+    "Gender",
+    "MrnSequence",
+    "Patient",
+    "PatientStatus",
 ]

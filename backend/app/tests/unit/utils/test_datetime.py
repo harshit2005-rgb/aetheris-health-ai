@@ -13,6 +13,7 @@ from app.utils.datetime import (
     format_iso,
     parse_iso,
     start_of_day,
+    subtract_years,
     to_timezone,
     to_utc,
     utc_now,
@@ -141,3 +142,27 @@ class TestToUtc:
         dt = datetime(2026, 7, 27, 16, 0, 0, tzinfo=ZoneInfo("Asia/Kolkata"))
         result = to_utc(dt)
         assert result == datetime(2026, 7, 27, 10, 30, 0, tzinfo=UTC)
+
+
+class TestSubtractYears:
+    """Calendar-year subtraction — the inverse of :func:`age`."""
+
+    def test_subtract_years_returns_the_same_day_and_month(self) -> None:
+        assert subtract_years(date(2026, 7, 27), 40) == date(1986, 7, 27)
+
+    def test_subtract_years_by_zero_is_the_identity(self) -> None:
+        assert subtract_years(date(2026, 7, 27), 0) == date(2026, 7, 27)
+
+    def test_subtract_years_clamps_a_leap_day_to_the_28th(self) -> None:
+        # 2023 is not a leap year, so 29 February does not exist there.
+        assert subtract_years(date(2024, 2, 29), 1) == date(2023, 2, 28)
+
+    def test_subtract_years_rejects_a_negative_count(self) -> None:
+        with pytest.raises(ValueError, match="must not be negative"):
+            subtract_years(date(2026, 7, 27), -1)
+
+    def test_subtract_years_inverts_age_at_the_boundary(self) -> None:
+        # Someone born exactly N years ago today is N — this is the identity an
+        # age-range filter relies on when converting bounds to birth dates.
+        today = date(2026, 7, 27)
+        assert age(subtract_years(today, 40), today) == 40

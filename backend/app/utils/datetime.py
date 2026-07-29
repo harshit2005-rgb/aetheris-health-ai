@@ -156,6 +156,31 @@ def age(birth_date: date, reference: date | None = None) -> int:
     return years
 
 
+def subtract_years(value: date, years: int) -> date:
+    """Return the same calendar date ``years`` earlier.
+
+    29 February has no counterpart in a non-leap year; it clamps to 28
+    February, which is the convention every civil-age calculation uses.
+
+    Complements :func:`age`: ``age`` maps a birth date to a number of years,
+    this maps a number of years back to a birth date, which is what an
+    age-range filter needs in order to stay index-friendly in SQL.
+
+    :param value: The starting date.
+    :param years: Number of years to subtract. Must not be negative.
+    :returns: The shifted date.
+    :raises ValueError: If ``years`` is negative.
+    """
+    if years < 0:
+        msg = "years must not be negative."
+        raise ValueError(msg)
+    try:
+        return value.replace(year=value.year - years)
+    except ValueError:
+        # Only reachable for 29 February in a target year that is not a leap year.
+        return value.replace(year=value.year - years, day=28)
+
+
 __all__ = [
     "age",
     "date_range",
@@ -163,6 +188,7 @@ __all__ = [
     "format_iso",
     "parse_iso",
     "start_of_day",
+    "subtract_years",
     "to_timezone",
     "to_utc",
     "utc_now",

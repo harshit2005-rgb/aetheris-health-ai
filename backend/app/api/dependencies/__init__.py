@@ -16,15 +16,27 @@ Usage::
 from app.api.dependencies.db import get_db_session
 from app.api.dependencies.repositories import (
     get_hospital_repository,
+    get_mrn_sequence_repository,
+    get_patient_repository,
     get_permission_repository,
     get_refresh_token_repository,
     get_role_repository,
     get_user_repository,
 )
+from app.api.dependencies.services import (
+    get_audit_sink,
+    get_mrn_service,
+    get_patient_service,
+)
 
 __all__ = [
+    "get_audit_sink",
     "get_db_session",
     "get_hospital_repository",
+    "get_mrn_sequence_repository",
+    "get_mrn_service",
+    "get_patient_repository",
+    "get_patient_service",
     "get_permission_repository",
     "get_refresh_token_repository",
     "get_role_repository",
