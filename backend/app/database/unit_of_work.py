@@ -22,8 +22,9 @@ from the caller (or from the DI system), keeping session lifecycle management
 in the request scope.
 """
 
-from contextlib import asynccontextmanager
 from __future__ import annotations
+
+from contextlib import asynccontextmanager
 
 from typing import TYPE_CHECKING, Any
 

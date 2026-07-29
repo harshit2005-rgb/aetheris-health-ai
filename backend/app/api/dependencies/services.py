@@ -49,7 +49,6 @@ from app.repositories import (
 from app.services.auth_service import AuthService
 from app.services.user_service import UserService
 
-
 # ── Dependency type aliases ──────────────────────────────────────────────────
 _Session = Annotated[AsyncSession, Depends(get_db_session)]
 
