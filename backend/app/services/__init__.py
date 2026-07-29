@@ -8,3 +8,11 @@ Placement rule (``docs/09-PROJECT_STRUCTURE.md``): a new service goes in
 ``app/services/<domain>_service.py`` and is wired for DI in
 ``app/api/dependencies/services.py``.
 """
+
+from app.services.mrn_service import MRNService
+from app.services.patient_service import PatientService
+
+__all__ = [
+    "MRNService",
+    "PatientService",
+]
