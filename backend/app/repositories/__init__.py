@@ -21,6 +21,7 @@ Placement rule (``docs/09-PROJECT_STRUCTURE.md``): a new repository goes in
 
 from app.repositories.base import BaseRepository
 from app.repositories.hospital_repository import HospitalRepository
+from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
 from app.repositories.permission_repository import PermissionRepository
 from app.repositories.refresh_token_repository import RefreshTokenRepository
 from app.repositories.role_repository import RoleRepository
@@ -29,6 +30,7 @@ from app.repositories.user_repository import UserRepository
 __all__ = [
     "BaseRepository",
     "HospitalRepository",
+    "PasswordResetTokenRepository",
     "PermissionRepository",
     "RefreshTokenRepository",
     "RoleRepository",
