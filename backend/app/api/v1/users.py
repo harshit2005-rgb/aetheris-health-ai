@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Query
 
 from app.api.dependencies.auth import get_current_user, require_permission
 from app.api.dependencies.services import get_auth_service, get_user_service
-from app.core.envelope import success_envelope
+from app.core.envelope import paginated_envelope, success_envelope
 from app.models.user import User, UserStatus
 from app.schemas.user import (
     AssignRoleRequest,
@@ -38,7 +38,15 @@ async def get_own_profile(
 ) -> dict[str, Any]:
     """Get the current user's profile."""
     user = await user_service.get_current_user_profile(current_user.id)
-    roles = [{"id": r.role.id, "name": r.role.name, "description": r.role.description, "is_system": r.role.is_system} for r in (user.user_roles or [])]
+    roles = [
+        {
+            "id": r.role.id,
+            "name": r.role.name,
+            "description": r.role.description,
+            "is_system": r.role.is_system,
+        }
+        for r in (user.user_roles or [])
+    ]
 
     return success_envelope(
         "User profile retrieved.",
@@ -64,7 +72,15 @@ async def update_own_profile(
         last_name=payload.last_name,
         phone=payload.phone,
     )
-    roles = [{"id": r.role.id, "name": r.role.name, "description": r.role.description, "is_system": r.role.is_system} for r in (user.user_roles or [])]
+    roles = [
+        {
+            "id": r.role.id,
+            "name": r.role.name,
+            "description": r.role.description,
+            "is_system": r.role.is_system,
+        }
+        for r in (user.user_roles or [])
+    ]
 
     return success_envelope(
         "Profile updated.",
@@ -95,17 +111,15 @@ async def list_users(
         search=search,
     )
 
-    return success_envelope(
+    # docs/06-API_STANDARDS.md §5.2: `data` is the array of records and the
+    # counts live in metadata.pagination. Passing the whole result dict as
+    # `data` nested the array under data.items and duplicated the counts.
+    return paginated_envelope(
         "Users retrieved.",
-        data=result,
-        metadata={
-            "pagination": {
-                "page": result["page"],
-                "page_size": result["page_size"],
-                "total_records": result["total"],
-                "total_pages": result["total_pages"],
-            },
-        },
+        data=result["items"],
+        page=result["page"],
+        page_size=result["page_size"],
+        total_records=result["total"],
     )
 
 
@@ -138,7 +152,15 @@ async def invite_user(
         role_ids=payload.role_ids,
         actor_permissions=actor_permissions,
     )
-    roles = [{"id": r.role.id, "name": r.role.name, "description": r.role.description, "is_system": r.role.is_system} for r in (user.user_roles or [])]
+    roles = [
+        {
+            "id": r.role.id,
+            "name": r.role.name,
+            "description": r.role.description,
+            "is_system": r.role.is_system,
+        }
+        for r in (user.user_roles or [])
+    ]
 
     return success_envelope(
         "User invited.",
@@ -165,7 +187,15 @@ async def get_user(
         user_id=uuid.UUID(user_id),
         actor_hospital_id=current_user.hospital_id,
     )
-    roles = [{"id": r.role.id, "name": r.role.name, "description": r.role.description, "is_system": r.role.is_system} for r in (user.user_roles or [])]
+    roles = [
+        {
+            "id": r.role.id,
+            "name": r.role.name,
+            "description": r.role.description,
+            "is_system": r.role.is_system,
+        }
+        for r in (user.user_roles or [])
+    ]
 
     return success_envelope(
         "User retrieved.",
@@ -200,7 +230,15 @@ async def update_user(
         last_name=payload.last_name,
         phone=payload.phone,
     )
-    roles = [{"id": r.role.id, "name": r.role.name, "description": r.role.description, "is_system": r.role.is_system} for r in (user.user_roles or [])]
+    roles = [
+        {
+            "id": r.role.id,
+            "name": r.role.name,
+            "description": r.role.description,
+            "is_system": r.role.is_system,
+        }
+        for r in (user.user_roles or [])
+    ]
 
     return success_envelope(
         "User updated.",
@@ -228,7 +266,15 @@ async def deactivate_user(
         user_id=uuid.UUID(user_id),
         actor_user_id=current_user.id,
     )
-    roles = [{"id": r.role.id, "name": r.role.name, "description": r.role.description, "is_system": r.role.is_system} for r in (user.user_roles or [])]
+    roles = [
+        {
+            "id": r.role.id,
+            "name": r.role.name,
+            "description": r.role.description,
+            "is_system": r.role.is_system,
+        }
+        for r in (user.user_roles or [])
+    ]
 
     return success_envelope(
         "User deactivated.",
@@ -252,7 +298,15 @@ async def reactivate_user(
 ) -> dict[str, Any]:
     """Reactivate a user."""
     user = await user_service.reactivate_user(user_id=uuid.UUID(user_id))
-    roles = [{"id": r.role.id, "name": r.role.name, "description": r.role.description, "is_system": r.role.is_system} for r in (user.user_roles or [])]
+    roles = [
+        {
+            "id": r.role.id,
+            "name": r.role.name,
+            "description": r.role.description,
+            "is_system": r.role.is_system,
+        }
+        for r in (user.user_roles or [])
+    ]
 
     return success_envelope(
         "User reactivated.",
@@ -276,7 +330,9 @@ async def admin_reset_password(
 ) -> dict[str, Any]:
     """Admin-initiated password reset."""
     await auth_service.admin_reset_password(user_id=uuid.UUID(user_id))
-    return success_envelope("Password reset initiated. The user will be required to set a new password on next login.")
+    return success_envelope(
+        "Password reset initiated. The user will be required to set a new password on next login."
+    )
 
 
 @router.get(
@@ -352,6 +408,7 @@ async def remove_role(
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
+
 def _user_to_dict(user: User, roles: list[dict[str, Any]]) -> dict[str, Any]:
     """Convert a User model to a response dict."""
     return {
@@ -365,9 +422,15 @@ def _user_to_dict(user: User, roles: list[dict[str, Any]]) -> dict[str, Any]:
         "roles": roles,
         "mfa_enabled": user.mfa_enabled,
         "last_login_at": user.last_login_at.isoformat() if user.last_login_at else None,
-        "password_changed_at": user.password_changed_at.isoformat() if user.password_changed_at else None,
-        "created_at": user.created_at.isoformat() if hasattr(user, "created_at") and user.created_at else None,
-        "updated_at": user.updated_at.isoformat() if hasattr(user, "updated_at") and user.updated_at else None,
+        "password_changed_at": user.password_changed_at.isoformat()
+        if user.password_changed_at
+        else None,
+        "created_at": user.created_at.isoformat()
+        if hasattr(user, "created_at") and user.created_at
+        else None,
+        "updated_at": user.updated_at.isoformat()
+        if hasattr(user, "updated_at") and user.updated_at
+        else None,
     }
 
 

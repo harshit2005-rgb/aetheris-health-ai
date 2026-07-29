@@ -103,6 +103,27 @@ def override_settings() -> Generator[None]:
                 setattr(settings, key, value)
 
 
+@pytest.fixture(autouse=True)
+def reset_rate_limiters() -> None:
+    """Clear the rate-limiter buckets before each test.
+
+    ``app.middleware.rate_limit`` builds its limiters as module-level
+    singletons at import time, so their counters are shared by every app
+    instance in the process and accumulate across tests. Without this reset the
+    suite starts returning 429 partway through, and which tests fail depends on
+    execution order.
+
+    Resetting here keeps tests isolated. The underlying design is worth
+    revisiting separately: ``docs/06-API_STANDARDS.md`` §15 specifies rate
+    limits tracked in Redis, and an in-process counter also cannot work once
+    the app runs more than one instance (``docs/03-ARCHITECTURE.md`` §13).
+    """
+    from app.middleware import rate_limit
+
+    for limiter in (rate_limit._anon_limiter, rate_limit._user_limiter):
+        limiter._buckets.clear()
+
+
 # ── Test doubles ─────────────────────────────────────────────────────────────
 
 
@@ -199,6 +220,16 @@ class RecordingAuditSink:
         """
         assert self.events, "Expected at least one audit event, but none were recorded."
         return self.events[-1]
+
+
+@pytest.fixture
+def mock_uow() -> AsyncMock:
+    """Return a mocked :class:`~app.database.unit_of_work.UnitOfWork`.
+
+    Services own the transaction boundary, so unit tests assert that a write
+    path committed by checking ``mock_uow.commit.await_count``.
+    """
+    return AsyncMock()
 
 
 @pytest.fixture
@@ -423,9 +454,7 @@ async def grant_permissions(
     for code in codes:
         # Permission codes are globally unique and seeded once, so reuse an
         # existing row when the suite has already created it.
-        existing = await session.execute(
-            select(Permission).where(Permission.code == code)
-        )
+        existing = await session.execute(select(Permission).where(Permission.code == code))
         permission = existing.unique().scalar_one_or_none()
         if permission is None:
             permission = Permission(
@@ -433,9 +462,7 @@ async def grant_permissions(
             )
             session.add(permission)
             await session.flush()
-        session.add(
-            RolePermission(id=uuid.uuid4(), role_id=role.id, permission_id=permission.id)
-        )
+        session.add(RolePermission(id=uuid.uuid4(), role_id=role.id, permission_id=permission.id))
 
     session.add(UserRole(id=uuid.uuid4(), user_id=user_id, role_id=role.id))
     await session.flush()

@@ -25,8 +25,7 @@ in the request scope.
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
-
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import structlog
 
@@ -91,7 +90,7 @@ class UnitOfWork:
     # ── Transaction context manager ─────────────────────────────────────────
 
     @asynccontextmanager
-    async def transaction(self) -> AsyncGenerator[UnitOfWork, None]:
+    async def transaction(self) -> AsyncGenerator[UnitOfWork]:
         """Async context manager that wraps work in a database transaction.
 
         Commits on success, rolls back on any exception.  Relies on

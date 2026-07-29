@@ -83,44 +83,87 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Super Admin",
         "Platform-wide access. Created per-hospital for local management.",
         [
-            "user.read", "user.create", "user.update", "user.deactivate", "user.reset_password",
-            "role.read", "role.assign",
-            "patient.read", "patient.create", "patient.update", "patient.delete",
-            "appointment.read", "appointment.create", "appointment.update", "appointment.cancel",
+            "user.read",
+            "user.create",
+            "user.update",
+            "user.deactivate",
+            "user.reset_password",
+            "role.read",
+            "role.assign",
+            "patient.read",
+            "patient.create",
+            "patient.update",
+            "patient.delete",
+            "appointment.read",
+            "appointment.create",
+            "appointment.update",
+            "appointment.cancel",
             "appointment.check_in",
-            "billing.read", "billing.create", "billing.void", "billing.approve_discount",
+            "billing.read",
+            "billing.create",
+            "billing.void",
+            "billing.approve_discount",
             "billing.record_payment",
-            "lab.read", "lab.create", "lab.update",
-            "pharmacy.read", "pharmacy.dispense",
-            "inventory.read", "inventory.create", "inventory.update",
-            "report.read", "report.export",
-            "settings.read", "settings.update",
+            "lab.read",
+            "lab.create",
+            "lab.update",
+            "pharmacy.read",
+            "pharmacy.dispense",
+            "inventory.read",
+            "inventory.create",
+            "inventory.update",
+            "report.read",
+            "report.export",
+            "settings.read",
+            "settings.update",
         ],
     ),
     (
         "Hospital Admin",
         "Full access within a single hospital.",
         [
-            "user.read", "user.create", "user.update", "user.deactivate", "user.reset_password",
-            "role.read", "role.assign",
-            "patient.read", "patient.create", "patient.update",
-            "appointment.read", "appointment.create", "appointment.update", "appointment.cancel",
-            "billing.read", "billing.create", "billing.void", "billing.approve_discount",
+            "user.read",
+            "user.create",
+            "user.update",
+            "user.deactivate",
+            "user.reset_password",
+            "role.read",
+            "role.assign",
+            "patient.read",
+            "patient.create",
+            "patient.update",
+            "patient.delete",
+            "appointment.read",
+            "appointment.create",
+            "appointment.update",
+            "appointment.cancel",
+            "billing.read",
+            "billing.create",
+            "billing.void",
+            "billing.approve_discount",
             "billing.record_payment",
             "lab.read",
             "pharmacy.read",
             "inventory.read",
-            "report.read", "report.export",
-            "settings.read", "settings.update",
+            "report.read",
+            "report.export",
+            "settings.read",
+            "settings.update",
         ],
     ),
     (
         "Doctor",
         "Clinical access — own patients, appointments, lab results.",
         [
-            "patient.read", "patient.create", "patient.update",
-            "appointment.read", "appointment.create", "appointment.update", "appointment.check_in",
-            "lab.read", "lab.create",
+            "patient.read",
+            "patient.create",
+            "patient.update",
+            "appointment.read",
+            "appointment.create",
+            "appointment.update",
+            "appointment.check_in",
+            "lab.read",
+            "lab.create",
             "report.read",
         ],
     ),
@@ -128,8 +171,10 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Nurse",
         "Care coordination — assigned patients, vitals, appointments.",
         [
-            "patient.read", "patient.update",
-            "appointment.read", "appointment.check_in",
+            "patient.read",
+            "patient.update",
+            "appointment.read",
+            "appointment.check_in",
             "lab.read",
         ],
     ),
@@ -137,8 +182,12 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Receptionist",
         "Front desk — patient registration, appointment booking.",
         [
-            "patient.read", "patient.create",
-            "appointment.read", "appointment.create", "appointment.cancel", "appointment.check_in",
+            "patient.read",
+            "patient.create",
+            "appointment.read",
+            "appointment.create",
+            "appointment.cancel",
+            "appointment.check_in",
         ],
     ),
     (
@@ -146,7 +195,10 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Financial operations — invoices, payments, insurance.",
         [
             "patient.read",
-            "billing.read", "billing.create", "billing.void", "billing.record_payment",
+            "billing.read",
+            "billing.create",
+            "billing.void",
+            "billing.record_payment",
             "report.read",
         ],
     ),
@@ -154,14 +206,17 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Lab Technician",
         "Lab operations — receive orders, enter results.",
         [
-            "lab.read", "lab.create", "lab.update",
+            "lab.read",
+            "lab.create",
+            "lab.update",
         ],
     ),
     (
         "Pharmacist",
         "Pharmacy operations — dispensing, inventory.",
         [
-            "pharmacy.read", "pharmacy.dispense",
+            "pharmacy.read",
+            "pharmacy.dispense",
             "inventory.read",
         ],
     ),
@@ -169,7 +224,9 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Inventory Manager",
         "Supply chain — stock management, purchase orders.",
         [
-            "inventory.read", "inventory.create", "inventory.update",
+            "inventory.read",
+            "inventory.create",
+            "inventory.update",
         ],
     ),
 ]
@@ -209,7 +266,9 @@ async def seed_database(database_url: str | None = None) -> None:
 
         role_map: dict[str, Role] = {}
         for name, description, permission_codes in SYSTEM_ROLES:
-            role_stmt = select(Role).where(Role.name == name, Role.hospital_id.is_(None), Role.is_system.is_(True))
+            role_stmt = select(Role).where(
+                Role.name == name, Role.hospital_id.is_(None), Role.is_system.is_(True)
+            )
             role_result = await session.execute(role_stmt)
             existing_role = role_result.unique().scalar_one_or_none()
 
@@ -270,7 +329,7 @@ async def seed_database(database_url: str | None = None) -> None:
                     "country": "India",
                 },
                 phone="+918012345678",
-                email="info@demohospital.test",
+                email="info@demohospital.com",
                 is_active=True,
             )
             session.add(hospital)
@@ -280,7 +339,7 @@ async def seed_database(database_url: str | None = None) -> None:
             logger.info("demo_hospital_exists", id=str(hospital.id))
 
         # ── 4. Create Demo Admin User ────────────────────────────────────────
-        admin_email = "admin@demohospital.test"
+        admin_email = "admin@demohospital.com"
         admin_stmt = select(User).where(User.email == admin_email, User.hospital_id == hospital.id)
         admin_result = await session.execute(admin_stmt)
         admin_user = admin_result.unique().scalar_one_or_none()
@@ -309,8 +368,10 @@ async def seed_database(database_url: str | None = None) -> None:
             logger.info("demo_admin_exists", email=admin_email)
 
         # ── 5. Create Demo Doctor User ───────────────────────────────────────
-        doctor_email = "doctor@demohospital.test"
-        doctor_stmt = select(User).where(User.email == doctor_email, User.hospital_id == hospital.id)
+        doctor_email = "doctor@demohospital.com"
+        doctor_stmt = select(User).where(
+            User.email == doctor_email, User.hospital_id == hospital.id
+        )
         doctor_result = await session.execute(doctor_stmt)
         doctor_user = doctor_result.unique().scalar_one_or_none()
 
@@ -337,8 +398,10 @@ async def seed_database(database_url: str | None = None) -> None:
             logger.info("demo_doctor_exists", email=doctor_email)
 
         # ── 6. Create Demo Receptionist User ─────────────────────────────────
-        receptionist_email = "reception@demohospital.test"
-        receptionist_stmt = select(User).where(User.email == receptionist_email, User.hospital_id == hospital.id)
+        receptionist_email = "reception@demohospital.com"
+        receptionist_stmt = select(User).where(
+            User.email == receptionist_email, User.hospital_id == hospital.id
+        )
         receptionist_result = await session.execute(receptionist_stmt)
         receptionist_user = receptionist_result.unique().scalar_one_or_none()
 
@@ -367,7 +430,9 @@ async def seed_database(database_url: str | None = None) -> None:
         # ── Commit ──────────────────────────────────────────────────────────
         await session.commit()
         logger.info("database_seeded_successfully")
-        logger.info("demo_credentials", admin=admin_email, doctor=doctor_email, reception=receptionist_email)
+        logger.info(
+            "demo_credentials", admin=admin_email, doctor=doctor_email, reception=receptionist_email
+        )
 
 
 async def main() -> None:
