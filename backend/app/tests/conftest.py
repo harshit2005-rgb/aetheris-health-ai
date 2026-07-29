@@ -35,7 +35,7 @@ from unittest.mock import AsyncMock
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 if TYPE_CHECKING:
@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from app.core.audit import AuditEvent
     from app.database.unit_of_work import UnitOfWork
 
-__all__ = ["FakeSession", "RecordingAuditSink"]
+__all__ = ["FakeSession", "RecordingAuditSink", "grant_permissions"]
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -391,6 +391,54 @@ async def hospital_id(db_session: AsyncSession) -> uuid.UUID:
 async def other_hospital_id(db_session: AsyncSession) -> uuid.UUID:
     """Create a second hospital, for multi-tenant isolation tests."""
     return await _create_hospital(db_session, slug=f"other-{uuid.uuid4().hex[:12]}")
+
+
+async def grant_permissions(
+    session: AsyncSession,
+    *,
+    hospital_id: uuid.UUID,
+    user_id: uuid.UUID,
+    codes: list[str],
+) -> None:
+    """Give a user a role carrying exactly ``codes``.
+
+    ``require_permission`` resolves permissions from the database — it walks
+    ``user_roles → role_permissions → permission.code`` — not from the JWT
+    claims. A token minted with permission claims therefore proves nothing;
+    the rows have to exist.
+
+    :param session: The test session.
+    :param hospital_id: Hospital the role belongs to.
+    :param user_id: User to grant the role to.
+    :param codes: Permission codes to include, e.g. ``["patient.read"]``.
+    """
+    from app.models.permission import Permission
+    from app.models.role import Role, RolePermission
+    from app.models.user import UserRole
+
+    role = Role(id=uuid.uuid4(), hospital_id=hospital_id, name=f"test-role-{uuid.uuid4().hex[:8]}")
+    session.add(role)
+    await session.flush()
+
+    for code in codes:
+        # Permission codes are globally unique and seeded once, so reuse an
+        # existing row when the suite has already created it.
+        existing = await session.execute(
+            select(Permission).where(Permission.code == code)
+        )
+        permission = existing.unique().scalar_one_or_none()
+        if permission is None:
+            permission = Permission(
+                id=uuid.uuid4(), code=code, module=code.split(".")[0], description=code
+            )
+            session.add(permission)
+            await session.flush()
+        session.add(
+            RolePermission(id=uuid.uuid4(), role_id=role.id, permission_id=permission.id)
+        )
+
+    session.add(UserRole(id=uuid.uuid4(), user_id=user_id, role_id=role.id))
+    await session.flush()
 
 
 @pytest_asyncio.fixture
