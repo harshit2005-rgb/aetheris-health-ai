@@ -45,6 +45,7 @@ def user_service(
     mock_role_repo: AsyncMock,
     mock_permission_repo: AsyncMock,
     mock_auth_service: AsyncMock,
+    mock_uow: AsyncMock,
 ) -> Any:
     """Create a UserService with mocked dependencies."""
     from app.services.user_service import UserService
@@ -54,6 +55,7 @@ def user_service(
         role_repo=mock_role_repo,
         permission_repo=mock_permission_repo,
         auth_service=mock_auth_service,
+        uow=mock_uow,
     )
 
 
@@ -85,6 +87,7 @@ def _make_user(overrides: dict[str, Any] | None = None) -> User:
 
 # ── Read Tests ─────────────────────────────────────────────────────────────
 
+
 class TestGetUser:
     """Tests for retrieving users."""
 
@@ -104,7 +107,9 @@ class TestGetUser:
         with pytest.raises(NotFoundError, match="User not found."):
             await user_service.get_user(user_id=uuid.uuid4())
 
-    async def test_get_user_cross_hospital_blocked(self: Any, user_service: Any, mock_user_repo: Any) -> None:
+    async def test_get_user_cross_hospital_blocked(
+        self: Any, user_service: Any, mock_user_repo: Any
+    ) -> None:
         """User from different hospital is not visible."""
         user = _make_user()
         mock_user_repo.get_by_id.return_value = user
@@ -116,6 +121,7 @@ class TestGetUser:
 
 # ── Invite Tests ──────────────────────────────────────────────────────────
 
+
 class TestInviteUser:
     """Tests for inviting users."""
 
@@ -123,10 +129,12 @@ class TestInviteUser:
         """User is created with invited status."""
         hospital_id = uuid.uuid4()
         mock_user_repo.get_by_email.return_value = None
-        mock_user_repo.create.return_value = _make_user({
-            "status": UserStatus.INVITED,
-            "hospital_id": hospital_id,
-        })
+        mock_user_repo.create.return_value = _make_user(
+            {
+                "status": UserStatus.INVITED,
+                "hospital_id": hospital_id,
+            }
+        )
 
         result = await user_service.invite_user(
             hospital_id=hospital_id,
@@ -139,7 +147,9 @@ class TestInviteUser:
         assert result.status == UserStatus.INVITED
         mock_user_repo.create.assert_called_once()
 
-    async def test_invite_user_duplicate_email(self: Any, user_service: Any, mock_user_repo: Any) -> None:
+    async def test_invite_user_duplicate_email(
+        self: Any, user_service: Any, mock_user_repo: Any
+    ) -> None:
         """Duplicate email raises BusinessRuleError."""
         hospital_id = uuid.uuid4()
         mock_user_repo.get_by_email.return_value = _make_user()
@@ -153,7 +163,9 @@ class TestInviteUser:
                 actor_permissions=["user.create"],
             )
 
-    async def test_invite_user_without_permission(self: Any, user_service: Any, mock_user_repo: Any) -> None:
+    async def test_invite_user_without_permission(
+        self: Any, user_service: Any, mock_user_repo: Any
+    ) -> None:
         """Missing permission raises error."""
         from app.core.exceptions import PermissionDeniedError
 
@@ -172,10 +184,13 @@ class TestInviteUser:
 
 # ── Deactivate Tests ──────────────────────────────────────────────────────
 
+
 class TestDeactivateUser:
     """Tests for deactivating users."""
 
-    async def test_deactivate_other_user(self: Any, user_service: Any, mock_user_repo: Any, mock_auth_service: Any) -> None:
+    async def test_deactivate_other_user(
+        self: Any, user_service: Any, mock_user_repo: Any, mock_auth_service: Any
+    ) -> None:
         """Admin can deactivate another user."""
         user = _make_user()
         admin_id = uuid.uuid4()
@@ -194,7 +209,9 @@ class TestDeactivateUser:
         assert result.status == UserStatus.SUSPENDED
         mock_auth_service.logout_all.assert_called_once_with(user.id)
 
-    async def test_deactivate_self_raises_error(self: Any, user_service: Any, mock_user_repo: Any) -> None:
+    async def test_deactivate_self_raises_error(
+        self: Any, user_service: Any, mock_user_repo: Any
+    ) -> None:
         """Deactivating yourself is not allowed."""
         user = _make_user()
 
@@ -204,10 +221,17 @@ class TestDeactivateUser:
 
 # ── Role Management Tests ──────────────────────────────────────────────────
 
+
 class TestRoleManagement:
     """Tests for role assignment and removal."""
 
-    async def test_assign_role(self: Any, user_service: Any, mock_user_repo: Any, mock_role_repo: Any, mock_auth_service: Any) -> None:
+    async def test_assign_role(
+        self: Any,
+        user_service: Any,
+        mock_user_repo: Any,
+        mock_role_repo: Any,
+        mock_auth_service: Any,
+    ) -> None:
         """Role is assigned and sessions are revoked."""
         user = _make_user()
         role_id = uuid.uuid4()
@@ -225,7 +249,13 @@ class TestRoleManagement:
         mock_user_repo.add_role.assert_called_once_with(user.id, role_id)
         mock_auth_service.logout_all.assert_called_once_with(user.id)
 
-    async def test_assign_role_already_assigned(self: Any, user_service: Any, mock_user_repo: Any, mock_role_repo: Any, mock_auth_service: Any) -> None:
+    async def test_assign_role_already_assigned(
+        self: Any,
+        user_service: Any,
+        mock_user_repo: Any,
+        mock_role_repo: Any,
+        mock_auth_service: Any,
+    ) -> None:
         """Re-assigning same role is idempotent."""
         user = _make_user()
         role_id = uuid.uuid4()
@@ -242,7 +272,9 @@ class TestRoleManagement:
 
         mock_user_repo.add_role.assert_not_called()
 
-    async def test_remove_role(self: Any, user_service: Any, mock_user_repo: Any, mock_auth_service: Any) -> None:
+    async def test_remove_role(
+        self: Any, user_service: Any, mock_user_repo: Any, mock_auth_service: Any
+    ) -> None:
         """Role is removed and sessions are revoked."""
         user = _make_user()
         role_id = uuid.uuid4()

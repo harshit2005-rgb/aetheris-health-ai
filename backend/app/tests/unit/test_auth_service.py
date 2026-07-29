@@ -40,6 +40,7 @@ def auth_service(
     mock_user_repo: AsyncMock,
     mock_refresh_token_repo: AsyncMock,
     mock_password_reset_repo: AsyncMock,
+    mock_uow: AsyncMock,
 ) -> Any:
     """Create an AuthService with mocked repositories."""
     from app.services.auth_service import AuthService
@@ -48,6 +49,7 @@ def auth_service(
         user_repo=mock_user_repo,
         refresh_token_repo=mock_refresh_token_repo,
         password_reset_repo=mock_password_reset_repo,
+        uow=mock_uow,
     )
 
 
@@ -114,10 +116,13 @@ def _make_user(overrides: dict[str, Any] | None = None) -> User:
 
 # ── Login Tests ────────────────────────────────────────────────────────────
 
+
 class TestLogin:
     """Tests for the login flow."""
 
-    async def test_login_success(self: Any, auth_service: Any, mock_user_repo: Any, mock_refresh_token_repo: Any) -> None:
+    async def test_login_success(
+        self: Any, auth_service: Any, mock_user_repo: Any, mock_refresh_token_repo: Any
+    ) -> None:
         """Happy path: valid credentials return tokens."""
         user = _make_user()
         mock_user_repo.get_by_email_cross_tenant.return_value = user
@@ -134,7 +139,9 @@ class TestLogin:
         assert result["user"]["email"] == "test@hospital.test"
         mock_user_repo.record_login.assert_called_once()
 
-    async def test_login_invalid_credentials(self: Any, auth_service: Any, mock_user_repo: Any) -> None:
+    async def test_login_invalid_credentials(
+        self: Any, auth_service: Any, mock_user_repo: Any
+    ) -> None:
         """Invalid password returns AuthenticationError."""
         user = _make_user()
         mock_user_repo.get_by_email_cross_tenant.return_value = user
@@ -145,7 +152,9 @@ class TestLogin:
                 password="WrongPass@123",
             )
 
-    async def test_login_nonexistent_email(self: Any, auth_service: Any, mock_user_repo: Any) -> None:
+    async def test_login_nonexistent_email(
+        self: Any, auth_service: Any, mock_user_repo: Any
+    ) -> None:
         """Non-existent email returns generic error."""
         mock_user_repo.get_by_email_cross_tenant.return_value = None
 
@@ -155,7 +164,9 @@ class TestLogin:
                 password="SomePass@123",
             )
 
-    async def test_login_suspended_account(self: Any, auth_service: Any, mock_user_repo: Any) -> None:
+    async def test_login_suspended_account(
+        self: Any, auth_service: Any, mock_user_repo: Any
+    ) -> None:
         """Suspended account returns generic error."""
         user = _make_user({"status": UserStatus.SUSPENDED})
         mock_user_repo.get_by_email_cross_tenant.return_value = user
@@ -180,10 +191,13 @@ class TestLogin:
 
 # ── Token Refresh Tests ────────────────────────────────────────────────────
 
+
 class TestRefreshToken:
     """Tests for refresh token rotation."""
 
-    async def test_refresh_success(self: Any, auth_service: Any, mock_user_repo: Any, mock_refresh_token_repo: Any) -> None:
+    async def test_refresh_success(
+        self: Any, auth_service: Any, mock_user_repo: Any, mock_refresh_token_repo: Any
+    ) -> None:
         """Valid refresh token returns new token pair."""
         from app.models.refresh_token import RefreshToken
 
@@ -206,7 +220,9 @@ class TestRefreshToken:
         assert result["refresh_token"] is not None
         assert result["expires_in"] > 0
 
-    async def test_refresh_reuse_detection(self: Any, auth_service: Any, mock_user_repo: Any, mock_refresh_token_repo: Any) -> None:
+    async def test_refresh_reuse_detection(
+        self: Any, auth_service: Any, mock_user_repo: Any, mock_refresh_token_repo: Any
+    ) -> None:
         """Revoked token triggers reuse detection."""
         from app.models.refresh_token import RefreshToken
 
@@ -227,10 +243,13 @@ class TestRefreshToken:
 
 # ── Password Reset Tests ───────────────────────────────────────────────────
 
+
 class TestPasswordReset:
     """Tests for password reset flow."""
 
-    async def test_forgot_password_existing_user(self: Any, auth_service: Any, mock_user_repo: Any, mock_password_reset_repo: Any) -> None:
+    async def test_forgot_password_existing_user(
+        self: Any, auth_service: Any, mock_user_repo: Any, mock_password_reset_repo: Any
+    ) -> None:
         """Existing user gets a reset token created."""
         user = _make_user()
         mock_user_repo.get_by_email_cross_tenant.return_value = user
@@ -239,7 +258,9 @@ class TestPasswordReset:
 
         mock_password_reset_repo.create.assert_called_once()
 
-    async def test_forgot_password_nonexistent_user(self: Any, auth_service: Any, mock_user_repo: Any, mock_password_reset_repo: Any) -> None:
+    async def test_forgot_password_nonexistent_user(
+        self: Any, auth_service: Any, mock_user_repo: Any, mock_password_reset_repo: Any
+    ) -> None:
         """Non-existent user still returns success (no reveal)."""
         mock_user_repo.get_by_email_cross_tenant.return_value = None
 
@@ -247,7 +268,9 @@ class TestPasswordReset:
 
         mock_password_reset_repo.create.assert_not_called()
 
-    async def test_reset_password_weak_password(self: Any, auth_service: Any, mock_password_reset_repo: Any) -> None:
+    async def test_reset_password_weak_password(
+        self: Any, auth_service: Any, mock_password_reset_repo: Any
+    ) -> None:
         """Weak password raises BusinessRuleError."""
         with pytest.raises(BusinessRuleError, match="Password does not meet requirements"):
             await auth_service.reset_password(
@@ -257,6 +280,7 @@ class TestPasswordReset:
 
 
 # ── MFA Tests ──────────────────────────────────────────────────────────────
+
 
 class TestMFA:
     """Tests for MFA enrollment and verification."""
