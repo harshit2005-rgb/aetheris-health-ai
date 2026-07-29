@@ -14,7 +14,12 @@ from typing import TYPE_CHECKING
 import structlog
 
 from app.core.config import settings
-from app.core.exceptions import AuthenticationError, BusinessRuleError
+from app.core.exceptions import (
+    AccountLockedError,
+    AccountSuspendedError,
+    AuthenticationError,
+    BusinessRuleError,
+)
 from app.core.security import (
     create_access_token,
     create_mfa_ticket,
@@ -512,11 +517,13 @@ class AuthService:
         """Check if the user's account is usable.
 
         :param user: The user to check.
-        :raises AuthenticationError: If the account is locked or suspended.
+        :raises AccountSuspendedError: If the account is suspended.
+        :raises AccountLockedError: If the account is temporarily locked.
+        :raises AuthenticationError: If the account has no usable credential.
         """
         if user.status == UserStatus.SUSPENDED:
             logger.info("login_attempt_suspended_account", user_id=str(user.id))
-            raise AuthenticationError("Invalid credentials.")
+            raise AccountSuspendedError
 
         if user.locked_until and datetime.now(UTC) < user.locked_until:
             logger.info(
@@ -524,7 +531,7 @@ class AuthService:
                 user_id=str(user.id),
                 locked_until=str(user.locked_until),
             )
-            raise AuthenticationError("Invalid credentials.")
+            raise AccountLockedError(user.locked_until)
 
         if user.status == UserStatus.INVITED and user.password_hash is None:
             logger.info("login_attempt_invited_account", user_id=str(user.id))
