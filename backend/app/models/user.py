@@ -69,8 +69,19 @@ class User(UUIDPrimaryKeyMixin, CommonColumnsMixin, Base):
         String(100), nullable=False, comment="User's family name."
     )
     status: Mapped[UserStatus] = mapped_column(
-        SQLEnum(UserStatus, name="user_status", create_type=True),
-        nullable=False, default=UserStatus.ACTIVE,
+        SQLEnum(
+            UserStatus,
+            name="user_status",
+            create_type=True,
+            # Persist the member *values* ('active'), not the member names
+            # ('ACTIVE'). The user_status type is created with lowercase labels
+            # in migration 0001, so without this every INSERT fails with
+            # InvalidTextRepresentationError and every SELECT fails with
+            # LookupError. Same pattern as Patient.gender.
+            values_callable=lambda enum_cls: [member.value for member in enum_cls],
+        ),
+        nullable=False,
+        default=UserStatus.ACTIVE,
         comment="Current account status (active, suspended, invited).",
     )
     last_login_at: Mapped[datetime | None] = mapped_column(

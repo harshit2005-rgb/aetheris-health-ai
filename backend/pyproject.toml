@@ -63,6 +63,12 @@ include = ["app*"]
 minversion = "8.0"
 testpaths = ["app/tests"]
 asyncio_mode = "auto"
+# One event loop for the whole session. The database engine and connection pool
+# are session-scoped, and an asyncpg connection is bound to the loop that
+# created it — per-test loops make every database fixture fail with
+# "attached to a different loop".
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 python_files = ["test_*.py"]
 filterwarnings = [
     "error",
