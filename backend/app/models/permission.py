@@ -33,15 +33,18 @@ class Permission(UUIDPrimaryKeyMixin, TimestampMixin, Base):
     )
 
     code: Mapped[str] = mapped_column(
-        String(100), nullable=False,
+        String(100),
+        nullable=False,
         comment="Unique permission code (e.g. 'patient.create').",
     )
     description: Mapped[str | None] = mapped_column(
-        Text, nullable=True,
+        Text,
+        nullable=True,
         comment="Human-readable explanation of what this permission grants.",
     )
     module: Mapped[str] = mapped_column(
-        String(50), nullable=False,
+        String(50),
+        nullable=False,
         comment="Module this permission belongs to (e.g. 'patient', 'billing').",
     )
 

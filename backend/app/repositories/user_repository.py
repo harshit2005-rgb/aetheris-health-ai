@@ -1,4 +1,4 @@
-"""Repository for the :class:`User` model.
+"""Repository for the :class:`User` model and :class:`UserRole` join table.
 
 Users belong to a hospital and support soft delete. All queries
 automatically filter out soft-deleted records.
@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
-from app.models.user import User, UserStatus
+from app.models.user import User, UserRole, UserStatus
 from app.repositories.base import BaseRepository
 
 if TYPE_CHECKING:
@@ -63,10 +63,17 @@ class UserRepository(BaseRepository[User]):
         :param email: The user's email address.
         :returns: The user instance, or ``None``.
         """
-        stmt = (
-            self._query()
-            .where(User.hospital_id == hospital_id, User.email == email)
-        )
+        stmt = self._query().where(User.hospital_id == hospital_id, User.email == email)
+        result = await self._session.execute(stmt)
+        return result.unique().scalar_one_or_none()
+
+    async def get_by_email_cross_tenant(self, email: str) -> User | None:
+        """Retrieve a user by email across all hospitals (login use case).
+
+        :param email: The user's email address.
+        :returns: The user instance, or ``None``.
+        """
+        stmt = select(User).where(User.email == email)
         result = await self._session.execute(stmt)
         return result.unique().scalar_one_or_none()
 
@@ -77,18 +84,27 @@ class UserRepository(BaseRepository[User]):
         skip: int = 0,
         limit: int = 100,
         status: UserStatus | None = None,
+        search: str | None = None,
     ) -> list[User]:
-        """List users belonging to a hospital, with optional status filter.
+        """List users belonging to a hospital, with optional filters.
 
         :param hospital_id: The hospital's UUID.
         :param skip: Number of records to skip.
         :param limit: Maximum records to return.
         :param status: Optional status filter.
+        :param search: Optional search query matching name or email (case-insensitive).
         :returns: List of user instances.
         """
         stmt = self._query().where(User.hospital_id == hospital_id)
         if status is not None:
             stmt = stmt.where(User.status == status)
+        if search:
+            pattern = f"%{search}%"
+            stmt = stmt.where(
+                User.first_name.ilike(pattern)
+                | User.last_name.ilike(pattern)
+                | User.email.ilike(pattern)
+            )
         stmt = self._apply_pagination(stmt, skip=skip, limit=limit)
         result = await self._session.execute(stmt)
         return list(result.unique().scalars().all())
@@ -144,3 +160,61 @@ class UserRepository(BaseRepository[User]):
         :returns: The updated user instance.
         """
         return await self.update(user, locked_until=until)
+
+    # ── UserRole Management ────────────────────────────────────────────────
+
+    async def has_role(self, user_id: uuid.UUID, role_id: uuid.UUID) -> bool:
+        """Check if a user already has a specific role assigned.
+
+        :param user_id: The user's UUID.
+        :param role_id: The role's UUID.
+        :returns: ``True`` if the user has the role.
+        """
+        stmt = (
+            select(UserRole)
+            .where(
+                UserRole.user_id == user_id,
+                UserRole.role_id == role_id,
+            )
+        )
+        result = await self._session.execute(stmt)
+        return result.unique().scalar_one_or_none() is not None
+
+    async def add_role(self, user_id: uuid.UUID, role_id: uuid.UUID, assigned_by: uuid.UUID | None = None) -> UserRole:
+        """Assign a role to a user.
+
+        :param user_id: The user's UUID.
+        :param role_id: The role's UUID.
+        :param assigned_by: Optional UUID of the assigning user.
+        :returns: The created UserRole instance.
+        """
+        user_role = UserRole(
+            user_id=user_id,
+            role_id=role_id,
+            assigned_by=assigned_by,
+        )
+        self._session.add(user_role)
+        await self._session.flush()
+        return user_role
+
+    async def remove_role(self, user_id: uuid.UUID, role_id: uuid.UUID) -> bool:
+        """Remove a role from a user.
+
+        :param user_id: The user's UUID.
+        :param role_id: The role's UUID.
+        :returns: ``True`` if a role was removed, ``False`` if it wasn't assigned.
+        """
+        stmt = (
+            select(UserRole)
+            .where(
+                UserRole.user_id == user_id,
+                UserRole.role_id == role_id,
+            )
+        )
+        result = await self._session.execute(stmt)
+        user_role = result.unique().scalar_one_or_none()
+        if user_role is None:
+            return False
+        await self._session.delete(user_role)
+        await self._session.flush()
+        return True

@@ -32,6 +32,7 @@ from app.api.dependencies.db import get_db_session
 from app.repositories import (
     HospitalRepository,
     MrnSequenceRepository,
+    PasswordResetTokenRepository,
     PatientRepository,
     PermissionRepository,
     RefreshTokenRepository,
@@ -76,3 +77,8 @@ def get_patient_repository(session: DbSession) -> PatientRepository:
 def get_mrn_sequence_repository(session: DbSession) -> MrnSequenceRepository:
     """Provide an :class:`MrnSequenceRepository` bound to the request session."""
     return MrnSequenceRepository(session)
+
+
+def get_password_reset_token_repository(session: DbSession) -> PasswordResetTokenRepository:
+    """Provide a :class:`PasswordResetTokenRepository` bound to the request session."""
+    return PasswordResetTokenRepository(session)

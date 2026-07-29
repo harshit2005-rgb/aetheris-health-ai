@@ -4,3 +4,12 @@
 per-hospital budget, records every interaction to ``ai_interactions``, and
 resolves prompts through the registry.
 """
+
+from __future__ import annotations
+
+from app.ai.services.ai_service import AIService, BudgetExceededError
+
+__all__ = [
+    "AIService",
+    "BudgetExceededError",
+]

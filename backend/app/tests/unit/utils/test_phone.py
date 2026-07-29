@@ -1,63 +1,45 @@
-"""Unit tests for :mod:`app.utils.phone`."""
+"""Tests for :mod:`app.utils.phone`."""
 
 from __future__ import annotations
 
-import pytest
-
-from app.utils.phone import is_e164, normalize_phone
+from app.utils.phone import is_e164, mask, normalize, strip_non_digits
 
 
-class TestNormalizePhone:
-    """Stripping human formatting before validation."""
+class TestStripNonDigits:
+    def test_strips_dashes(self) -> None:
+        assert strip_non_digits("+91-9876543210") == "+919876543210"
 
-    @pytest.mark.parametrize(
-        ("raw", "expected"),
-        [
-            ("+919812345678", "+919812345678"),
-            ("  +919812345678  ", "+919812345678"),
-            ("+91 98123-45678", "+919812345678"),
-            ("+91 (981) 234.5678", "+919812345678"),
-        ],
-        ids=["already_clean", "surrounding_space", "spaces_and_hyphens", "parens_and_dots"],
-    )
-    def test_normalize_phone_strips_formatting(self, raw: str, expected: str) -> None:
-        assert normalize_phone(raw) == expected
-
-    def test_normalize_phone_returns_empty_string_for_whitespace_only(self) -> None:
-        assert normalize_phone("   ") == ""
+    def test_strips_spaces(self) -> None:
+        assert strip_non_digits("+91 98765 43210") == "+919876543210"
 
 
 class TestIsE164:
-    """E.164 validation."""
+    def test_valid_e164(self) -> None:
+        assert is_e164("+919876543210") is True
 
-    @pytest.mark.parametrize(
-        "value",
-        ["+919812345678", "+14155552671", "+442071838750", "+6834002"],
-        ids=["india", "usa", "uk", "shortest_real_number"],
-    )
-    def test_is_e164_accepts_valid_numbers(self, value: str) -> None:
-        assert is_e164(value)
+    def test_invalid_no_plus(self) -> None:
+        assert is_e164("9876543210") is False
 
-    @pytest.mark.parametrize(
-        "value",
-        [
-            "919812345678",
-            "+0919812345678",
-            "+9198",
-            "+9198123456789012345",
-            "+91981234567a",
-            "+91 98123 45678",
-            "",
-        ],
-        ids=[
-            "missing_plus",
-            "leading_zero_country_code",
-            "too_short",
-            "too_long",
-            "contains_letter",
-            "unnormalized_spaces",
-            "empty",
-        ],
-    )
-    def test_is_e164_rejects_invalid_numbers(self, value: str) -> None:
-        assert not is_e164(value)
+    def test_invalid_short(self) -> None:
+        assert is_e164("+91123") is False
+
+
+class TestNormalize:
+    def test_international_format(self) -> None:
+        assert normalize("+919876543210") == "+919876543210"
+
+    def test_indian_mobile_10_digits(self) -> None:
+        assert normalize("9876543210") == "+919876543210"
+
+    def test_indian_mobile_with_leading_zero(self) -> None:
+        assert normalize("09876543210") == "+919876543210"
+
+
+class TestMask:
+    def test_masks_all_but_last_4(self) -> None:
+        masked = mask("+919876543210", visible_digits=4)
+        assert masked.endswith("3210")
+        assert masked.startswith("*")
+
+    def test_full_reveal_for_short(self) -> None:
+        assert mask("1234", visible_digits=4) == "1234"

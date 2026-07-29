@@ -35,8 +35,8 @@ from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validat
 
 from app.models.patient import BloodGroup, Gender, PatientStatus
 from app.schemas.common import Page
-from app.utils.datetime import age_in_years, utc_today
-from app.utils.phone import PHONE_MAX_LENGTH, is_e164, normalize_phone
+from app.utils.datetime import age, utc_today
+from app.utils.phone import is_e164, normalize
 
 if TYPE_CHECKING:
     from app.models.patient import Patient
@@ -73,6 +73,11 @@ MAX_PATIENT_AGE_YEARS = 130
 #: (CLAUDE.md, "What NOT to Do"). Swapping to ``EmailStr`` once that package is
 #: approved is a one-line change here.
 _EMAIL_PATTERN = re.compile(r"^[^@\s]+@[^@\s.]+(\.[^@\s.]+)+$")
+
+#: Maximum stored phone length — matches ``patients.phone VARCHAR(20)``
+#: (``docs/05-DATABASE_DESIGN.md`` §2.7). Kept here rather than in
+#: ``app.utils.phone`` because it is a column constraint, not a phone-format fact.
+PHONE_MAX_LENGTH = 20
 
 #: Reusable constrained string for 1–100 character names (module spec §11).
 PersonName = Annotated[str, Field(min_length=1, max_length=100)]
@@ -135,9 +140,16 @@ def _validate_optional_phone(value: str | None) -> str | None:
     """
     if value is None:
         return None
-    cleaned = normalize_phone(value)
-    if not cleaned:
+    if not value.strip():
+        # Genuinely blank: the field was left empty. Module spec §11 allows it.
         return None
+    cleaned = normalize(value)
+    if not cleaned:
+        # Non-blank input that normalizes to nothing ("not-a-phone") is a typo,
+        # not an omission. Returning None here would silently discard what the
+        # user typed and report success.
+        msg = "Phone must be in E.164 format, e.g. +919812345678."
+        raise ValueError(msg)
     if not is_e164(cleaned):
         msg = "Phone must be in E.164 format, e.g. +919812345678."
         raise ValueError(msg)
@@ -159,7 +171,7 @@ def _validate_date_of_birth(value: date) -> date:
     if value > today:
         msg = "Date of birth cannot be in the future."
         raise ValueError(msg)
-    if age_in_years(value, as_of=today) > MAX_PATIENT_AGE_YEARS:
+    if age(value, today) > MAX_PATIENT_AGE_YEARS:
         msg = f"Date of birth cannot be more than {MAX_PATIENT_AGE_YEARS} years ago."
         raise ValueError(msg)
     return value
@@ -562,7 +574,7 @@ class PatientSummaryResponse(BaseModel):
             last_name=patient.last_name,
             full_name=patient.full_name,
             date_of_birth=patient.date_of_birth,
-            age=age_in_years(patient.date_of_birth),
+            age=age(patient.date_of_birth),
             gender=patient.gender,
             phone=patient.phone,
             status=patient.status,
@@ -606,7 +618,7 @@ class PatientResponse(BaseModel):
     @property
     def age(self) -> int:
         """Age in completed years, computed at response time."""
-        return age_in_years(self.date_of_birth)
+        return age(self.date_of_birth)
 
     @classmethod
     def from_model(cls, patient: Patient) -> Self:

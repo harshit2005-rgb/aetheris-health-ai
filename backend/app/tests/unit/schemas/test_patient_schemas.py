@@ -95,9 +95,21 @@ class TestCreatePatientRequest:
         )
         assert request.phone == "+919812345678"
 
-    def test_create_request_rejects_a_non_e164_phone(self) -> None:
+    def test_create_request_promotes_a_bare_indian_mobile_to_e164(self) -> None:
+        # app.utils.phone.normalize is India-aware: a bare 10-digit mobile is a
+        # valid entry at an Indian hospital reception desk, so it is promoted to
+        # +91 rather than rejected.
+        request = CreatePatientRequest.model_validate(build_patient_payload(phone="9812345678"))
+        assert request.phone == "+919812345678"
+
+    @pytest.mark.parametrize(
+        "phone",
+        ["12345", "098123456780000", "not-a-phone"],
+        ids=["too_short", "too_long", "letters"],
+    )
+    def test_create_request_rejects_a_phone_that_cannot_be_normalized(self, phone: str) -> None:
         with pytest.raises(ValidationError, match="E.164"):
-            CreatePatientRequest.model_validate(build_patient_payload(phone="9812345678"))
+            CreatePatientRequest.model_validate(build_patient_payload(phone=phone))
 
     def test_create_request_treats_a_blank_phone_as_absent(self) -> None:
         # Module spec §11: "E.164 or blank". Blank must land as NULL, not "".

@@ -51,3 +51,6 @@ dist/
 
 # Misc
 coverage/
+
+# Freebuff Desktop — local runtime database, not part of the project
+.freebuff/

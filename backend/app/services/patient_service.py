@@ -38,7 +38,7 @@ from app.schemas.patient import (
     SearchPatientRequest,
     UpdatePatientRequest,
 )
-from app.utils.datetime import age_in_years, subtract_years, utc_today
+from app.utils.datetime import age, subtract_years, utc_today
 from app.utils.phone import is_e164
 
 if TYPE_CHECKING:
@@ -202,7 +202,7 @@ class PatientService:
         if dob is not None:
             if dob > today:
                 errors.append({"field": "date_of_birth", "message": "Cannot be in the future."})
-            elif age_in_years(dob, as_of=today) > MAX_PATIENT_AGE_YEARS:
+            elif age(dob, today) > MAX_PATIENT_AGE_YEARS:
                 errors.append(
                     {
                         "field": "date_of_birth",

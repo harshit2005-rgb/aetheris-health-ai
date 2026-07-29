@@ -1,8 +1,4 @@
-"""Unit tests for :mod:`app.utils.mrn`.
-
-MRN formatting is the one place a hospital-configured string is interpolated,
-so the template allowlist gets as much attention as the happy path.
-"""
+"""Tests for :mod:`app.utils.mrn`."""
 
 from __future__ import annotations
 
@@ -13,33 +9,70 @@ from app.utils.mrn import (
     MRN_MAX_LENGTH,
     InvalidMrnTemplateError,
     format_mrn,
+    generate_mrn,
+    parse_mrn,
     validate_mrn_template,
 )
 
 
+class TestGenerateMrn:
+    def test_generates_valid_mrn(self) -> None:
+        mrn = generate_mrn(year=2026, sequence=42)
+        assert mrn == "MRN-2026-00042"
+
+    def test_zero_pads_sequence(self) -> None:
+        mrn = generate_mrn(year=2026, sequence=1)
+        assert mrn == "MRN-2026-00001"
+
+    def test_raises_without_sequence(self) -> None:
+        with pytest.raises(ValueError):
+            generate_mrn(year=2026)  # sequence is None
+
+    def test_raises_negative_sequence(self) -> None:
+        with pytest.raises(ValueError):
+            generate_mrn(year=2026, sequence=-1)
+
+
+class TestParseMrn:
+    def test_parses_valid_mrn(self) -> None:
+        result = parse_mrn("MRN-2026-00042")
+        assert result is not None
+        assert result["year"] == 2026
+        assert result["sequence"] == 42
+
+    def test_returns_none_for_invalid(self) -> None:
+        assert parse_mrn("invalid") is None
+        assert parse_mrn("MRN-26-00001") is None
+
+
+# ── Per-hospital template API ────────────────────────────────────────────────
+# generate_mrn above renders the default format. These cover the template-driven
+# API the patient module uses, where the format is stored per hospital.
+
+
 class TestFormatMrn:
-    """Rendering an MRN from a template."""
+    """Rendering an MRN from a stored template."""
 
-    def test_format_mrn_default_template_pads_sequence_to_five_digits(self) -> None:
-        assert format_mrn(DEFAULT_MRN_TEMPLATE, year=2026, sequence=42) == "MRN-2026-00042"
-
-    def test_format_mrn_first_patient_renders_sequence_one(self) -> None:
-        assert format_mrn(DEFAULT_MRN_TEMPLATE, year=2026, sequence=1) == "MRN-2026-00001"
-
-    def test_format_mrn_sequence_beyond_padding_width_is_not_truncated(self) -> None:
-        # A hospital that passes 99,999 patients must keep getting valid MRNs,
-        # not silently wrap around to a value already in use.
-        assert format_mrn(DEFAULT_MRN_TEMPLATE, year=2026, sequence=123456) == "MRN-2026-123456"
+    def test_format_mrn_matches_generate_mrn_for_the_default_template(self) -> None:
+        # The two APIs must not drift: a hospital on the default template and a
+        # hospital with no template row have to end up with the same MRN.
+        assert format_mrn(DEFAULT_MRN_TEMPLATE, year=2026, sequence=42) == generate_mrn(
+            year=2026, sequence=42
+        )
 
     def test_format_mrn_honours_a_custom_template(self) -> None:
         assert format_mrn("AH/{year}/{seq:04d}", year=2026, sequence=7) == "AH/2026/0007"
 
+    def test_format_mrn_does_not_cap_the_sequence_at_the_padding_width(self) -> None:
+        # A hospital past 99,999 patients must keep getting valid MRNs rather
+        # than colliding with one already issued.
+        assert format_mrn(DEFAULT_MRN_TEMPLATE, year=2026, sequence=123456) == "MRN-2026-123456"
+
     def test_format_mrn_rejects_a_render_longer_than_the_column(self) -> None:
         # patients.mrn is VARCHAR(30); a longer value would fail at INSERT time
         # with an opaque database error instead of a clear configuration error.
-        oversized = "HOSPITAL-PREFIX-VERY-LONG-{year}-{seq:05d}"
         with pytest.raises(InvalidMrnTemplateError, match=str(MRN_MAX_LENGTH)):
-            format_mrn(oversized, year=2026, sequence=1)
+            format_mrn("HOSPITAL-PREFIX-VERY-LONG-{year}-{seq:05d}", year=2026, sequence=1)
 
 
 class TestValidateMrnTemplate:
@@ -47,13 +80,7 @@ class TestValidateMrnTemplate:
 
     @pytest.mark.parametrize(
         "template",
-        [
-            "MRN-{year}-{seq:05d}",
-            "{seq}",
-            "AH/{year}/{seq:04d}",
-            "P {seq:08d}",
-            "MRN_{seq:03d}",
-        ],
+        ["MRN-{year}-{seq:05d}", "{seq}", "AH/{year}/{seq:04d}", "P {seq:08d}", "MRN_{seq:03d}"],
         ids=["default", "bare_seq", "slashes", "space", "underscore"],
     )
     def test_validate_mrn_template_accepts_allowed_forms(self, template: str) -> None:

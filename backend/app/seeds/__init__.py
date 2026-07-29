@@ -1,6 +1,20 @@
-"""Idempotent seed data.
+"""Database seed data — permissions, roles, and demo data.
 
-Permissions, system roles, and the starter billable-service catalog. Seeds are
-re-runnable: running them twice must not create duplicates. Invoked via
-``make seed``.
+Usage::
+
+    from app.seeds.seed import seed_database
+
+    await seed_database()
+
+Or from the command line::
+
+    python -m app.seeds.seed
+
+See :mod:`app.seeds.seed` for the full seed implementation.
 """
+
+from app.seeds.seed import seed_database
+
+__all__ = [
+    "seed_database",
+]

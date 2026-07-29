@@ -3,18 +3,21 @@
 ``asyncio_mode = "auto"`` is set in ``pyproject.toml``, so ``async def`` tests
 need no decorator.
 
-Two families of fixtures live here:
+Three families of fixtures live here:
 
-**Database fixtures** (``db_engine``, ``db_session``, ``hospital_id``) require a
-real PostgreSQL, because the schema uses JSONB, native enums, partial indexes,
-and ``SELECT ... FOR UPDATE`` — none of which SQLite emulates
-(``docs/11-TESTING_STRATEGY.md`` §2.2). When no database is reachable they skip
-rather than fail, so unit tests still run on a laptop with no Docker. Point
-them at a database with ``TEST_DATABASE_URL``; the default is the configured
-development URL with a ``_test`` suffix.
+**Application** (``app``, ``async_client``, ``override_settings``) — for API
+tests that drive the ASGI app without starting a server.
 
-**Test doubles** (:class:`FakeSession`, :class:`RecordingAuditSink`) let unit
-tests exercise the service layer with no database at all.
+**Database** (``db_engine``, ``db_session``, ``uow``, ``hospital_id``,
+``actor_id``) — require a real PostgreSQL, because the schema uses JSONB,
+native enums, partial indexes, and ``SELECT ... FOR UPDATE``, none of which
+SQLite emulates (``docs/11-TESTING_STRATEGY.md`` §2.2). When no database is
+reachable they skip rather than fail, so unit tests still run on a laptop with
+no Docker. Point them at a database with ``TEST_DATABASE_URL``; the default is
+the configured URL with a ``_test`` suffix.
+
+**Test doubles** (``mock_repository``, :class:`FakeSession`,
+:class:`RecordingAuditSink`) — for unit tests that need no database at all.
 
 Each database test runs inside an outer transaction that is rolled back on
 teardown, so tests never see each other's rows and ordering never matters
@@ -26,22 +29,24 @@ from __future__ import annotations
 import asyncio
 import os
 import uuid
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Any, Self
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
-from app.core.config import settings
-
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import AsyncGenerator, Generator
     from types import TracebackType
 
-    from sqlalchemy.ext.asyncio import AsyncEngine
+    from fastapi import FastAPI
+    from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker
 
     from app.core.audit import AuditEvent
+    from app.database.unit_of_work import UnitOfWork
 
 __all__ = ["FakeSession", "RecordingAuditSink"]
 
@@ -54,7 +59,64 @@ def pytest_configure(config: pytest.Config) -> None:
     )
 
 
-# ── Test doubles ────────────────────────────────────────────────────────────
+# ── Application ──────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(scope="session")
+def app() -> FastAPI:
+    """Return the FastAPI application instance (session-scoped)."""
+    from app.main import create_app
+
+    return create_app()
+
+
+# ── Settings ─────────────────────────────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def override_settings() -> Generator[None]:
+    """Override settings for the duration of each test.
+
+    By default, switches to test-friendly values. Individual tests can modify
+    settings within their body.
+
+    This fixture is ``autouse`` so every test gets a clean settings context.
+    """
+    from app.core.config import settings
+
+    original_values: dict[str, Any] = {}
+
+    # Store original values.
+    for key in ("APP_ENV", "APP_DEBUG", "LOG_LEVEL"):
+        original_values[key] = getattr(settings, key, None)
+
+    try:
+        # Apply test defaults.
+        settings.APP_ENV = "development"  # type: ignore[assignment]
+        settings.APP_DEBUG = True
+        settings.LOG_LEVEL = "CRITICAL"
+        yield
+    finally:
+        # Restore original values.
+        for key, value in original_values.items():
+            if value is not None:
+                setattr(settings, key, value)
+
+
+# ── Test doubles ─────────────────────────────────────────────────────────────
+
+
+@pytest.fixture
+def mock_repository() -> AsyncMock:
+    """Return a generic :class:`AsyncMock` for repository injection.
+
+    Usage::
+
+        def test_service(mock_repository):
+            mock_repository.get_by_id.return_value = FakeModel()
+            service = MyService(mock_repository)
+    """
+    return AsyncMock()
 
 
 class _FakeNestedTransaction:
@@ -151,16 +213,18 @@ def audit_sink() -> RecordingAuditSink:
     return RecordingAuditSink()
 
 
-# ── Database fixtures ───────────────────────────────────────────────────────
+# ── Database ─────────────────────────────────────────────────────────────────
 
 
 def _test_database_url() -> str:
     """Return the URL of the test database.
 
-    ``TEST_DATABASE_URL`` wins. Otherwise the configured development URL is
-    reused with a ``_test`` suffix on the database name, so a misconfigured run
-    cannot write to a developer's working data.
+    ``TEST_DATABASE_URL`` wins. Otherwise the configured URL is reused with a
+    ``_test`` suffix on the database name, so a misconfigured run cannot write
+    to a developer's working data.
     """
+    from app.core.config import settings
+
     explicit = os.getenv("TEST_DATABASE_URL")
     if explicit:
         return explicit
@@ -221,6 +285,23 @@ async def db_engine() -> AsyncGenerator[AsyncEngine]:
 
 
 @pytest_asyncio.fixture
+async def db_session_factory() -> async_sessionmaker[AsyncSession]:
+    """Create an ephemeral async session factory for testing.
+
+    .. caution::
+
+        This connects to ``settings.DATABASE_URL`` and does **not** wrap the
+        session in a rolled-back transaction. Prefer :func:`db_session`, which
+        is isolated and points at the dedicated test database.
+    """
+    from app.core.config import settings
+    from app.database import create_session_factory, initialize_database
+
+    initialize_database(database_url=settings.DATABASE_URL)
+    return create_session_factory(pool_size=5, max_overflow=0, echo=False)
+
+
+@pytest_asyncio.fixture
 async def db_session(db_engine: AsyncEngine) -> AsyncGenerator[AsyncSession]:
     """Provide a session whose writes are discarded when the test ends.
 
@@ -229,6 +310,11 @@ async def db_session(db_engine: AsyncEngine) -> AsyncGenerator[AsyncSession]:
     code under test releases a savepoint rather than committing for real, so
     services can own their transaction boundary honestly and the test still
     leaves no rows behind.
+
+    This matters for more than tidiness: a plain ``session.rollback()`` on
+    teardown does not undo work a service already committed, so any service
+    that commits — as :class:`~app.services.patient_service.PatientService`
+    does — would otherwise leave rows in the database permanently.
     """
     async with db_engine.connect() as connection:
         transaction = await connection.begin()
@@ -242,6 +328,37 @@ async def db_session(db_engine: AsyncEngine) -> AsyncGenerator[AsyncSession]:
         finally:
             await session.close()
             await transaction.rollback()
+
+
+@pytest_asyncio.fixture
+async def uow(db_session: AsyncSession) -> UnitOfWork:
+    """Yield a :class:`UnitOfWork` bound to the test-scoped session."""
+    from app.database.unit_of_work import UnitOfWork
+
+    return UnitOfWork(db_session)
+
+
+# ── HTTP client ──────────────────────────────────────────────────────────────
+
+
+@pytest_asyncio.fixture
+async def async_client(app: FastAPI) -> AsyncGenerator[AsyncClient]:
+    """Yield an ``httpx.AsyncClient`` configured against the FastAPI app.
+
+    Sends real HTTP requests through ASGI without starting a server.
+
+    Usage::
+
+        async def test_health(async_client: AsyncClient):
+            response = await async_client.get("/api/v1/health/live")
+            assert response.status_code == 200
+    """
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+
+
+# ── Domain fixtures ──────────────────────────────────────────────────────────
 
 
 async def _create_hospital(session: AsyncSession, *, slug: str) -> uuid.UUID:
