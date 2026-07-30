@@ -73,6 +73,11 @@ PERMISSION_DEFINITIONS: list[tuple[str, str, str]] = [
     # Settings
     ("settings.read", "settings", "View hospital settings"),
     ("settings.update", "settings", "Update hospital settings"),
+    # Departments (docs/modules/14-hospital-settings.md §10)
+    ("department.read", "settings", "List and read departments"),
+    ("department.create", "settings", "Create departments"),
+    ("department.update", "settings", "Edit and reactivate departments"),
+    ("department.delete", "settings", "Deactivate departments"),
 ]
 
 # ── System Role Definitions ─────────────────────────────────────────────────
@@ -116,6 +121,10 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "report.export",
             "settings.read",
             "settings.update",
+            "department.read",
+            "department.create",
+            "department.update",
+            "department.delete",
         ],
     ),
     (
@@ -149,6 +158,10 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "report.export",
             "settings.read",
             "settings.update",
+            "department.read",
+            "department.create",
+            "department.update",
+            "department.delete",
         ],
     ),
     (
@@ -165,6 +178,7 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "lab.read",
             "lab.create",
             "report.read",
+            "department.read",
         ],
     ),
     (
@@ -176,6 +190,7 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "appointment.read",
             "appointment.check_in",
             "lab.read",
+            "department.read",
         ],
     ),
     (
@@ -188,6 +203,7 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "appointment.create",
             "appointment.cancel",
             "appointment.check_in",
+            "department.read",
         ],
     ),
     (
@@ -200,6 +216,7 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "billing.void",
             "billing.record_payment",
             "report.read",
+            "department.read",
         ],
     ),
     (
@@ -209,6 +226,7 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "lab.read",
             "lab.create",
             "lab.update",
+            "department.read",
         ],
     ),
     (
@@ -218,6 +236,7 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "pharmacy.read",
             "pharmacy.dispense",
             "inventory.read",
+            "department.read",
         ],
     ),
     (
@@ -227,6 +246,7 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "inventory.read",
             "inventory.create",
             "inventory.update",
+            "department.read",
         ],
     ),
 ]

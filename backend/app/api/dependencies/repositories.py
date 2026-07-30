@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.db import get_db_session
 from app.repositories import (
+    DepartmentRepository,
     HospitalRepository,
     MrnSequenceRepository,
     PasswordResetTokenRepository,
@@ -82,3 +83,8 @@ def get_mrn_sequence_repository(session: DbSession) -> MrnSequenceRepository:
 def get_password_reset_token_repository(session: DbSession) -> PasswordResetTokenRepository:
     """Provide a :class:`PasswordResetTokenRepository` bound to the request session."""
     return PasswordResetTokenRepository(session)
+
+
+def get_department_repository(session: DbSession) -> DepartmentRepository:
+    """Provide a :class:`DepartmentRepository` bound to the request session."""
+    return DepartmentRepository(session)

@@ -433,6 +433,37 @@ Every AI call is logged for observability, cost tracking, and evaluation.
 
 **Never** store the full prompt or response in this table by default — separate opt-in storage with retention policies for those.
 
+### 2.23 `departments`
+
+Organisational units within a hospital — Cardiology, Radiology, Emergency.
+Doctors are assigned to one; Reports and Inventory filter by it.
+
+Numbered 2.23 rather than inserted beside `doctors` so the existing §2.x
+numbering stays stable — module specs and code docstrings cite these numbers.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | UUID PK | |
+| hospital_id | UUID FK hospitals(id) NOT NULL | |
+| code | VARCHAR(20) NOT NULL | short code, e.g. `CARD`; uppercase-normalised on write |
+| name | VARCHAR(150) NOT NULL | |
+| description | TEXT | |
+| phone_extension | VARCHAR(10) | internal extension |
+| email | VARCHAR(200) | department inbox |
+| location | VARCHAR(150) | floor / wing / block |
+| + audit columns | | |
+
+**Indexes:** `uq_departments_hospital_code (hospital_id, code)`,
+`uq_departments_hospital_name_lower (hospital_id, lower(name))`,
+`ix_departments_hospital_active (hospital_id) WHERE deleted_at IS NULL`,
+`ix_departments_name_lower (hospital_id, lower(name) varchar_pattern_ops)`
+
+Check: `ck_departments_code_format` — `code ~ '^[A-Z0-9][A-Z0-9_-]{1,19}$'`.
+
+`doctors.department_id` and `departments.head_doctor_id` are added by later
+migrations, not at creation: the two tables reference each other, so neither
+can carry its foreign key when it is created.
+
 ---
 
 ## 3. Enum Types (Postgres)

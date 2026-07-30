@@ -20,6 +20,7 @@ Placement rule (``docs/09-PROJECT_STRUCTURE.md``): a new repository goes in
 """
 
 from app.repositories.base import BaseRepository
+from app.repositories.department_repository import DepartmentRepository
 from app.repositories.hospital_repository import HospitalRepository
 from app.repositories.mrn_sequence_repository import MrnSequenceRepository
 from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
@@ -31,6 +32,7 @@ from app.repositories.user_repository import UserRepository
 
 __all__ = [
     "BaseRepository",
+    "DepartmentRepository",
     "HospitalRepository",
     "MrnSequenceRepository",
     "PatientRepository",

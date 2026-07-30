@@ -17,6 +17,7 @@ from app.models.base import (
     TimestampMixin,
     UUIDPrimaryKeyMixin,
 )
+from app.models.department import Department, DepartmentStatus
 from app.models.hospital import Hospital
 from app.models.password_reset_token import PasswordResetToken
 from app.models.patient import BloodGroup, Gender, MrnSequence, Patient, PatientStatus
@@ -49,4 +50,7 @@ __all__ = [
     "MrnSequence",
     "Patient",
     "PatientStatus",
+    # Department
+    "Department",
+    "DepartmentStatus",
 ]
