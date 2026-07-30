@@ -93,9 +93,13 @@ def _register_middleware(app: FastAPI) -> None:
     from app.middleware.logging import RequestLoggingMiddleware
     from app.middleware.rate_limit import RateLimitMiddleware
     from app.middleware.request_id import RequestIDMiddleware
+    from app.middleware.timing import TimingMiddleware
 
-    # 6. Exception handler — outermost, wraps everything
+    # 7. Exception handler — outermost, wraps everything
     app.add_middleware(ExceptionHandlerMiddleware)
+
+    # 6. Timing (measures total request time including all inner layers)
+    app.add_middleware(TimingMiddleware)
 
     # 5. Auth
     app.add_middleware(AuthMiddleware)
