@@ -32,6 +32,7 @@ from app.api.dependencies.db import get_db_session
 # module rather than picking between ``dependencies/`` sub-modules.
 from app.api.dependencies.repositories import (  # noqa: F401
     DbSession,
+    get_department_repository,
     get_hospital_repository,
     get_mrn_sequence_repository,
     get_password_reset_token_repository,
@@ -43,6 +44,7 @@ from app.api.dependencies.repositories import (  # noqa: F401
 )
 from app.core.audit import AuditSink, StructlogAuditSink
 from app.repositories import (
+    DepartmentRepository,
     MrnSequenceRepository,
     PasswordResetTokenRepository,
     PatientRepository,
@@ -52,6 +54,11 @@ from app.repositories import (
     UserRepository,
 )
 from app.services.auth_service import AuthService
+from app.services.department_service import (
+    DepartmentService,
+    DepartmentUsageSource,
+    NullDepartmentUsageSource,
+)
 from app.services.mrn_service import MRNService
 from app.services.patient_service import PatientService
 from app.services.user_service import UserService
@@ -124,9 +131,37 @@ def get_patient_service(
     return PatientService(patients, mrn_service, session, audit)
 
 
+# ── Department module ───────────────────────────────────────────────────────
+def get_department_usage_source() -> DepartmentUsageSource:
+    """Provide the source that answers how many doctors a department has.
+
+    Returns the interim null implementation, which reports zero assignments
+    because no ``doctors`` table exists yet. When
+    ``docs/modules/04-doctor-management.md`` ships, this provider returns a
+    ``DoctorRepository``-backed adapter instead and
+    :class:`DepartmentService` does not change.
+    """
+    return NullDepartmentUsageSource()
+
+
+def get_department_service(
+    departments: DepartmentRepository = Depends(get_department_repository),
+    session: AsyncSession = Depends(get_db_session),
+    audit: AuditSink = Depends(get_audit_sink),
+    usage: DepartmentUsageSource = Depends(get_department_usage_source),
+) -> DepartmentService:
+    """Provide a :class:`DepartmentService` bound to the request session.
+
+    The repository and the service share the same request-scoped session, so
+    the service's ``commit()`` covers every write made through it.
+    """
+    return DepartmentService(departments, session, audit, usage)
+
+
 __all__ = [
     # Re-exports from repositories
     "DbSession",
+    "get_department_repository",
     "get_hospital_repository",
     "get_password_reset_token_repository",
     "get_permission_repository",
@@ -140,4 +175,7 @@ __all__ = [
     "get_audit_sink",
     "get_mrn_service",
     "get_patient_service",
+    # Department module
+    "get_department_service",
+    "get_department_usage_source",
 ]
