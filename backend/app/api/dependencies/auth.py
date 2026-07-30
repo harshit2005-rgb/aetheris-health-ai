@@ -88,7 +88,7 @@ async def get_current_user(
                 "error_code": ErrorCode.AUTHENTICATION_REQUIRED,
             },
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from None
     except pyjwt.InvalidTokenError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -97,7 +97,7 @@ async def get_current_user(
                 "error_code": ErrorCode.AUTHENTICATION_REQUIRED,
             },
             headers={"WWW-Authenticate": "Bearer"},
-        )
+        ) from None
 
     # Validate token type
     if payload.get("type") != "access":

@@ -103,37 +103,28 @@ def override_settings() -> Generator[None]:
                 setattr(settings, key, value)
 
 
-# ── Test doubles ─────────────────────────────────────────────────────────────
-
-
 @pytest.fixture(autouse=True)
-def reset_rate_limiter() -> Generator[None]:
-    """Clear the rate-limiter buckets before every test.
+def reset_rate_limiters() -> None:
+    """Clear the rate-limiter buckets before each test.
 
-    ``app.middleware.rate_limit`` holds its token buckets in two **module-level**
-    limiters, so they outlive any individual ``create_app()`` and accumulate
-    across the whole test session. ``AuthMiddleware`` never populates
-    ``request.state.user`` — real authentication is a route dependency — so
-    every request in the suite, authenticated or not, keys on
-    ``ip:testclient`` and shares the single 60-requests-per-minute anonymous
-    bucket.
+    ``app.middleware.rate_limit`` builds its limiters as module-level
+    singletons at import time, so their counters are shared by every app
+    instance in the process and accumulate across tests. Without this reset the
+    suite starts returning 429 partway through, and which tests fail depends on
+    execution order.
 
-    Without this reset the suite has a hard ceiling of 60 HTTP requests in
-    total, and the 61st test to run gets a 429 regardless of what it asserts.
-    That makes failures depend on test *ordering*, which is exactly the kind of
-    flake that erodes trust in a suite.
-
-    Reaching into ``_buckets`` is deliberate: the limiter exposes no reset hook,
-    and adding one would mean changing production middleware to suit tests. The
-    in-memory limiter is itself a placeholder — its own docstring flags the
-    Redis-backed replacement as Sprint 3 work — so this shim is scoped to last
-    exactly as long as the thing it works around.
+    Resetting here keeps tests isolated. The underlying design is worth
+    revisiting separately: ``docs/06-API_STANDARDS.md`` §15 specifies rate
+    limits tracked in Redis, and an in-process counter also cannot work once
+    the app runs more than one instance (``docs/03-ARCHITECTURE.md`` §13).
     """
-    from app.middleware.rate_limit import _anon_limiter, _user_limiter
+    from app.middleware import rate_limit
 
-    _anon_limiter._buckets.clear()  # noqa: SLF001
-    _user_limiter._buckets.clear()  # noqa: SLF001
-    yield
+    for limiter in (rate_limit._anon_limiter, rate_limit._user_limiter):
+        limiter._buckets.clear()
+
+
+# ── Test doubles ─────────────────────────────────────────────────────────────
 
 
 @pytest.fixture
@@ -229,6 +220,16 @@ class RecordingAuditSink:
         """
         assert self.events, "Expected at least one audit event, but none were recorded."
         return self.events[-1]
+
+
+@pytest.fixture
+def mock_uow() -> AsyncMock:
+    """Return a mocked :class:`~app.database.unit_of_work.UnitOfWork`.
+
+    Services own the transaction boundary, so unit tests assert that a write
+    path committed by checking ``mock_uow.commit.await_count``.
+    """
+    return AsyncMock()
 
 
 @pytest.fixture

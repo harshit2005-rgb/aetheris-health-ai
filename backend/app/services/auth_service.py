@@ -9,12 +9,17 @@ from __future__ import annotations
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING
 
 import structlog
 
 from app.core.config import settings
-from app.core.exceptions import AuthenticationError, BusinessRuleError
+from app.core.exceptions import (
+    AccountLockedError,
+    AccountSuspendedError,
+    AuthenticationError,
+    BusinessRuleError,
+)
 from app.core.security import (
     create_access_token,
     create_mfa_ticket,
@@ -30,9 +35,14 @@ from app.core.security import (
     verify_totp_code,
 )
 from app.models.user import User, UserStatus
-from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
-from app.repositories.refresh_token_repository import RefreshTokenRepository
-from app.repositories.user_repository import UserRepository
+
+if TYPE_CHECKING:
+    from typing import Any
+
+    from app.database.unit_of_work import UnitOfWork
+    from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
+    from app.repositories.refresh_token_repository import RefreshTokenRepository
+    from app.repositories.user_repository import UserRepository
 
 logger = structlog.get_logger(__name__)
 
@@ -50,14 +60,22 @@ class AuthService:
         user_repo: UserRepository,
         refresh_token_repo: RefreshTokenRepository,
         password_reset_repo: PasswordResetTokenRepository,
+        uow: UnitOfWork,
     ) -> None:
         self._user_repo = user_repo
         self._refresh_token_repo = refresh_token_repo
         self._password_reset_repo = password_reset_repo
+        self._uow = uow
 
     # ── Login ────────────────────────────────────────────────────────────────
 
-    async def login(self, email: str, password: str, device_info: str | None = None, ip_address: str | None = None) -> dict[str, Any]:
+    async def login(
+        self,
+        email: str,
+        password: str,
+        device_info: str | None = None,
+        ip_address: str | None = None,
+    ) -> dict[str, Any]:
         """Authenticate a user with email and password.
 
         :param email: The user's email address.
@@ -101,6 +119,9 @@ class AuthService:
         if user.mfa_enabled:
             mfa_ticket = create_mfa_ticket(user.id)
             logger.info("mfa_required", user_id=str(user.id))
+            # Commit the login timestamp and failed-count reset before
+            # returning: this branch does not reach _issue_tokens.
+            await self._uow.commit()
             return {
                 "mfa_ticket": mfa_ticket,
                 "expires_in": 300,  # 5 minutes
@@ -109,7 +130,13 @@ class AuthService:
         # Step 8: Issue tokens
         return await self._issue_tokens(user, device_info, ip_address)
 
-    async def verify_mfa(self, mfa_ticket: str, code: str, device_info: str | None = None, ip_address: str | None = None) -> dict[str, Any]:
+    async def verify_mfa(
+        self,
+        mfa_ticket: str,
+        code: str,
+        device_info: str | None = None,
+        ip_address: str | None = None,
+    ) -> dict[str, Any]:
         """Complete MFA verification after login.
 
         :param mfa_ticket: The MFA ticket from the login response.
@@ -148,7 +175,9 @@ class AuthService:
 
     # ── Token Management ─────────────────────────────────────────────────────
 
-    async def refresh_token(self, raw_token: str, device_info: str | None = None, ip_address: str | None = None) -> dict[str, Any]:
+    async def refresh_token(
+        self, raw_token: str, device_info: str | None = None, ip_address: str | None = None
+    ) -> dict[str, Any]:
         """Refresh an access token using a refresh token (rotation pattern).
 
         Implements refresh token rotation with reuse detection.
@@ -215,6 +244,8 @@ class AuthService:
 
         logger.info("token_refreshed", user_id=str(user.id), token_id=str(stored_token.id))
 
+        await self._uow.commit()
+
         return {
             "access_token": access_token,
             "refresh_token": raw_new_token,
@@ -231,7 +262,11 @@ class AuthService:
 
         if stored_token is not None and not stored_token.is_revoked:
             await self._refresh_token_repo.revoke(stored_token)
-            logger.info("token_revoked", token_id=str(stored_token.id), user_id=str(stored_token.user_id))
+            logger.info(
+                "token_revoked", token_id=str(stored_token.id), user_id=str(stored_token.user_id)
+            )
+
+        await self._uow.commit()
 
     async def logout_all(self, user_id: uuid.UUID) -> int:
         """Revoke ALL refresh tokens for a user.
@@ -241,6 +276,7 @@ class AuthService:
         """
         count = await self._refresh_token_repo.revoke_all_for_user(user_id)
         logger.info("all_tokens_revoked", user_id=str(user_id), count=count)
+        await self._uow.commit()
         return count
 
     # ── Password Management ────────────────────────────────────────────────
@@ -260,7 +296,9 @@ class AuthService:
 
         # Generate token
         raw_token, token_hash = generate_opaque_token()
-        expires_at = datetime.now(UTC) + timedelta(minutes=settings.PASSWORD_RESET_TOKEN_TTL_MINUTES)
+        expires_at = datetime.now(UTC) + timedelta(
+            minutes=settings.PASSWORD_RESET_TOKEN_TTL_MINUTES
+        )
 
         await self._password_reset_repo.create(
             user_id=user.id,
@@ -268,6 +306,7 @@ class AuthService:
             expires_at=expires_at,
         )
 
+        await self._uow.commit()
         logger.info("password_reset_token_created", user_id=str(user.id))
 
     async def reset_password(self, raw_token: str, new_password: str) -> None:
@@ -281,7 +320,9 @@ class AuthService:
         # Validate password strength
         password_errors = validate_password_strength(new_password)
         if password_errors:
-            raise BusinessRuleError("Password does not meet requirements.", detail={"password": password_errors})
+            raise BusinessRuleError(
+                "Password does not meet requirements.", detail={"password": password_errors}
+            )
 
         # Find the token
         token_hash = hash_token(raw_token)
@@ -313,9 +354,12 @@ class AuthService:
         # Revoke all refresh tokens (force re-login)
         await self._refresh_token_repo.revoke_all_for_user(user.id)
 
+        await self._uow.commit()
         logger.info("password_reset_completed", user_id=str(user.id))
 
-    async def change_password(self, user_id: uuid.UUID, current_password: str, new_password: str) -> None:
+    async def change_password(
+        self, user_id: uuid.UUID, current_password: str, new_password: str
+    ) -> None:
         """Change password for an authenticated user.
 
         :param user_id: The user's UUID.
@@ -333,7 +377,9 @@ class AuthService:
 
         password_errors = validate_password_strength(new_password)
         if password_errors:
-            raise BusinessRuleError("Password does not meet requirements.", detail={"password": password_errors})
+            raise BusinessRuleError(
+                "Password does not meet requirements.", detail={"password": password_errors}
+            )
 
         now = datetime.now(UTC)
         new_hash = hash_password(new_password)
@@ -347,6 +393,7 @@ class AuthService:
         # (We don't have a "current session" concept, so we revoke all for now.)
         await self._refresh_token_repo.revoke_all_for_user(user.id)
 
+        await self._uow.commit()
         logger.info("password_changed", user_id=str(user.id))
 
     async def admin_reset_password(self, user_id: uuid.UUID) -> None:
@@ -369,6 +416,7 @@ class AuthService:
         # Revoke all sessions
         await self._refresh_token_repo.revoke_all_for_user(user.id)
 
+        await self._uow.commit()
         logger.info("admin_password_reset", user_id=str(user_id))
 
     # ── MFA ─────────────────────────────────────────────────────────────────
@@ -423,6 +471,7 @@ class AuthService:
             mfa_enabled=True,
         )
 
+        await self._uow.commit()
         logger.info("mfa_enabled", user_id=str(user.id))
 
     async def disable_mfa(self, user_id: uuid.UUID, password: str, code: str) -> None:
@@ -449,6 +498,7 @@ class AuthService:
             mfa_enabled=False,
         )
 
+        await self._uow.commit()
         logger.info("mfa_disabled", user_id=str(user.id))
 
     # ── Internal Helpers ────────────────────────────────────────────────────
@@ -467,15 +517,21 @@ class AuthService:
         """Check if the user's account is usable.
 
         :param user: The user to check.
-        :raises AuthenticationError: If the account is locked or suspended.
+        :raises AccountSuspendedError: If the account is suspended.
+        :raises AccountLockedError: If the account is temporarily locked.
+        :raises AuthenticationError: If the account has no usable credential.
         """
         if user.status == UserStatus.SUSPENDED:
             logger.info("login_attempt_suspended_account", user_id=str(user.id))
-            raise AuthenticationError("Invalid credentials.")
+            raise AccountSuspendedError
 
         if user.locked_until and datetime.now(UTC) < user.locked_until:
-            logger.info("login_attempt_locked_account", user_id=str(user.id), locked_until=str(user.locked_until))
-            raise AuthenticationError("Invalid credentials.")
+            logger.info(
+                "login_attempt_locked_account",
+                user_id=str(user.id),
+                locked_until=str(user.locked_until),
+            )
+            raise AccountLockedError(user.locked_until)
 
         if user.status == UserStatus.INVITED and user.password_hash is None:
             logger.info("login_attempt_invited_account", user_id=str(user.id))
@@ -499,7 +555,16 @@ class AuthService:
                 locked_until=str(locked_until),
             )
 
-    async def _issue_tokens(self, user: User, device_info: str | None = None, ip_address: str | None = None) -> dict[str, Any]:
+        # Committed here rather than by the caller: login() raises
+        # AuthenticationError immediately after this returns, so a commit at the
+        # caller's end would never be reached and the attempt counter would be
+        # rolled back. Brute-force protection depends on this write surviving a
+        # failed request (docs/modules/01-authentication.md §4, rule 4).
+        await self._uow.commit()
+
+    async def _issue_tokens(
+        self, user: User, device_info: str | None = None, ip_address: str | None = None
+    ) -> dict[str, Any]:
         """Issue a new access token and refresh token pair.
 
         :param user: The authenticated user.
@@ -517,6 +582,11 @@ class AuthService:
             device_info=device_info,
             ip_address=ip_address,
         )
+
+        # The refresh token must be durable before it is handed to the client.
+        # Returning a token that was never committed is what made every refresh
+        # fail with "Invalid refresh token" on first use.
+        await self._uow.commit()
 
         # Get permissions
         permissions = await self._get_user_permission_codes(user)

@@ -17,6 +17,7 @@ from app.core.security import hash_password
 from app.models.user import User, UserStatus
 
 if TYPE_CHECKING:
+    from app.database.unit_of_work import UnitOfWork
     from app.repositories.permission_repository import PermissionRepository
     from app.repositories.role_repository import RoleRepository
     from app.repositories.user_repository import UserRepository
@@ -40,15 +41,19 @@ class UserService:
         role_repo: RoleRepository,
         permission_repo: PermissionRepository,
         auth_service: AuthService,
+        uow: UnitOfWork,
     ) -> None:
         self._user_repo = user_repo
         self._role_repo = role_repo
         self._permission_repo = permission_repo
         self._auth_service = auth_service
+        self._uow = uow
 
     # ── Read ─────────────────────────────────────────────────────────────────
 
-    async def get_user(self, user_id: uuid.UUID, actor_hospital_id: uuid.UUID | None = None) -> User:
+    async def get_user(
+        self, user_id: uuid.UUID, actor_hospital_id: uuid.UUID | None = None
+    ) -> User:
         """Retrieve a single user by ID.
 
         :param user_id: The user's UUID.
@@ -102,22 +107,32 @@ class UserService:
         # Enrich with roles
         user_list = []
         for u in users:
-            roles = [{"id": r.role.id, "name": r.role.name, "description": r.role.description, "is_system": r.role.is_system} for r in (u.user_roles or [])]
-            user_list.append({
-                "id": u.id,
-                "email": u.email,
-                "first_name": u.first_name,
-                "last_name": u.last_name,
-                "phone": u.phone,
-                "status": u.status.value,
-                "hospital_id": u.hospital_id,
-                "roles": roles,
-                "mfa_enabled": u.mfa_enabled,
-                "last_login_at": u.last_login_at,
-                "password_changed_at": u.password_changed_at,
-                "created_at": u.created_at,
-                "updated_at": u.updated_at,
-            })
+            roles = [
+                {
+                    "id": r.role.id,
+                    "name": r.role.name,
+                    "description": r.role.description,
+                    "is_system": r.role.is_system,
+                }
+                for r in (u.user_roles or [])
+            ]
+            user_list.append(
+                {
+                    "id": u.id,
+                    "email": u.email,
+                    "first_name": u.first_name,
+                    "last_name": u.last_name,
+                    "phone": u.phone,
+                    "status": u.status.value,
+                    "hospital_id": u.hospital_id,
+                    "roles": roles,
+                    "mfa_enabled": u.mfa_enabled,
+                    "last_login_at": u.last_login_at,
+                    "password_changed_at": u.password_changed_at,
+                    "created_at": u.created_at,
+                    "updated_at": u.updated_at,
+                }
+            )
 
         return {
             "items": user_list,
@@ -197,6 +212,7 @@ class UserService:
                 if not await self._user_repo.has_role(user.id, role_id):
                     await self._user_repo.add_role(user.id, role_id)
 
+        await self._uow.commit()
         logger.info("user_invited", user_id=str(user.id), hospital_id=str(hospital_id))
         return user
 
@@ -230,6 +246,7 @@ class UserService:
 
         if safe_updates:
             user = await self._user_repo.update(user, **safe_updates)
+            await self._uow.commit()
             logger.info("user_updated", user_id=str(user.id), fields=list(safe_updates.keys()))
 
         return user
@@ -248,6 +265,7 @@ class UserService:
 
         if safe_updates:
             user = await self._user_repo.update(user, **safe_updates)
+            await self._uow.commit()
             logger.info("own_profile_updated", user_id=str(user.id))
 
         return user
@@ -275,6 +293,7 @@ class UserService:
         # Revoke all sessions
         await self._auth_service.logout_all(user_id)
 
+        await self._uow.commit()
         logger.info("user_deactivated", user_id=str(user_id), actor_id=str(actor_user_id))
         return user
 
@@ -289,8 +308,11 @@ class UserService:
         if user is None:
             raise NotFoundError("User not found.")
 
-        await self._user_repo.update(user, status=UserStatus.ACTIVE, failed_login_attempts=0, locked_until=None)
+        await self._user_repo.update(
+            user, status=UserStatus.ACTIVE, failed_login_attempts=0, locked_until=None
+        )
 
+        await self._uow.commit()
         logger.info("user_reactivated", user_id=str(user_id))
         return user
 
@@ -333,6 +355,7 @@ class UserService:
         # Revoke refresh tokens to force re-login with new claims
         await self._auth_service.logout_all(user_id)
 
+        await self._uow.commit()
         logger.info("role_assigned", user_id=str(user_id), role_id=str(role_id))
         return user
 
@@ -361,6 +384,7 @@ class UserService:
         removed = await self._user_repo.remove_role(user_id, role_id)
         if removed:
             await self._auth_service.logout_all(user_id)
+            await self._uow.commit()
             logger.info("role_removed", user_id=str(user_id), role_id=str(role_id))
 
         return user

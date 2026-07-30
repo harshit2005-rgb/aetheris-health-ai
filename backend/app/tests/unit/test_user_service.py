@@ -6,6 +6,7 @@ Tests business logic with mocked repositories.
 from __future__ import annotations
 
 import uuid
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -39,7 +40,13 @@ def mock_auth_service() -> AsyncMock:
 
 
 @pytest.fixture
-def user_service(mock_user_repo: AsyncMock, mock_role_repo: AsyncMock, mock_permission_repo: AsyncMock, mock_auth_service: AsyncMock):
+def user_service(
+    mock_user_repo: AsyncMock,
+    mock_role_repo: AsyncMock,
+    mock_permission_repo: AsyncMock,
+    mock_auth_service: AsyncMock,
+    mock_uow: AsyncMock,
+) -> Any:
     """Create a UserService with mocked dependencies."""
     from app.services.user_service import UserService
 
@@ -48,10 +55,11 @@ def user_service(mock_user_repo: AsyncMock, mock_role_repo: AsyncMock, mock_perm
         role_repo=mock_role_repo,
         permission_repo=mock_permission_repo,
         auth_service=mock_auth_service,
+        uow=mock_uow,
     )
 
 
-def _make_user(overrides: dict | None = None) -> User:
+def _make_user(overrides: dict[str, Any] | None = None) -> User:
     """Create a test user with sensible defaults."""
     user_id = uuid.uuid4()
     hospital_id = uuid.uuid4()
@@ -79,10 +87,11 @@ def _make_user(overrides: dict | None = None) -> User:
 
 # ── Read Tests ─────────────────────────────────────────────────────────────
 
+
 class TestGetUser:
     """Tests for retrieving users."""
 
-    async def test_get_user_success(self, user_service, mock_user_repo):
+    async def test_get_user_success(self: Any, user_service: Any, mock_user_repo: Any) -> None:
         """Existing user is returned."""
         user = _make_user()
         mock_user_repo.get_by_id.return_value = user
@@ -91,14 +100,16 @@ class TestGetUser:
         assert result.id == user.id
         assert result.email == "test@hospital.test"
 
-    async def test_get_user_not_found(self, user_service, mock_user_repo):
+    async def test_get_user_not_found(self: Any, user_service: Any, mock_user_repo: Any) -> None:
         """Non-existent user raises NotFoundError."""
         mock_user_repo.get_by_id.return_value = None
 
         with pytest.raises(NotFoundError, match="User not found."):
             await user_service.get_user(user_id=uuid.uuid4())
 
-    async def test_get_user_cross_hospital_blocked(self, user_service, mock_user_repo):
+    async def test_get_user_cross_hospital_blocked(
+        self: Any, user_service: Any, mock_user_repo: Any
+    ) -> None:
         """User from different hospital is not visible."""
         user = _make_user()
         mock_user_repo.get_by_id.return_value = user
@@ -110,17 +121,20 @@ class TestGetUser:
 
 # ── Invite Tests ──────────────────────────────────────────────────────────
 
+
 class TestInviteUser:
     """Tests for inviting users."""
 
-    async def test_invite_user_success(self, user_service, mock_user_repo):
+    async def test_invite_user_success(self: Any, user_service: Any, mock_user_repo: Any) -> None:
         """User is created with invited status."""
         hospital_id = uuid.uuid4()
         mock_user_repo.get_by_email.return_value = None
-        mock_user_repo.create.return_value = _make_user({
-            "status": UserStatus.INVITED,
-            "hospital_id": hospital_id,
-        })
+        mock_user_repo.create.return_value = _make_user(
+            {
+                "status": UserStatus.INVITED,
+                "hospital_id": hospital_id,
+            }
+        )
 
         result = await user_service.invite_user(
             hospital_id=hospital_id,
@@ -133,7 +147,9 @@ class TestInviteUser:
         assert result.status == UserStatus.INVITED
         mock_user_repo.create.assert_called_once()
 
-    async def test_invite_user_duplicate_email(self, user_service, mock_user_repo):
+    async def test_invite_user_duplicate_email(
+        self: Any, user_service: Any, mock_user_repo: Any
+    ) -> None:
         """Duplicate email raises BusinessRuleError."""
         hospital_id = uuid.uuid4()
         mock_user_repo.get_by_email.return_value = _make_user()
@@ -147,7 +163,9 @@ class TestInviteUser:
                 actor_permissions=["user.create"],
             )
 
-    async def test_invite_user_without_permission(self, user_service, mock_user_repo):
+    async def test_invite_user_without_permission(
+        self: Any, user_service: Any, mock_user_repo: Any
+    ) -> None:
         """Missing permission raises error."""
         from app.core.exceptions import PermissionDeniedError
 
@@ -166,17 +184,20 @@ class TestInviteUser:
 
 # ── Deactivate Tests ──────────────────────────────────────────────────────
 
+
 class TestDeactivateUser:
     """Tests for deactivating users."""
 
-    async def test_deactivate_other_user(self, user_service, mock_user_repo, mock_auth_service):
+    async def test_deactivate_other_user(
+        self: Any, user_service: Any, mock_user_repo: Any, mock_auth_service: Any
+    ) -> None:
         """Admin can deactivate another user."""
         user = _make_user()
         admin_id = uuid.uuid4()
         mock_user_repo.get_by_id.return_value = user
 
         # Mock update to modify the user in-place (simulating SQLAlchemy flush)
-        async def _update_in_place(instance, **kwargs):
+        async def _update_in_place(instance: Any, **kwargs: Any) -> Any:
             for key, value in kwargs.items():
                 setattr(instance, key, value)
             return instance
@@ -188,7 +209,9 @@ class TestDeactivateUser:
         assert result.status == UserStatus.SUSPENDED
         mock_auth_service.logout_all.assert_called_once_with(user.id)
 
-    async def test_deactivate_self_raises_error(self, user_service, mock_user_repo):
+    async def test_deactivate_self_raises_error(
+        self: Any, user_service: Any, mock_user_repo: Any
+    ) -> None:
         """Deactivating yourself is not allowed."""
         user = _make_user()
 
@@ -198,10 +221,17 @@ class TestDeactivateUser:
 
 # ── Role Management Tests ──────────────────────────────────────────────────
 
+
 class TestRoleManagement:
     """Tests for role assignment and removal."""
 
-    async def test_assign_role(self, user_service, mock_user_repo, mock_role_repo, mock_auth_service):
+    async def test_assign_role(
+        self: Any,
+        user_service: Any,
+        mock_user_repo: Any,
+        mock_role_repo: Any,
+        mock_auth_service: Any,
+    ) -> None:
         """Role is assigned and sessions are revoked."""
         user = _make_user()
         role_id = uuid.uuid4()
@@ -219,7 +249,13 @@ class TestRoleManagement:
         mock_user_repo.add_role.assert_called_once_with(user.id, role_id)
         mock_auth_service.logout_all.assert_called_once_with(user.id)
 
-    async def test_assign_role_already_assigned(self, user_service, mock_user_repo, mock_role_repo, mock_auth_service):
+    async def test_assign_role_already_assigned(
+        self: Any,
+        user_service: Any,
+        mock_user_repo: Any,
+        mock_role_repo: Any,
+        mock_auth_service: Any,
+    ) -> None:
         """Re-assigning same role is idempotent."""
         user = _make_user()
         role_id = uuid.uuid4()
@@ -235,11 +271,10 @@ class TestRoleManagement:
         )
 
         mock_user_repo.add_role.assert_not_called()
-        # Should not revoke sessions if role was already there
-        # (logout_all is still called because the code currently does it always)
-        # Actually our implementation calls logout_all always. That's the current behavior.
 
-    async def test_remove_role(self, user_service, mock_user_repo, mock_auth_service):
+    async def test_remove_role(
+        self: Any, user_service: Any, mock_user_repo: Any, mock_auth_service: Any
+    ) -> None:
         """Role is removed and sessions are revoked."""
         user = _make_user()
         role_id = uuid.uuid4()

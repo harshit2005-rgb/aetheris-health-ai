@@ -27,6 +27,7 @@ from app.api.v1 import (
 )
 from app.core.config import settings
 from app.core.constants import API_DOCS_URL, API_OPENAPI_URL, API_REDOC_URL, API_V1_PREFIX
+from app.core.error_codes import ErrorCode
 from app.core.lifecycle import lifespan
 from app.core.logging import configure_logging
 
@@ -168,11 +169,26 @@ def _register_routers(app: FastAPI) -> None:
     logger.debug("routers_registered")
 
 
+#: HTTP status → error code, for HTTPExceptions raised with a plain string
+#: detail (FastAPI's own 404s and 405s).
+_STATUS_TO_ERROR_CODE: dict[int, str] = {
+    401: ErrorCode.AUTHENTICATION_REQUIRED,
+    403: ErrorCode.PERMISSION_DENIED,
+    404: ErrorCode.RESOURCE_NOT_FOUND,
+    409: ErrorCode.RESOURCE_CONFLICT,
+    422: ErrorCode.VALIDATION_ERROR,
+    429: ErrorCode.RATE_LIMITED,
+}
+
+
 def _register_exception_handlers(app: FastAPI) -> None:
     """Register global exception handlers.
 
     Maps :class:`AetherisError` subclasses to structured JSON responses.
     """
+    from fastapi.exceptions import RequestValidationError
+    from starlette.exceptions import HTTPException as StarletteHTTPException
+
     from app.core.envelope import error_envelope
     from app.core.error_codes import ErrorCode
     from app.core.exceptions import AetherisError
@@ -198,6 +214,60 @@ def _register_exception_handlers(app: FastAPI) -> None:
                 exc.message,
                 error_code=exc.error_code,
                 errors=exc.detail,
+                request_id=getattr(request.state, "request_id", None),
+            ),
+        )
+
+    @app.exception_handler(StarletteHTTPException)
+    async def http_exception_handler(request: Request, exc: StarletteHTTPException) -> JSONResponse:
+        """Map HTTPException to the standard failure envelope.
+
+        The auth dependencies raise ``HTTPException`` with a ``{"message",
+        "error_code"}`` detail. Without this handler FastAPI serialises that as
+        ``{"detail": ...}``, so a 401 or 403 does not match the envelope in
+        ``docs/06-API_STANDARDS.md`` §5.3 and clients need a second error shape.
+        """
+        detail = exc.detail
+        if isinstance(detail, dict):
+            message = str(detail.get("message", "Request failed."))
+            error_code = str(detail.get("error_code", ErrorCode.INTERNAL_ERROR))
+        else:
+            message = str(detail)
+            error_code = str(_STATUS_TO_ERROR_CODE.get(exc.status_code, ErrorCode.INTERNAL_ERROR))
+
+        return JSONResponse(
+            status_code=exc.status_code,
+            content=error_envelope(
+                message,
+                error_code=error_code,
+                request_id=getattr(request.state, "request_id", None),
+            ),
+            headers=getattr(exc, "headers", None),
+        )
+
+    @app.exception_handler(RequestValidationError)
+    async def validation_exception_handler(
+        request: Request, exc: RequestValidationError
+    ) -> JSONResponse:
+        """Map Pydantic request-validation errors to the standard envelope.
+
+        ``docs/06-API_STANDARDS.md`` §5.3 specifies ``errors`` as a list of
+        ``{field, message}`` objects; FastAPI's default is a raw ``detail``
+        array whose ``loc`` tuples leak internal request structure.
+        """
+        errors = [
+            {
+                "field": ".".join(str(part) for part in error.get("loc", ()) if part != "body"),
+                "message": str(error.get("msg", "Invalid value.")),
+            }
+            for error in exc.errors()
+        ]
+        return JSONResponse(
+            status_code=422,
+            content=error_envelope(
+                "Validation failed.",
+                error_code=ErrorCode.VALIDATION_ERROR,
+                errors=errors,
                 request_id=getattr(request.state, "request_id", None),
             ),
         )

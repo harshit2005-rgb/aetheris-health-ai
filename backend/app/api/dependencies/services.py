@@ -43,6 +43,7 @@ from app.api.dependencies.repositories import (  # noqa: F401
     get_user_repository,
 )
 from app.core.audit import AuditSink, StructlogAuditSink
+from app.database.unit_of_work import UnitOfWork
 from app.repositories import (
     DepartmentRepository,
     MrnSequenceRepository,
@@ -67,6 +68,15 @@ from app.services.user_service import UserService
 _Session = Annotated[AsyncSession, Depends(get_db_session)]
 
 
+def get_unit_of_work(session: AsyncSession = Depends(get_db_session)) -> UnitOfWork:
+    """Provide a :class:`UnitOfWork` over the request-scoped session.
+
+    Services own the transaction boundary (``docs/03-ARCHITECTURE.md`` §9), so
+    every service that writes takes one of these and commits through it.
+    """
+    return UnitOfWork(session)
+
+
 # ── Auth service ────────────────────────────────────────────────────────────
 def get_auth_service(
     user_repo: UserRepository = Depends(get_user_repository),
@@ -74,12 +84,14 @@ def get_auth_service(
     password_reset_repo: PasswordResetTokenRepository = Depends(
         get_password_reset_token_repository
     ),
+    uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> AuthService:
     """Provide an :class:`AuthService` composed with its repository dependencies."""
     return AuthService(
         user_repo=user_repo,
         refresh_token_repo=refresh_token_repo,
         password_reset_repo=password_reset_repo,
+        uow=uow,
     )
 
 
@@ -89,6 +101,7 @@ def get_user_service(
     role_repo: RoleRepository = Depends(get_role_repository),
     permission_repo: PermissionRepository = Depends(get_permission_repository),
     auth_service: AuthService = Depends(get_auth_service),
+    uow: UnitOfWork = Depends(get_unit_of_work),
 ) -> UserService:
     """Provide a :class:`UserService` composed with its repository dependencies."""
     return UserService(
@@ -96,6 +109,7 @@ def get_user_service(
         role_repo=role_repo,
         permission_repo=permission_repo,
         auth_service=auth_service,
+        uow=uow,
     )
 
 
@@ -170,6 +184,7 @@ __all__ = [
     "get_user_repository",
     # Service providers
     "get_auth_service",
+    "get_unit_of_work",
     "get_user_service",
     # Patient module
     "get_audit_sink",

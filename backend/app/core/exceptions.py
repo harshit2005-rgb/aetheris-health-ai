@@ -7,9 +7,24 @@ to the standard HTTP response envelope.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 
 from app.core.error_codes import ErrorCode
+
+
+def _to_iso_utc(value: datetime) -> str:
+    """Render a datetime as an ISO 8601 UTC string with a ``Z`` suffix.
+
+    ``docs/06-API_STANDARDS.md`` §17: no naive datetimes cross the API
+    boundary. A value without tzinfo is assumed to be UTC, matching how every
+    timestamp is stored.
+
+    :param value: The datetime to render.
+    :returns: e.g. ``2026-07-29T13:20:29Z``.
+    """
+    aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    return aware.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 class AetherisError(Exception):
@@ -137,6 +152,49 @@ class AuthenticationError(AetherisError):
             detail=detail,
             status_code=401,
             error_code=ErrorCode.AUTHENTICATION_REQUIRED,
+        )
+
+
+class AccountLockedError(AetherisError):
+    """Raised when login is attempted against a temporarily locked account.
+
+    Maps to HTTP 403 with ``ACCOUNT_LOCKED``
+    (``docs/modules/01-authentication.md`` §5.2). The lockout is time-limited,
+    so the unlock instant is returned to let the client tell the user when to
+    retry rather than leaving them to guess.
+
+    :param unlock_at: When the lock expires. Serialized into ``errors`` as an
+        ISO 8601 UTC timestamp (``docs/06-API_STANDARDS.md`` §17).
+    :param message: Human-readable description.
+    """
+
+    def __init__(
+        self,
+        unlock_at: datetime,
+        message: str = "Account is locked.",
+    ) -> None:
+        super().__init__(
+            message=message,
+            detail={"unlock_at": _to_iso_utc(unlock_at)},
+            status_code=403,
+            error_code=ErrorCode.ACCOUNT_LOCKED,
+        )
+
+
+class AccountSuspendedError(AetherisError):
+    """Raised when login is attempted against a suspended account.
+
+    Maps to HTTP 403 with ``ACCOUNT_SUSPENDED``
+    (``docs/modules/01-authentication.md`` §5.2). Unlike a lockout this carries
+    no unlock time: suspension is lifted by an administrator, not by the clock.
+    """
+
+    def __init__(self, message: str = "Account is suspended.") -> None:
+        super().__init__(
+            message=message,
+            detail=None,
+            status_code=403,
+            error_code=ErrorCode.ACCOUNT_SUSPENDED,
         )
 
 

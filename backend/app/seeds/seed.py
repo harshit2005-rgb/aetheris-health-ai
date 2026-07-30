@@ -12,15 +12,13 @@ All operations are idempotent — safe to run multiple times.
 from __future__ import annotations
 
 import asyncio
-import uuid
-from datetime import UTC, datetime, timedelta
-from typing import Any
+from datetime import UTC, datetime
 
 import structlog
 from sqlalchemy import select
 
 from app.core.security import hash_password
-from app.database import Base, create_session_factory, initialize_database
+from app.database import create_session_factory, initialize_database
 from app.models.hospital import Hospital
 from app.models.permission import Permission
 from app.models.role import Role, RolePermission
@@ -90,46 +88,95 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Super Admin",
         "Platform-wide access. Created per-hospital for local management.",
         [
-            "user.read", "user.create", "user.update", "user.deactivate", "user.reset_password",
-            "role.read", "role.assign",
-            "patient.read", "patient.create", "patient.update", "patient.delete",
-            "appointment.read", "appointment.create", "appointment.update", "appointment.cancel",
+            "user.read",
+            "user.create",
+            "user.update",
+            "user.deactivate",
+            "user.reset_password",
+            "role.read",
+            "role.assign",
+            "patient.read",
+            "patient.create",
+            "patient.update",
+            "patient.delete",
+            "appointment.read",
+            "appointment.create",
+            "appointment.update",
+            "appointment.cancel",
             "appointment.check_in",
-            "billing.read", "billing.create", "billing.void", "billing.approve_discount",
+            "billing.read",
+            "billing.create",
+            "billing.void",
+            "billing.approve_discount",
             "billing.record_payment",
-            "lab.read", "lab.create", "lab.update",
-            "pharmacy.read", "pharmacy.dispense",
-            "inventory.read", "inventory.create", "inventory.update",
-            "report.read", "report.export",
-            "settings.read", "settings.update",
-            "department.read", "department.create", "department.update", "department.delete",
+            "lab.read",
+            "lab.create",
+            "lab.update",
+            "pharmacy.read",
+            "pharmacy.dispense",
+            "inventory.read",
+            "inventory.create",
+            "inventory.update",
+            "report.read",
+            "report.export",
+            "settings.read",
+            "settings.update",
+            "department.read",
+            "department.create",
+            "department.update",
+            "department.delete",
         ],
     ),
     (
         "Hospital Admin",
         "Full access within a single hospital.",
         [
-            "user.read", "user.create", "user.update", "user.deactivate", "user.reset_password",
-            "role.read", "role.assign",
-            "patient.read", "patient.create", "patient.update",
-            "appointment.read", "appointment.create", "appointment.update", "appointment.cancel",
-            "billing.read", "billing.create", "billing.void", "billing.approve_discount",
+            "user.read",
+            "user.create",
+            "user.update",
+            "user.deactivate",
+            "user.reset_password",
+            "role.read",
+            "role.assign",
+            "patient.read",
+            "patient.create",
+            "patient.update",
+            "patient.delete",
+            "appointment.read",
+            "appointment.create",
+            "appointment.update",
+            "appointment.cancel",
+            "billing.read",
+            "billing.create",
+            "billing.void",
+            "billing.approve_discount",
             "billing.record_payment",
             "lab.read",
             "pharmacy.read",
             "inventory.read",
-            "report.read", "report.export",
-            "settings.read", "settings.update",
-            "department.read", "department.create", "department.update", "department.delete",
+            "report.read",
+            "report.export",
+            "settings.read",
+            "settings.update",
+            "department.read",
+            "department.create",
+            "department.update",
+            "department.delete",
         ],
     ),
     (
         "Doctor",
         "Clinical access — own patients, appointments, lab results.",
         [
-            "patient.read", "patient.create", "patient.update",
-            "appointment.read", "appointment.create", "appointment.update", "appointment.check_in",
-            "lab.read", "lab.create",
+            "patient.read",
+            "patient.create",
+            "patient.update",
+            "appointment.read",
+            "appointment.create",
+            "appointment.update",
+            "appointment.check_in",
+            "lab.read",
+            "lab.create",
             "report.read",
             "department.read",
         ],
@@ -138,8 +185,10 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Nurse",
         "Care coordination — assigned patients, vitals, appointments.",
         [
-            "patient.read", "patient.update",
-            "appointment.read", "appointment.check_in",
+            "patient.read",
+            "patient.update",
+            "appointment.read",
+            "appointment.check_in",
             "lab.read",
             "department.read",
         ],
@@ -148,8 +197,12 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Receptionist",
         "Front desk — patient registration, appointment booking.",
         [
-            "patient.read", "patient.create",
-            "appointment.read", "appointment.create", "appointment.cancel", "appointment.check_in",
+            "patient.read",
+            "patient.create",
+            "appointment.read",
+            "appointment.create",
+            "appointment.cancel",
+            "appointment.check_in",
             "department.read",
         ],
     ),
@@ -158,7 +211,10 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Financial operations — invoices, payments, insurance.",
         [
             "patient.read",
-            "billing.read", "billing.create", "billing.void", "billing.record_payment",
+            "billing.read",
+            "billing.create",
+            "billing.void",
+            "billing.record_payment",
             "report.read",
             "department.read",
         ],
@@ -167,7 +223,9 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Lab Technician",
         "Lab operations — receive orders, enter results.",
         [
-            "lab.read", "lab.create", "lab.update",
+            "lab.read",
+            "lab.create",
+            "lab.update",
             "department.read",
         ],
     ),
@@ -175,7 +233,8 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Pharmacist",
         "Pharmacy operations — dispensing, inventory.",
         [
-            "pharmacy.read", "pharmacy.dispense",
+            "pharmacy.read",
+            "pharmacy.dispense",
             "inventory.read",
             "department.read",
         ],
@@ -184,7 +243,9 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Inventory Manager",
         "Supply chain — stock management, purchase orders.",
         [
-            "inventory.read", "inventory.create", "inventory.update",
+            "inventory.read",
+            "inventory.create",
+            "inventory.update",
             "department.read",
         ],
     ),
@@ -205,18 +266,18 @@ async def seed_database(database_url: str | None = None) -> None:
 
         permission_map: dict[str, Permission] = {}
         for code, module, description in PERMISSION_DEFINITIONS:
-            stmt = select(Permission).where(Permission.code == code)
-            result = await session.execute(stmt)
-            existing = result.unique().scalar_one_or_none()
+            perm_stmt = select(Permission).where(Permission.code == code)
+            perm_result = await session.execute(perm_stmt)
+            existing_perm = perm_result.unique().scalar_one_or_none()
 
-            if existing is None:
+            if existing_perm is None:
                 permission = Permission(code=code, module=module, description=description)
                 session.add(permission)
                 await session.flush()
                 permission_map[code] = permission
                 logger.debug("permission_created", code=code)
             else:
-                permission_map[code] = existing
+                permission_map[code] = existing_perm
 
         logger.info("permissions_seeded", count=len(permission_map))
 
@@ -225,11 +286,13 @@ async def seed_database(database_url: str | None = None) -> None:
 
         role_map: dict[str, Role] = {}
         for name, description, permission_codes in SYSTEM_ROLES:
-            stmt = select(Role).where(Role.name == name, Role.hospital_id.is_(None), Role.is_system.is_(True))
-            result = await session.execute(stmt)
-            existing = result.unique().scalar_one_or_none()
+            role_stmt = select(Role).where(
+                Role.name == name, Role.hospital_id.is_(None), Role.is_system.is_(True)
+            )
+            role_result = await session.execute(role_stmt)
+            existing_role = role_result.unique().scalar_one_or_none()
 
-            if existing is None:
+            if existing_role is None:
                 role = Role(
                     name=name,
                     description=description,
@@ -241,10 +304,13 @@ async def seed_database(database_url: str | None = None) -> None:
                 role_map[name] = role
                 logger.debug("role_created", name=name)
             else:
-                role_map[name] = existing
+                role_map[name] = existing_role
 
             # Assign permissions to the role
             if permission_codes:
+                current_role = role_map.get(name)
+                if current_role is None:
+                    continue
                 for perm_code in permission_codes:
                     perm = permission_map.get(perm_code)
                     if perm is None:
@@ -252,14 +318,14 @@ async def seed_database(database_url: str | None = None) -> None:
 
                     # Check if already assigned
                     rp_stmt = select(RolePermission).where(
-                        RolePermission.role_id == role_map[name].id,
+                        RolePermission.role_id == current_role.id,
                         RolePermission.permission_id == perm.id,
                     )
                     rp_result = await session.execute(rp_stmt)
                     existing_rp = rp_result.unique().scalar_one_or_none()
 
                     if existing_rp is None:
-                        rp = RolePermission(role_id=role_map[name].id, permission_id=perm.id)
+                        rp = RolePermission(role_id=current_role.id, permission_id=perm.id)
                         session.add(rp)
 
             await session.flush()
@@ -267,9 +333,9 @@ async def seed_database(database_url: str | None = None) -> None:
         logger.info("roles_seeded", count=len(role_map))
 
         # ── 3. Create Demo Hospital ──────────────────────────────────────────
-        stmt = select(Hospital).where(Hospital.slug == "demo-hospital")
-        result = await session.execute(stmt)
-        hospital = result.unique().scalar_one_or_none()
+        hospital_stmt = select(Hospital).where(Hospital.slug == "demo-hospital")
+        hospital_result = await session.execute(hospital_stmt)
+        hospital = hospital_result.unique().scalar_one_or_none()
 
         if hospital is None:
             hospital = Hospital(
@@ -283,7 +349,7 @@ async def seed_database(database_url: str | None = None) -> None:
                     "country": "India",
                 },
                 phone="+918012345678",
-                email="info@demohospital.test",
+                email="info@demohospital.com",
                 is_active=True,
             )
             session.add(hospital)
@@ -293,10 +359,10 @@ async def seed_database(database_url: str | None = None) -> None:
             logger.info("demo_hospital_exists", id=str(hospital.id))
 
         # ── 4. Create Demo Admin User ────────────────────────────────────────
-        admin_email = "admin@demohospital.test"
-        stmt = select(User).where(User.email == admin_email, User.hospital_id == hospital.id)
-        result = await session.execute(stmt)
-        admin_user = result.unique().scalar_one_or_none()
+        admin_email = "admin@demohospital.com"
+        admin_stmt = select(User).where(User.email == admin_email, User.hospital_id == hospital.id)
+        admin_result = await session.execute(admin_stmt)
+        admin_user = admin_result.unique().scalar_one_or_none()
 
         if admin_user is None:
             admin_user = User(
@@ -322,10 +388,12 @@ async def seed_database(database_url: str | None = None) -> None:
             logger.info("demo_admin_exists", email=admin_email)
 
         # ── 5. Create Demo Doctor User ───────────────────────────────────────
-        doctor_email = "doctor@demohospital.test"
-        stmt = select(User).where(User.email == doctor_email, User.hospital_id == hospital.id)
-        result = await session.execute(stmt)
-        doctor_user = result.unique().scalar_one_or_none()
+        doctor_email = "doctor@demohospital.com"
+        doctor_stmt = select(User).where(
+            User.email == doctor_email, User.hospital_id == hospital.id
+        )
+        doctor_result = await session.execute(doctor_stmt)
+        doctor_user = doctor_result.unique().scalar_one_or_none()
 
         if doctor_user is None:
             doctor_user = User(
@@ -350,10 +418,12 @@ async def seed_database(database_url: str | None = None) -> None:
             logger.info("demo_doctor_exists", email=doctor_email)
 
         # ── 6. Create Demo Receptionist User ─────────────────────────────────
-        receptionist_email = "reception@demohospital.test"
-        stmt = select(User).where(User.email == receptionist_email, User.hospital_id == hospital.id)
-        result = await session.execute(stmt)
-        receptionist_user = result.unique().scalar_one_or_none()
+        receptionist_email = "reception@demohospital.com"
+        receptionist_stmt = select(User).where(
+            User.email == receptionist_email, User.hospital_id == hospital.id
+        )
+        receptionist_result = await session.execute(receptionist_stmt)
+        receptionist_user = receptionist_result.unique().scalar_one_or_none()
 
         if receptionist_user is None:
             receptionist_user = User(
@@ -380,7 +450,9 @@ async def seed_database(database_url: str | None = None) -> None:
         # ── Commit ──────────────────────────────────────────────────────────
         await session.commit()
         logger.info("database_seeded_successfully")
-        logger.info("demo_credentials", admin=admin_email, doctor=doctor_email, reception=receptionist_email)
+        logger.info(
+            "demo_credentials", admin=admin_email, doctor=doctor_email, reception=receptionist_email
+        )
 
 
 async def main() -> None:

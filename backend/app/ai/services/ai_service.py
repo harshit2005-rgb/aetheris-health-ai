@@ -26,6 +26,10 @@ from app.core.exceptions import ServiceUnavailableError
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
+#: Fallbacks when a model hint has no entry in the lookup tables.
+DEFAULT_MAX_TOKENS = 4096
+DEFAULT_TEMPERATURE = 0.3
+
 logger = structlog.get_logger(__name__)
 
 
@@ -158,16 +162,25 @@ class AIService:
         except ValueError:
             pass
 
+        # The defaults are supplied to .get() rather than only to the else
+        # branch: a valid ModelHint that is absent from the lookup table would
+        # otherwise resolve to None and be passed straight to the provider.
         actual_max_tokens: int = (
             max_tokens
             if max_tokens is not None
-            else (MAX_TOKENS.get(hint_enum) if hint_enum else 4096)
-        )  # type: ignore[assignment]
+            else (
+                MAX_TOKENS.get(hint_enum, DEFAULT_MAX_TOKENS) if hint_enum else DEFAULT_MAX_TOKENS
+            )
+        )
         actual_temperature: float = (
             temperature
             if temperature is not None
-            else (TEMPERATURE.get(hint_enum) if hint_enum else 0.3)
-        )  # type: ignore[assignment]
+            else (
+                TEMPERATURE.get(hint_enum, DEFAULT_TEMPERATURE)
+                if hint_enum
+                else DEFAULT_TEMPERATURE
+            )
+        )
 
         start_ns = _time.perf_counter_ns()
 
