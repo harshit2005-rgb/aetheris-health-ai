@@ -194,6 +194,7 @@ Composite PK `(role_id, permission_id)`.
 | id | UUID PK | |
 | user_id | UUID FK users(id) UNIQUE NOT NULL | doctor is a user + doctor row |
 | hospital_id | UUID FK hospitals(id) NOT NULL | |
+| department_id | UUID FK departments(id) NULL | assignment target, feature 5.2 |
 | specialization | VARCHAR(100) NOT NULL | |
 | qualifications | JSONB NOT NULL DEFAULT '[]' | |
 | license_number | VARCHAR(50) NOT NULL | |
@@ -202,30 +203,65 @@ Composite PK `(role_id, permission_id)`.
 | languages | JSONB NOT NULL DEFAULT '[]' | |
 | + audit columns | | |
 
+**Indexes:** `uq_doctors_user_id (user_id)`,
+`ix_doctors_hospital_specialization (hospital_id, specialization)`,
+`ix_doctors_department (department_id)`,
+`ix_doctors_hospital_active (hospital_id) WHERE deleted_at IS NULL`
+
+`department_id` is nullable — a doctor can be onboarded before their
+department is decided. It pairs with `departments.head_doctor_id` (§2.23); the
+two tables reference each other, so the columns are added by separate
+migrations (`0006` and `0007`) rather than at table creation.
+
 ### 2.9 `doctor_availability`
 
 | Column | Type | Notes |
 |---|---|---|
 | id | UUID PK | |
-| doctor_id | UUID FK doctors(id) NOT NULL | |
-| day_of_week | INT NOT NULL | 0=Mon .. 6=Sun |
-| start_time | TIME NOT NULL | |
-| end_time | TIME NOT NULL | |
+| doctor_id | UUID FK doctors(id) NOT NULL | `ON DELETE CASCADE` — replaced wholesale on every update |
+| hospital_id | UUID FK hospitals(id) NOT NULL | tenant column, see note below |
+| day_of_week | SMALLINT NOT NULL | 0=Mon .. 6=Sun, matching `date.weekday()` |
+| start_time | TIME NOT NULL | wall-clock in the hospital's timezone |
+| end_time | TIME NOT NULL | wall-clock in the hospital's timezone |
 | slot_duration_minutes | INT NOT NULL DEFAULT 15 | |
 | + audit columns | | |
 
-Check: `end_time > start_time`.
+**Indexes:** `ix_doctor_avail_doctor_day (doctor_id, day_of_week)`
+
+Checks: `ck_doctor_availability_time_order` (`end_time > start_time`),
+`ck_doctor_availability_day_of_week_range` (`day_of_week BETWEEN 0 AND 6`),
+`ck_doctor_availability_slot_duration` (one of 10, 15, 20, 30, 45, 60).
+
+Times are **wall-clock**, not instants: slot generation resolves them against
+the hospital's IANA timezone on the requested date, so a daylight-saving
+transition changes how many slots a day yields.
 
 ### 2.10 `doctor_leaves`
 
 | Column | Type | Notes |
 |---|---|---|
 | id | UUID PK | |
-| doctor_id | UUID FK doctors(id) NOT NULL | |
-| starts_at | TIMESTAMPTZ NOT NULL | |
-| ends_at | TIMESTAMPTZ NOT NULL | |
+| doctor_id | UUID FK doctors(id) NOT NULL | `ON DELETE RESTRICT` — leaves are auditable records |
+| hospital_id | UUID FK hospitals(id) NOT NULL | tenant column, see note below |
+| starts_at | TIMESTAMPTZ NOT NULL | inclusive, UTC |
+| ends_at | TIMESTAMPTZ NOT NULL | exclusive, UTC |
 | reason | VARCHAR(200) | |
 | + audit columns | | |
+
+**Indexes:** `ix_doctor_leaves_doctor_range (doctor_id, starts_at, ends_at)`,
+`ix_doctor_leaves_hospital_active (hospital_id) WHERE deleted_at IS NULL`
+
+Check: `ck_doctor_leaves_range_order` (`ends_at > starts_at`).
+
+Intervals are half-open, so a leave ending at 09:00 leaves the 08:30–09:00
+slot bookable and back-to-back leaves do not count as overlapping.
+
+> **Note on `hospital_id` in §2.9 and §2.10.** These two child tables carry a
+> tenant column even though they could be reached through `doctor_id` alone.
+> CLAUDE.md rules 4 and 5 require a `hospital_id` on every tenant table and a
+> filter on it at the repository layer; carrying the column means a child row
+> is directly tenant-filterable instead of depending on every call site to
+> resolve its parent first.
 
 ### 2.11 `appointments`
 
@@ -451,6 +487,7 @@ numbering stays stable — module specs and code docstrings cite these numbers.
 | phone_extension | VARCHAR(10) | internal extension |
 | email | VARCHAR(200) | department inbox |
 | location | VARCHAR(150) | floor / wing / block |
+| head_doctor_id | UUID FK doctors(id) NULL | `ON DELETE SET NULL`; added by migration `0007` |
 | + audit columns | | |
 
 **Indexes:** `uq_departments_hospital_code (hospital_id, code)`,
@@ -460,9 +497,10 @@ numbering stays stable — module specs and code docstrings cite these numbers.
 
 Check: `ck_departments_code_format` — `code ~ '^[A-Z0-9][A-Z0-9_-]{1,19}$'`.
 
-`doctors.department_id` and `departments.head_doctor_id` are added by later
-migrations, not at creation: the two tables reference each other, so neither
-can carry its foreign key when it is created.
+`doctors.department_id` and `departments.head_doctor_id` reference each other,
+so neither could carry its foreign key at creation. `0005` created this table
+without `head_doctor_id`, `0006` created `doctors` with `department_id`, and
+`0007` added `head_doctor_id` to close the loop.
 
 ---
 

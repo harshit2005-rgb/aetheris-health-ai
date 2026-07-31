@@ -15,6 +15,18 @@ from app.tests.factories.department import (
     build_department_payload,
     build_update_department_request,
 )
+from app.tests.factories.doctor import (
+    build_availability_model,
+    build_availability_payload,
+    build_create_doctor_request,
+    build_doctor_model,
+    build_doctor_payload,
+    build_leave_model,
+    build_leave_payload,
+    build_leave_request,
+    build_set_availability_request,
+    build_update_doctor_request,
+)
 from app.tests.factories.patient import (
     build_create_patient_request,
     build_patient_payload,
@@ -22,7 +34,17 @@ from app.tests.factories.patient import (
 )
 
 __all__ = [
+    "build_availability_model",
+    "build_availability_payload",
     "build_create_department_request",
+    "build_create_doctor_request",
+    "build_doctor_model",
+    "build_doctor_payload",
+    "build_leave_model",
+    "build_leave_payload",
+    "build_leave_request",
+    "build_set_availability_request",
+    "build_update_doctor_request",
     "build_create_patient_request",
     "build_department_model",
     "build_department_payload",

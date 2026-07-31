@@ -18,6 +18,13 @@ from app.models.base import (
     UUIDPrimaryKeyMixin,
 )
 from app.models.department import Department, DepartmentStatus
+from app.models.doctor import (
+    Doctor,
+    DoctorAvailability,
+    DoctorLeave,
+    DoctorStatus,
+    SlotStatus,
+)
 from app.models.hospital import Hospital
 from app.models.password_reset_token import PasswordResetToken
 from app.models.patient import BloodGroup, Gender, MrnSequence, Patient, PatientStatus
@@ -53,4 +60,10 @@ __all__ = [
     # Department
     "Department",
     "DepartmentStatus",
+    # Doctor
+    "Doctor",
+    "DoctorAvailability",
+    "DoctorLeave",
+    "DoctorStatus",
+    "SlotStatus",
 ]

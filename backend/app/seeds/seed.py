@@ -78,6 +78,15 @@ PERMISSION_DEFINITIONS: list[tuple[str, str, str]] = [
     ("department.create", "settings", "Create departments"),
     ("department.update", "settings", "Edit and reactivate departments"),
     ("department.delete", "settings", "Deactivate departments"),
+    # Doctors (docs/modules/04-doctor-management.md §10)
+    ("doctor.read", "doctor", "View doctors"),
+    ("doctor.create", "doctor", "Onboard doctors"),
+    ("doctor.update", "doctor", "Update doctor profiles"),
+    ("doctor.delete", "doctor", "Deactivate doctors"),
+    ("doctor.availability.read", "doctor", "View doctor availability and computed slots"),
+    ("doctor.availability.update", "doctor", "Set doctor availability"),
+    ("doctor.leave.create", "doctor", "Record doctor leave"),
+    ("doctor.leave.delete", "doctor", "Cancel doctor leave"),
 ]
 
 # ── System Role Definitions ─────────────────────────────────────────────────
@@ -125,6 +134,14 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "department.create",
             "department.update",
             "department.delete",
+            "doctor.read",
+            "doctor.create",
+            "doctor.update",
+            "doctor.delete",
+            "doctor.availability.read",
+            "doctor.availability.update",
+            "doctor.leave.create",
+            "doctor.leave.delete",
         ],
     ),
     (
@@ -162,6 +179,14 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "department.create",
             "department.update",
             "department.delete",
+            "doctor.read",
+            "doctor.create",
+            "doctor.update",
+            "doctor.delete",
+            "doctor.availability.read",
+            "doctor.availability.update",
+            "doctor.leave.create",
+            "doctor.leave.delete",
         ],
     ),
     (
@@ -179,6 +204,11 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "lab.create",
             "report.read",
             "department.read",
+            "doctor.read",
+            "doctor.availability.read",
+            "doctor.availability.update",
+            "doctor.leave.create",
+            "doctor.leave.delete",
         ],
     ),
     (
@@ -191,6 +221,8 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "appointment.check_in",
             "lab.read",
             "department.read",
+            "doctor.read",
+            "doctor.availability.read",
         ],
     ),
     (
@@ -204,6 +236,8 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "appointment.cancel",
             "appointment.check_in",
             "department.read",
+            "doctor.read",
+            "doctor.availability.read",
         ],
     ),
     (
@@ -217,6 +251,7 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "billing.record_payment",
             "report.read",
             "department.read",
+            "doctor.read",
         ],
     ),
     (
