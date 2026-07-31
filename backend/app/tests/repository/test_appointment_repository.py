@@ -376,6 +376,28 @@ class TestDoctorSeamQueries:
             == 0
         )
 
+    async def test_completed_appointment_does_not_block_deactivation(
+        self, repository: AppointmentRepository, db_session: AsyncSession, hospital_id: uuid.UUID
+    ) -> None:
+        """FR-5 is about work needing reassignment, and a completed one needs none.
+
+        Regression: this counted ``completed`` as blocking, which left a doctor
+        permanently undeactivatable — nothing can move an appointment out of a
+        terminal state, so the guard could never clear. Found by driving the
+        live API rather than by a unit test, because it only shows up once an
+        appointment has been carried all the way through the lifecycle.
+        """
+        patient_id, doctor_id = await _fixtures(db_session, hospital_id)
+        done = await _book(repository, hospital_id, patient_id, doctor_id)
+        await repository.update_appointment(done, status=AppointmentStatus.COMPLETED)
+
+        assert (
+            await repository.count_future_for_doctor(
+                hospital_id, doctor_id, after=BASE - timedelta(days=1)
+            )
+            == 0
+        )
+
     async def test_count_future_is_tenant_scoped(
         self,
         repository: AppointmentRepository,

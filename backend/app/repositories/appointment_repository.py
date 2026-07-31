@@ -18,6 +18,7 @@ from sqlalchemy import Select, func, select
 
 from app.models.appointment import (
     SLOT_FREEING_STATUSES,
+    TERMINAL_STATUSES,
     Appointment,
     AppointmentStatus,
     AppointmentStatusHistory,
@@ -339,18 +340,28 @@ class AppointmentRepository(BaseRepository[Appointment]):
     ) -> int:
         """Count a doctor's upcoming appointments.
 
-        Backs the Doctor module's FR-5 guard — a doctor with future
-        appointments cannot be deactivated. Cancelled and no-show appointments
-        do not count: they need no reassignment.
+        Backs the Doctor module's FR-5 guard — a doctor with *active* future
+        appointments cannot be deactivated.
+
+        Excludes every **terminal** status, not just the slot-freeing ones.
+        FR-5 is about work that still needs reassigning, and a completed
+        consultation needs none: it already happened. Using
+        ``SLOT_FREEING_STATUSES`` here would count a completed appointment as
+        blocking and leave the doctor undeactivatable forever, since nothing
+        can move a completed appointment out of that state.
+
+        (``booked_intervals_for_doctor`` above deliberately keeps the narrower
+        set: a completed appointment *did* occupy its slot, so the calendar
+        must still show it as taken.)
 
         :param hospital_id: The tenant to scope to.
         :param doctor_id: The doctor to check.
         :param after: Only appointments starting after this instant (UTC).
-        :returns: The number of upcoming appointments.
+        :returns: The number of upcoming appointments needing reassignment.
         """
         stmt = self._scoped(hospital_id).where(
             Appointment.doctor_id == doctor_id,
-            Appointment.status.not_in(tuple(SLOT_FREEING_STATUSES)),
+            Appointment.status.not_in(tuple(TERMINAL_STATUSES)),
             Appointment.scheduled_start > after,
         )
         count_stmt = select(func.count()).select_from(stmt.subquery())
