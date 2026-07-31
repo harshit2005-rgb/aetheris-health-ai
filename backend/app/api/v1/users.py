@@ -143,7 +143,7 @@ async def invite_user(
     # Collect actor's permissions
     actor_permissions = _get_user_permission_codes(current_user)
 
-    user = await user_service.invite_user(
+    user, invite_token = await user_service.invite_user(
         hospital_id=current_user.hospital_id,
         email=payload.email,
         first_name=payload.first_name,
@@ -163,9 +163,14 @@ async def invite_user(
         for r in (user.user_roles or [])
     ]
 
+    data = _user_to_dict(user, roles)
+    # B6 seam: the single-use invite token is handed back here so the
+    # Notifications module can deliver it. Email delivery is out of scope.
+    data["invite_token"] = invite_token
+
     return success_envelope(
         "User invited.",
-        data=_user_to_dict(user, roles),
+        data=data,
     )
 
 
@@ -267,6 +272,8 @@ async def deactivate_user(
     user = await user_service.deactivate_user(
         user_id=uuid.UUID(user_id),
         actor_user_id=current_user.id,
+        actor_hospital_id=current_user.hospital_id,
+        actor_permissions=_get_user_permission_codes(current_user),
     )
     roles = [
         {
@@ -302,6 +309,8 @@ async def reactivate_user(
     user = await user_service.reactivate_user(
         user_id=uuid.UUID(user_id),
         actor_id=current_user.id,
+        actor_hospital_id=current_user.hospital_id,
+        actor_permissions=_get_user_permission_codes(current_user),
     )
     roles = [
         {
@@ -337,6 +346,7 @@ async def admin_reset_password(
     await auth_service.admin_reset_password(
         user_id=uuid.UUID(user_id),
         actor_id=current_user.id,
+        actor_hospital_id=current_user.hospital_id,
     )
     return success_envelope(
         "Password reset initiated. The user will be required to set a new password on next login."
@@ -355,7 +365,10 @@ async def get_user_roles(
     user_service: UserService = Depends(get_user_service),
 ) -> dict[str, Any]:
     """List roles assigned to a user."""
-    roles = await user_service.list_user_roles(user_id=uuid.UUID(user_id))
+    roles = await user_service.list_user_roles(
+        user_id=uuid.UUID(user_id),
+        actor_hospital_id=current_user.hospital_id,
+    )
     return success_envelope(
         "User roles retrieved.",
         data=roles,
@@ -385,6 +398,7 @@ async def assign_role(
         role_id=payload.role_id,
         actor_permissions=actor_permissions,
         actor_id=current_user.id,
+        actor_hospital_id=current_user.hospital_id,
     )
     return success_envelope("Role assigned.")
 
@@ -412,6 +426,7 @@ async def remove_role(
         role_id=uuid.UUID(role_id),
         actor_permissions=actor_permissions,
         actor_id=current_user.id,
+        actor_hospital_id=current_user.hospital_id,
     )
     return success_envelope("Role removed.")
 

@@ -176,3 +176,142 @@ class TestListUsersEnvelope:
         assert body["success"] is False
         assert body["error_code"] == "AUTHENTICATION_REQUIRED"
         assert "detail" not in body
+
+
+class TestCrossTenantIsolation:
+    """B1: every admin write endpoint 404s on another hospital's user UUID.
+
+    The handoff demands a test per endpoint asserting a 404 for a cross-tenant
+    UUID — an admin at Hospital A must not deactivate, reset, or re-role a
+    user at Hospital B, even with a known UUID.
+    """
+
+    ALL_PERMISSIONS = [
+        "user.read",
+        "user.create",
+        "user.update",
+        "user.deactivate",
+        "user.reset_password",
+        "role.assign",
+    ]
+
+    @pytest_asyncio.fixture
+    async def admin(
+        self, db_session: AsyncSession, hospital_id: uuid.UUID
+    ) -> dict[str, Any]:
+        """An admin holding every permission the endpoints below check."""
+        user = User(
+            id=uuid.uuid4(),
+            hospital_id=hospital_id,
+            email=f"admin-{uuid.uuid4().hex[:12]}@hospital.example",
+            password_hash=hash_password("Str0ng!Passw0rd123"),
+            first_name="Admin",
+            last_name="User",
+        )
+        db_session.add(user)
+        await db_session.flush()
+        await grant_permissions(
+            db_session, hospital_id=hospital_id, user_id=user.id, codes=self.ALL_PERMISSIONS
+        )
+        token = create_access_token(user_id=user.id, hospital_id=hospital_id)
+        return {"id": user.id, "headers": {"Authorization": f"Bearer {token}"}}
+
+    @pytest_asyncio.fixture
+    async def foreign_user(
+        self, db_session: AsyncSession, other_hospital_id: uuid.UUID
+    ) -> uuid.UUID:
+        """A user who belongs to a hospital the admin has no access to.
+
+        ``other_hospital_id`` is a real hospital row — the ``users.hospital_id``
+        foreign key is NOT NULL with ``ON DELETE RESTRICT``, so a random UUID
+        would raise an IntegrityError instead of exercising the tenant check.
+        """
+        user = User(
+            id=uuid.uuid4(),
+            hospital_id=other_hospital_id,
+            email=f"foreign-{uuid.uuid4().hex[:12]}@hospital.example",
+            password_hash=hash_password("Str0ng!Passw0rd123"),
+            first_name="Foreign",
+            last_name="User",
+        )
+        db_session.add(user)
+        await db_session.flush()
+        return user.id
+
+    @pytest_asyncio.fixture
+    async def any_role(self, db_session: AsyncSession, hospital_id: uuid.UUID) -> uuid.UUID:
+        """A role id for the role endpoints (the user 404 must fire first)."""
+        from app.models.role import Role
+
+        role = Role(
+            id=uuid.uuid4(), hospital_id=hospital_id, name=f"Role {uuid.uuid4().hex[:8]}"
+        )
+        db_session.add(role)
+        await db_session.flush()
+        return role.id
+
+    async def test_get_user_foreign_uuid_is_404(
+        self, api: AsyncClient, admin: dict[str, Any], foreign_user: uuid.UUID
+    ) -> None:
+        response = await api.get(
+            f"/api/v1/users/{foreign_user}", headers=admin["headers"]
+        )
+        assert response.status_code == 404
+
+    async def test_deactivate_foreign_uuid_is_404(
+        self, api: AsyncClient, admin: dict[str, Any], foreign_user: uuid.UUID
+    ) -> None:
+        response = await api.post(
+            f"/api/v1/users/{foreign_user}/deactivate", headers=admin["headers"]
+        )
+        assert response.status_code == 404
+
+    async def test_reactivate_foreign_uuid_is_404(
+        self, api: AsyncClient, admin: dict[str, Any], foreign_user: uuid.UUID
+    ) -> None:
+        response = await api.post(
+            f"/api/v1/users/{foreign_user}/reactivate", headers=admin["headers"]
+        )
+        assert response.status_code == 404
+
+    async def test_admin_reset_foreign_uuid_is_404(
+        self, api: AsyncClient, admin: dict[str, Any], foreign_user: uuid.UUID
+    ) -> None:
+        response = await api.post(
+            f"/api/v1/users/{foreign_user}/reset-password", headers=admin["headers"]
+        )
+        assert response.status_code == 404
+
+    async def test_get_roles_foreign_uuid_is_404(
+        self, api: AsyncClient, admin: dict[str, Any], foreign_user: uuid.UUID
+    ) -> None:
+        response = await api.get(
+            f"/api/v1/users/{foreign_user}/roles", headers=admin["headers"]
+        )
+        assert response.status_code == 404
+
+    async def test_assign_role_foreign_uuid_is_404(
+        self,
+        api: AsyncClient,
+        admin: dict[str, Any],
+        foreign_user: uuid.UUID,
+        any_role: uuid.UUID,
+    ) -> None:
+        response = await api.post(
+            f"/api/v1/users/{foreign_user}/roles",
+            json={"role_id": str(any_role)},
+            headers=admin["headers"],
+        )
+        assert response.status_code == 404
+
+    async def test_remove_role_foreign_uuid_is_404(
+        self,
+        api: AsyncClient,
+        admin: dict[str, Any],
+        foreign_user: uuid.UUID,
+        any_role: uuid.UUID,
+    ) -> None:
+        response = await api.delete(
+            f"/api/v1/users/{foreign_user}/roles/{any_role}", headers=admin["headers"]
+        )
+        assert response.status_code == 404

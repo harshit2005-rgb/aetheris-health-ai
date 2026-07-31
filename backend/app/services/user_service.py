@@ -8,18 +8,21 @@ from __future__ import annotations
 
 import math
 import uuid
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from app.core.audit import AuditEvent
+from app.core.config import settings
 from app.core.exceptions import BusinessRuleError, NotFoundError, PermissionDeniedError
-from app.core.security import hash_password
+from app.core.security import generate_opaque_token, hash_password
 from app.models.user import User, UserStatus
 
 if TYPE_CHECKING:
     from app.core.audit import AuditSink
     from app.database.unit_of_work import UnitOfWork
+    from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
     from app.repositories.permission_repository import PermissionRepository
     from app.repositories.role_repository import RoleRepository
     from app.repositories.user_repository import UserRepository
@@ -46,6 +49,7 @@ class UserService:
         auth_service: AuthService,
         uow: UnitOfWork,
         audit: AuditSink,
+        password_reset_repo: PasswordResetTokenRepository,
     ) -> None:
         self._user_repo = user_repo
         self._role_repo = role_repo
@@ -53,6 +57,7 @@ class UserService:
         self._auth_service = auth_service
         self._uow = uow
         self._audit = audit
+        self._password_reset_repo = password_reset_repo
 
     # ── Read ─────────────────────────────────────────────────────────────────
 
@@ -107,7 +112,9 @@ class UserService:
             search=search,
         )
 
-        total = await self._user_repo.count_by_hospital(hospital_id, status=status)
+        total = await self._user_repo.count_by_hospital(
+            hospital_id, status=status, search=search
+        )
 
         # Enrich with roles
         user_list = []
@@ -171,11 +178,14 @@ class UserService:
         role_ids: list[uuid.UUID] | None = None,
         actor_permissions: list[str] | None = None,
         actor_id: uuid.UUID | None = None,
-    ) -> User:
+    ) -> tuple[User, str]:
         """Invite a new user to the system.
 
-        Creates the user with ``status=invited``. The user will need to
-        set their password via the invitation link.
+        Creates the user with ``status=invited`` and mints a single-use
+        invitation token (Week 1 handoff B6) that ``reset_password`` accepts
+        to transition the account ``INVITED -> ACTIVE``. The raw token is
+        returned so the Notifications module can deliver it; email delivery
+        itself is out of scope.
 
         :param hospital_id: The hospital UUID.
         :param email: The user's email address.
@@ -185,9 +195,12 @@ class UserService:
         :param role_ids: Optional list of initial role UUIDs.
         :param actor_permissions: Permissions of the actor performing the invite.
         :param actor_id: UUID of the acting user, for the audit trail.
-        :returns: The created user instance.
+        :returns: A ``(user, invite_token)`` pair. The token is single-use and
+            expires after ``INVITE_TOKEN_TTL_HOURS``.
         :raises BusinessRuleError: If the email already exists in the hospital.
         :raises PermissionDeniedError: If the actor doesn't have ``user.create``.
+        :raises NotFoundError: If any requested role id does not exist or
+            belongs to another hospital (all-or-nothing, B5).
         """
         # Check permission
         if not actor_permissions or "user.create" not in actor_permissions:
@@ -197,6 +210,29 @@ class UserService:
         existing = await self._user_repo.get_by_email(hospital_id, email)
         if existing is not None:
             raise BusinessRuleError("A user with this email already exists in this hospital.")
+
+        # B5: validate every requested role BEFORE creating the user — the
+        # invite is all-or-nothing. Unknown ids and another hospital's roles
+        # both fail the whole operation instead of being silently skipped.
+        validated_roles: list[uuid.UUID] = []
+        if role_ids:
+            unknown_ids: list[str] = []
+            for role_id in role_ids:
+                role = await self._role_repo.get_by_id(role_id)
+                if role is None:
+                    unknown_ids.append(str(role_id))
+                    continue
+                # System roles (hospital_id NULL) are visible to every tenant;
+                # hospital-scoped roles must belong to this hospital.
+                if role.hospital_id is not None and role.hospital_id != hospital_id:
+                    unknown_ids.append(str(role_id))
+                    continue
+                validated_roles.append(role_id)
+            if unknown_ids:
+                raise NotFoundError(
+                    "One or more roles were not found in this hospital.",
+                    detail={"role_ids": unknown_ids},
+                )
 
         # Create user without a password (they'll set it via the invite link)
         user = await self._user_repo.create(
@@ -209,15 +245,20 @@ class UserService:
             status=UserStatus.INVITED,
         )
 
-        # Assign roles if provided
-        if role_ids:
-            for role_id in role_ids:
-                role = await self._role_repo.get_by_id(role_id)
-                if role is None:
-                    continue
-                # Check if already assigned
-                if not await self._user_repo.has_role(user.id, role_id):
-                    await self._user_repo.add_role(user.id, role_id)
+        # Assign validated roles (all-or-nothing enforced above)
+        for role_id in validated_roles:
+            if not await self._user_repo.has_role(user.id, role_id):
+                await self._user_repo.add_role(user.id, role_id)
+
+        # B6: mint the single-use invitation token (stored hashed) and hand
+        # the raw token to the caller for the Notifications module to deliver.
+        raw_token, token_hash = generate_opaque_token()
+        expires_at = datetime.now(UTC) + timedelta(hours=settings.INVITE_TOKEN_TTL_HOURS)
+        await self._password_reset_repo.create(
+            user_id=user.id,
+            token_hash=token_hash,
+            expires_at=expires_at,
+        )
 
         await self._audit.record(
             AuditEvent(
@@ -230,7 +271,7 @@ class UserService:
         )
         await self._uow.commit()
         logger.info("user_invited", user_id=str(user.id), hospital_id=str(hospital_id))
-        return user
+        return user, raw_token
 
     # ── Update ───────────────────────────────────────────────────────────────
 
@@ -255,7 +296,7 @@ class UserService:
         """
         user = await self.get_user(user_id, actor_hospital_id)
 
-        if actor_permissions and "user.update" not in actor_permissions:
+        if not actor_permissions or "user.update" not in actor_permissions:
             raise PermissionDeniedError("You do not have permission to update users.")
 
         # Only allow updating allowed fields
@@ -312,21 +353,31 @@ class UserService:
 
     # ── Deactivate / Reactivate ──────────────────────────────────────────────
 
-    async def deactivate_user(self, user_id: uuid.UUID, actor_user_id: uuid.UUID) -> User:
+    async def deactivate_user(
+        self,
+        user_id: uuid.UUID,
+        actor_user_id: uuid.UUID,
+        actor_hospital_id: uuid.UUID | None = None,
+        actor_permissions: list[str] | None = None,
+    ) -> User:
         """Deactivate (suspend) a user.
 
         :param user_id: The user's UUID.
         :param actor_user_id: The UUID of the user performing the action.
+        :param actor_hospital_id: The acting user's hospital for tenant isolation.
+        :param actor_permissions: Permissions of the actor.
         :returns: The updated user instance.
         :raises BusinessRuleError: If trying to deactivate oneself.
-        :raises NotFoundError: If the user doesn't exist.
+        :raises PermissionDeniedError: If the actor doesn't have ``user.deactivate``.
+        :raises NotFoundError: If the user doesn't exist or is outside the actor's hospital.
         """
+        if not actor_permissions or "user.deactivate" not in actor_permissions:
+            raise PermissionDeniedError("You do not have permission to deactivate users.")
+
         if user_id == actor_user_id:
             raise BusinessRuleError("You cannot deactivate yourself.")
 
-        user = await self._user_repo.get_by_id(user_id)
-        if user is None:
-            raise NotFoundError("User not found.")
+        user = await self.get_user(user_id, actor_hospital_id)
 
         await self._user_repo.update(user, status=UserStatus.SUSPENDED)
 
@@ -346,17 +397,28 @@ class UserService:
         logger.info("user_deactivated", user_id=str(user_id), actor_id=str(actor_user_id))
         return user
 
-    async def reactivate_user(self, user_id: uuid.UUID, *, actor_id: uuid.UUID | None = None) -> User:
+    async def reactivate_user(
+        self,
+        user_id: uuid.UUID,
+        *,
+        actor_id: uuid.UUID | None = None,
+        actor_hospital_id: uuid.UUID | None = None,
+        actor_permissions: list[str] | None = None,
+    ) -> User:
         """Reactivate a suspended user.
 
         :param user_id: The user's UUID.
         :param actor_id: UUID of the acting user, for the audit trail.
+        :param actor_hospital_id: The acting user's hospital for tenant isolation.
+        :param actor_permissions: Permissions of the actor.
         :returns: The updated user instance.
-        :raises NotFoundError: If the user doesn't exist.
+        :raises PermissionDeniedError: If the actor doesn't have ``user.deactivate``.
+        :raises NotFoundError: If the user doesn't exist or is outside the actor's hospital.
         """
-        user = await self._user_repo.get_by_id(user_id)
-        if user is None:
-            raise NotFoundError("User not found.")
+        if not actor_permissions or "user.deactivate" not in actor_permissions:
+            raise PermissionDeniedError("You do not have permission to reactivate users.")
+
+        user = await self.get_user(user_id, actor_hospital_id)
 
         await self._user_repo.update(
             user, status=UserStatus.ACTIVE, failed_login_attempts=0, locked_until=None
@@ -383,6 +445,7 @@ class UserService:
         role_id: uuid.UUID,
         actor_permissions: list[str] | None = None,
         actor_id: uuid.UUID | None = None,
+        actor_hospital_id: uuid.UUID | None = None,
     ) -> User:
         """Assign a role to a user.
 
@@ -390,19 +453,30 @@ class UserService:
         :param role_id: The role's UUID.
         :param actor_permissions: Permissions of the actor.
         :param actor_id: UUID of the acting user, for the audit trail.
+        :param actor_hospital_id: The acting user's hospital for tenant isolation.
         :returns: The updated user instance.
         :raises PermissionDeniedError: If the actor doesn't have ``role.assign``.
-        :raises NotFoundError: If the user or role doesn't exist.
+        :raises NotFoundError: If the user or role doesn't exist, or either
+            belongs to another hospital (B1).
         """
-        if actor_permissions and "role.assign" not in actor_permissions:
+        if not actor_permissions or "role.assign" not in actor_permissions:
             raise PermissionDeniedError("You do not have permission to assign roles.")
 
-        user = await self._user_repo.get_by_id(user_id)
-        if user is None:
-            raise NotFoundError("User not found.")
+        user = await self.get_user(user_id, actor_hospital_id)
 
         role = await self._role_repo.get_by_id(role_id)
         if role is None:
+            raise NotFoundError("Role not found.")
+
+        # B1: the role must belong to the actor's hospital or be a system role
+        # (system roles have a NULL hospital_id and are visible to every tenant).
+        # A tenantless actor (actor_hospital_id is None, e.g. a system admin or
+        # internal caller) is not constrained — mirroring ``get_user``.
+        if (
+            actor_hospital_id is not None
+            and role.hospital_id is not None
+            and role.hospital_id != actor_hospital_id
+        ):
             raise NotFoundError("Role not found.")
 
         # Check if already assigned
@@ -436,6 +510,7 @@ class UserService:
         role_id: uuid.UUID,
         actor_permissions: list[str] | None = None,
         actor_id: uuid.UUID | None = None,
+        actor_hospital_id: uuid.UUID | None = None,
     ) -> User:
         """Remove a role from a user.
 
@@ -443,16 +518,15 @@ class UserService:
         :param role_id: The role's UUID.
         :param actor_permissions: Permissions of the actor.
         :param actor_id: UUID of the acting user, for the audit trail.
+        :param actor_hospital_id: The acting user's hospital for tenant isolation.
         :returns: The updated user instance.
         :raises PermissionDeniedError: If the actor doesn't have ``role.assign``.
-        :raises NotFoundError: If the user doesn't exist.
+        :raises NotFoundError: If the user doesn't exist or is outside the actor's hospital.
         """
-        if actor_permissions and "role.assign" not in actor_permissions:
+        if not actor_permissions or "role.assign" not in actor_permissions:
             raise PermissionDeniedError("You do not have permission to remove roles.")
 
-        user = await self._user_repo.get_by_id(user_id)
-        if user is None:
-            raise NotFoundError("User not found.")
+        user = await self.get_user(user_id, actor_hospital_id)
 
         removed = await self._user_repo.remove_role(user_id, role_id)
         if removed:
@@ -472,16 +546,17 @@ class UserService:
 
         return user
 
-    async def list_user_roles(self, user_id: uuid.UUID) -> list[dict[str, Any]]:
+    async def list_user_roles(
+        self, user_id: uuid.UUID, actor_hospital_id: uuid.UUID | None = None
+    ) -> list[dict[str, Any]]:
         """List all roles assigned to a user.
 
         :param user_id: The user's UUID.
+        :param actor_hospital_id: The acting user's hospital for tenant isolation.
         :returns: List of role dicts.
-        :raises NotFoundError: If the user doesn't exist.
+        :raises NotFoundError: If the user doesn't exist or is outside the actor's hospital.
         """
-        user = await self._user_repo.get_by_id(user_id)
-        if user is None:
-            raise NotFoundError("User not found.")
+        user = await self.get_user(user_id, actor_hospital_id)
 
         return [
             {

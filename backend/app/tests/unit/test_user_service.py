@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.core.exceptions import BusinessRuleError, NotFoundError
+from app.core.exceptions import BusinessRuleError, NotFoundError, PermissionDeniedError
 from app.models.user import User, UserStatus
 
 
@@ -40,6 +40,12 @@ def mock_auth_service() -> AsyncMock:
 
 
 @pytest.fixture
+def mock_password_reset_repo() -> AsyncMock:
+    """Create a mock PasswordResetTokenRepository."""
+    return AsyncMock()
+
+
+@pytest.fixture
 def user_service(
     mock_user_repo: AsyncMock,
     mock_role_repo: AsyncMock,
@@ -47,6 +53,7 @@ def user_service(
     mock_auth_service: AsyncMock,
     mock_uow: AsyncMock,
     audit_sink: Any,
+    mock_password_reset_repo: AsyncMock,
 ) -> Any:
     """Create a UserService with mocked dependencies."""
     from app.services.user_service import UserService
@@ -58,6 +65,7 @@ def user_service(
         auth_service=mock_auth_service,
         uow=mock_uow,
         audit=audit_sink,
+        password_reset_repo=mock_password_reset_repo,
     )
 
 
@@ -138,7 +146,7 @@ class TestInviteUser:
             }
         )
 
-        result = await user_service.invite_user(
+        result, invite_token = await user_service.invite_user(
             hospital_id=hospital_id,
             email="newuser@hospital.test",
             first_name="New",
@@ -147,6 +155,7 @@ class TestInviteUser:
         )
 
         assert result.status == UserStatus.INVITED
+        assert invite_token  # B6: an invite token is minted for activation
         mock_user_repo.create.assert_called_once()
 
     async def test_invite_user_duplicate_email(
@@ -169,8 +178,6 @@ class TestInviteUser:
         self: Any, user_service: Any, mock_user_repo: Any
     ) -> None:
         """Missing permission raises error."""
-        from app.core.exceptions import PermissionDeniedError
-
         # Ensure get_by_email returns None so it won't interfere
         mock_user_repo.get_by_email.return_value = None
 
@@ -182,6 +189,50 @@ class TestInviteUser:
                 last_name="User",
                 actor_permissions=[],
             )
+
+    async def test_invite_user_rejects_unknown_role_id(
+        self: Any, user_service: Any, mock_user_repo: Any, mock_role_repo: Any
+    ) -> None:
+        """B5: an unresolvable role id fails the whole invite (all-or-nothing)."""
+        hospital_id = uuid.uuid4()
+        mock_user_repo.get_by_email.return_value = None
+        mock_role_repo.get_by_id.return_value = None
+
+        with pytest.raises(NotFoundError, match="roles were not found"):
+            await user_service.invite_user(
+                hospital_id=hospital_id,
+                email="newuser@hospital.test",
+                first_name="New",
+                last_name="User",
+                role_ids=[uuid.uuid4()],
+                actor_permissions=["user.create"],
+            )
+
+        # All-or-nothing: the user must not have been created.
+        mock_user_repo.create.assert_not_called()
+
+    async def test_invite_user_rejects_foreign_hospital_role(
+        self: Any, user_service: Any, mock_user_repo: Any, mock_role_repo: Any
+    ) -> None:
+        """B5/B1: a role from another hospital fails the invite too."""
+        hospital_id = uuid.uuid4()
+        foreign_role = MagicMock(
+            id=uuid.uuid4(), name="Other Hospital Role", hospital_id=uuid.uuid4()
+        )
+        mock_user_repo.get_by_email.return_value = None
+        mock_role_repo.get_by_id.return_value = foreign_role
+
+        with pytest.raises(NotFoundError, match="roles were not found"):
+            await user_service.invite_user(
+                hospital_id=hospital_id,
+                email="newuser@hospital.test",
+                first_name="New",
+                last_name="User",
+                role_ids=[foreign_role.id],
+                actor_permissions=["user.create"],
+            )
+
+        mock_user_repo.create.assert_not_called()
 
 
 # ── Deactivate Tests ──────────────────────────────────────────────────────
@@ -206,7 +257,12 @@ class TestDeactivateUser:
 
         mock_user_repo.update.side_effect = _update_in_place
 
-        result = await user_service.deactivate_user(user_id=user.id, actor_user_id=admin_id)
+        result = await user_service.deactivate_user(
+            user_id=user.id,
+            actor_user_id=admin_id,
+            actor_hospital_id=user.hospital_id,
+            actor_permissions=["user.deactivate"],
+        )
 
         assert result.status == UserStatus.SUSPENDED
         mock_auth_service.logout_all.assert_called_once_with(user.id)
@@ -218,7 +274,77 @@ class TestDeactivateUser:
         user = _make_user()
 
         with pytest.raises(BusinessRuleError, match="cannot deactivate yourself"):
-            await user_service.deactivate_user(user_id=user.id, actor_user_id=user.id)
+            await user_service.deactivate_user(
+                user_id=user.id,
+                actor_user_id=user.id,
+                actor_permissions=["user.deactivate"],
+            )
+
+    async def test_deactivate_cross_tenant_is_a_404(
+        self: Any, user_service: Any, mock_user_repo: Any
+    ) -> None:
+        """B1: deactivating a user from another hospital is not found."""
+        user = _make_user()
+        mock_user_repo.get_by_id.return_value = user
+
+        with pytest.raises(NotFoundError, match="User not found."):
+            await user_service.deactivate_user(
+                user_id=user.id,
+                actor_user_id=uuid.uuid4(),
+                actor_hospital_id=uuid.uuid4(),  # different hospital
+                actor_permissions=["user.deactivate"],
+            )
+
+    async def test_deactivate_without_permission_fails_closed(
+        self: Any, user_service: Any, mock_user_repo: Any
+    ) -> None:
+        """B2: empty permission list is denied, not skipped."""
+        user = _make_user()
+        mock_user_repo.get_by_id.return_value = user
+
+        with pytest.raises(PermissionDeniedError):
+            await user_service.deactivate_user(
+                user_id=user.id,
+                actor_user_id=uuid.uuid4(),
+                actor_hospital_id=user.hospital_id,
+                actor_permissions=[],
+            )
+
+        with pytest.raises(PermissionDeniedError):
+            await user_service.deactivate_user(
+                user_id=user.id,
+                actor_user_id=uuid.uuid4(),
+                actor_hospital_id=user.hospital_id,
+                actor_permissions=None,
+            )
+
+    async def test_reactivate_cross_tenant_is_a_404(
+        self: Any, user_service: Any, mock_user_repo: Any
+    ) -> None:
+        """B1: reactivating a user from another hospital is not found."""
+        user = _make_user()
+        mock_user_repo.get_by_id.return_value = user
+
+        with pytest.raises(NotFoundError, match="User not found."):
+            await user_service.reactivate_user(
+                user_id=user.id,
+                actor_hospital_id=uuid.uuid4(),
+                actor_permissions=["user.deactivate"],
+            )
+
+    async def test_reactivate_without_permission_fails_closed(
+        self: Any, user_service: Any, mock_user_repo: Any
+    ) -> None:
+        """B2: reactivate now requires the permission explicitly."""
+        user = _make_user()
+        mock_user_repo.get_by_id.return_value = user
+
+        with pytest.raises(PermissionDeniedError):
+            await user_service.reactivate_user(
+                user_id=user.id,
+                actor_hospital_id=user.hospital_id,
+                actor_permissions=None,
+            )
 
 
 # ── Role Management Tests ──────────────────────────────────────────────────
@@ -239,13 +365,17 @@ class TestRoleManagement:
         role_id = uuid.uuid4()
 
         mock_user_repo.get_by_id.return_value = user
-        mock_role_repo.get_by_id.return_value = MagicMock(id=role_id, name="Doctor")
+        # A system role (hospital_id=None) is assignable from any tenant (B1).
+        mock_role_repo.get_by_id.return_value = MagicMock(
+            id=role_id, name="Doctor", hospital_id=None
+        )
         mock_user_repo.has_role.return_value = False
 
         await user_service.assign_role(
             user_id=user.id,
             role_id=role_id,
             actor_permissions=["role.assign"],
+            actor_hospital_id=user.hospital_id,
         )
 
         mock_user_repo.add_role.assert_called_once_with(user.id, role_id)
@@ -263,13 +393,16 @@ class TestRoleManagement:
         role_id = uuid.uuid4()
 
         mock_user_repo.get_by_id.return_value = user
-        mock_role_repo.get_by_id.return_value = MagicMock(id=role_id, name="Doctor")
+        mock_role_repo.get_by_id.return_value = MagicMock(
+            id=role_id, name="Doctor", hospital_id=None
+        )
         mock_user_repo.has_role.return_value = True  # Already assigned
 
         await user_service.assign_role(
             user_id=user.id,
             role_id=role_id,
             actor_permissions=["role.assign"],
+            actor_hospital_id=user.hospital_id,
         )
 
         mock_user_repo.add_role.assert_not_called()
@@ -288,7 +421,116 @@ class TestRoleManagement:
             user_id=user.id,
             role_id=role_id,
             actor_permissions=["role.assign"],
+            actor_hospital_id=user.hospital_id,
         )
 
         mock_user_repo.remove_role.assert_called_once_with(user.id, role_id)
         mock_auth_service.logout_all.assert_called_once_with(user.id)
+
+    async def test_assign_role_fails_closed_without_permission(
+        self: Any, user_service: Any, mock_user_repo: Any
+    ) -> None:
+        """B2: ``None`` actor_permissions is denied, not skipped."""
+        user = _make_user()
+        mock_user_repo.get_by_id.return_value = user
+
+        with pytest.raises(PermissionDeniedError):
+            await user_service.assign_role(
+                user_id=user.id,
+                role_id=uuid.uuid4(),
+                actor_permissions=None,
+            )
+
+    async def test_remove_role_fails_closed_without_permission(
+        self: Any, user_service: Any, mock_user_repo: Any
+    ) -> None:
+        """B2: empty permission list is denied, not skipped."""
+        user = _make_user()
+        mock_user_repo.get_by_id.return_value = user
+
+        with pytest.raises(PermissionDeniedError):
+            await user_service.remove_role(
+                user_id=user.id,
+                role_id=uuid.uuid4(),
+                actor_permissions=[],
+            )
+
+    async def test_assign_role_cross_tenant_user_is_a_404(
+        self: Any, user_service: Any, mock_user_repo: Any, mock_role_repo: Any
+    ) -> None:
+        """B1: assigning a role to another hospital's user is not found."""
+        user = _make_user()
+        mock_user_repo.get_by_id.return_value = user
+        mock_role_repo.get_by_id.return_value = MagicMock(
+            id=uuid.uuid4(), name="Doctor", hospital_id=None
+        )
+
+        with pytest.raises(NotFoundError, match="User not found."):
+            await user_service.assign_role(
+                user_id=user.id,
+                role_id=uuid.uuid4(),
+                actor_permissions=["role.assign"],
+                actor_hospital_id=uuid.uuid4(),
+            )
+
+    async def test_assign_role_cross_tenant_role_is_a_404(
+        self: Any, user_service: Any, mock_user_repo: Any, mock_role_repo: Any
+    ) -> None:
+        """B1: a role from another hospital cannot be assigned."""
+        user = _make_user()
+        mock_user_repo.get_by_id.return_value = user
+        mock_role_repo.get_by_id.return_value = MagicMock(
+            id=uuid.uuid4(), name="Other Hospital Role", hospital_id=uuid.uuid4()
+        )
+
+        with pytest.raises(NotFoundError, match="Role not found."):
+            await user_service.assign_role(
+                user_id=user.id,
+                role_id=uuid.uuid4(),
+                actor_permissions=["role.assign"],
+                actor_hospital_id=user.hospital_id,
+            )
+
+    async def test_remove_role_cross_tenant_user_is_a_404(
+        self: Any, user_service: Any, mock_user_repo: Any
+    ) -> None:
+        """B1: removing a role from another hospital's user is not found."""
+        user = _make_user()
+        mock_user_repo.get_by_id.return_value = user
+
+        with pytest.raises(NotFoundError, match="User not found."):
+            await user_service.remove_role(
+                user_id=user.id,
+                role_id=uuid.uuid4(),
+                actor_permissions=["role.assign"],
+                actor_hospital_id=uuid.uuid4(),
+            )
+
+    async def test_list_user_roles_cross_tenant_is_a_404(
+        self: Any, user_service: Any, mock_user_repo: Any
+    ) -> None:
+        """B1: listing roles of another hospital's user is not found."""
+        user = _make_user()
+        mock_user_repo.get_by_id.return_value = user
+
+        with pytest.raises(NotFoundError, match="User not found."):
+            await user_service.list_user_roles(
+                user_id=user.id, actor_hospital_id=uuid.uuid4()
+            )
+
+    async def test_update_user_fails_closed_without_permission(
+        self: Any, user_service: Any, mock_user_repo: Any
+    ) -> None:
+        """B2: update_user denies ``None``/empty actor_permissions."""
+        user = _make_user()
+        mock_user_repo.get_by_id.return_value = user
+
+        permission_cases: list[list[str] | None] = [None, []]
+        for permissions in permission_cases:
+            with pytest.raises(PermissionDeniedError):
+                await user_service.update_user(
+                    user_id=user.id,
+                    actor_hospital_id=user.hospital_id,
+                    actor_permissions=permissions,
+                    last_name="Nope",
+                )
