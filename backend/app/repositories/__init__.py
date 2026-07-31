@@ -19,6 +19,7 @@ Placement rule (``docs/09-PROJECT_STRUCTURE.md``): a new repository goes in
 ``app/api/dependencies/repositories.py``.
 """
 
+from app.repositories.appointment_repository import AppointmentRepository
 from app.repositories.base import BaseRepository
 from app.repositories.department_repository import DepartmentRepository
 from app.repositories.doctor_repository import DoctorRepository
@@ -32,6 +33,7 @@ from app.repositories.role_repository import RoleRepository
 from app.repositories.user_repository import UserRepository
 
 __all__ = [
+    "AppointmentRepository",
     "BaseRepository",
     "DepartmentRepository",
     "DoctorRepository",
