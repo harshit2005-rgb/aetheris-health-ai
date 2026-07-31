@@ -10,7 +10,14 @@ Usage::
     from fastapi import Depends
 
     from app.api.dependencies.services import get_auth_service
-    from app.services.auth_service import AuthService
+    from app.services.appointment_service import (
+    AppointmentBookedIntervalSource,
+    AppointmentService,
+    InvoiceDraftSink,
+    NullInvoiceDraftSink,
+    SlotRanker,
+)
+from app.services.auth_service import AuthService
 
     async def handler(
         auth: Annotated[AuthService, Depends(get_auth_service)],
@@ -32,6 +39,7 @@ from app.api.dependencies.db import get_db_session
 # module rather than picking between ``dependencies/`` sub-modules.
 from app.api.dependencies.repositories import (  # noqa: F401
     DbSession,
+    get_appointment_repository,
     get_department_repository,
     get_doctor_repository,
     get_hospital_repository,
@@ -46,6 +54,7 @@ from app.api.dependencies.repositories import (  # noqa: F401
 from app.core.audit import AuditSink, StructlogAuditSink
 from app.database.unit_of_work import UnitOfWork
 from app.repositories import (
+    AppointmentRepository,
     DepartmentRepository,
     DoctorRepository,
     HospitalRepository,
@@ -57,13 +66,19 @@ from app.repositories import (
     RoleRepository,
     UserRepository,
 )
+from app.services.appointment_service import (
+    AppointmentBookedIntervalSource,
+    AppointmentService,
+    InvoiceDraftSink,
+    NullInvoiceDraftSink,
+    SlotRanker,
+)
 from app.services.auth_service import AuthService
 from app.services.department_service import DepartmentService, DepartmentUsageSource
 from app.services.doctor_service import (
     BookedIntervalSource,
     DoctorDepartmentUsageSource,
     DoctorService,
-    NullBookedIntervalSource,
 )
 from app.services.mrn_service import MRNService
 from app.services.patient_service import PatientService
@@ -182,17 +197,19 @@ def get_department_service(
 
 
 # ── Doctor module ───────────────────────────────────────────────────────────
-def get_booked_interval_source() -> BookedIntervalSource:
+def get_booked_interval_source(
+    appointments: AppointmentRepository = Depends(get_appointment_repository),
+) -> BookedIntervalSource:
     """Provide the source of appointment facts slot generation needs.
 
-    Returns the interim null implementation, which reports an empty calendar
-    because no ``appointments`` table exists yet. When
-    ``docs/modules/05-appointment-management.md`` ships, this provider returns
-    an appointment-repository-backed adapter and neither
-    :class:`DoctorService` nor ``generate_slots`` changes — the same seam
-    pattern that let Doctor Management close the department guard above.
+    This is the swap Doctor Management was built for. It shipped against
+    ``NullBookedIntervalSource``, which reported an empty calendar because no
+    ``appointments`` table existed. Returning the real adapter now activates
+    two things at once — slots reporting ``booked`` with their appointment id,
+    and the FR-5 guard refusing to deactivate a doctor with future
+    appointments — with **no change to any doctor module code**.
     """
-    return NullBookedIntervalSource()
+    return AppointmentBookedIntervalSource(appointments)
 
 
 def get_doctor_service(
@@ -216,9 +233,65 @@ def get_doctor_service(
     return DoctorService(doctors, users, departments, hospitals, session, audit, booked)
 
 
+# ── Appointment module ──────────────────────────────────────────────────────
+def get_invoice_draft_sink() -> InvoiceDraftSink:
+    """Provide the sink completed appointments are handed to for invoicing.
+
+    Returns the interim null implementation, which logs rather than drafts,
+    because ``docs/modules/06-billing.md`` has not shipped. Billing swaps this
+    one provider and :class:`AppointmentService` does not change.
+    """
+    return NullInvoiceDraftSink()
+
+
+def get_slot_ranker() -> SlotRanker | None:
+    """Provide the AI slot ranker, when the AI stack is configured.
+
+    Returns ``None`` when the AI platform is unavailable, which makes
+    ``POST /appointments/recommend-slot`` return an empty list instead of
+    failing. Booking by hand must never depend on the AI stack being up
+    (module spec §18 gates the feature behind a flag for the same reason).
+    """
+    try:
+        from app.ai.prompts.registry import PromptRegistry
+        from app.ai.providers import registry as provider_registry
+        from app.ai.services.ai_service import AIService
+        from app.services.slot_ranker import AISlotRanker
+
+        prompts = PromptRegistry()
+        prompts.load_all("app/ai/prompts/templates")
+        return AISlotRanker(AIService(provider_registry, prompts), prompts)
+    except Exception:  # noqa: BLE001 — an unconfigured AI stack is not an error here
+        # No provider credentials, no templates on disk, or the AI package is
+        # mid-refactor: none of that should stop a receptionist booking.
+        return None
+
+
+def get_appointment_service(
+    appointments: AppointmentRepository = Depends(get_appointment_repository),
+    patients: PatientRepository = Depends(get_patient_repository),
+    doctors: DoctorRepository = Depends(get_doctor_repository),
+    hospitals: HospitalRepository = Depends(get_hospital_repository),
+    session: AsyncSession = Depends(get_db_session),
+    audit: AuditSink = Depends(get_audit_sink),
+    invoices: InvoiceDraftSink = Depends(get_invoice_draft_sink),
+    slot_ranker: SlotRanker | None = Depends(get_slot_ranker),
+) -> AppointmentService:
+    """Provide an :class:`AppointmentService` bound to the request session.
+
+    Every repository shares the request-scoped session, so the service's
+    ``commit()`` covers the appointment row and its status-history row together
+    — which business rule 7 requires.
+    """
+    return AppointmentService(
+        appointments, patients, doctors, hospitals, session, audit, invoices, slot_ranker
+    )
+
+
 __all__ = [
     # Re-exports from repositories
     "DbSession",
+    "get_appointment_repository",
     "get_department_repository",
     "get_doctor_repository",
     "get_hospital_repository",
@@ -238,6 +311,10 @@ __all__ = [
     # Department module
     "get_department_service",
     "get_department_usage_source",
+    # Appointment module
+    "get_appointment_service",
+    "get_invoice_draft_sink",
+    "get_slot_ranker",
     # Doctor module
     "get_booked_interval_source",
     "get_doctor_service",

@@ -44,6 +44,11 @@ dependencies = [
 
     # Caching & queues
     "redis>=5.2.0,<6.0.0",
+    # Background jobs. `backend/CLAUDE.md` sanctions Celery or Arq; Arq is the
+    # async-native one, so it needs no sync bridge in an all-async stack, and it
+    # runs on the Redis connection already configured above. Required by the
+    # no-show sweeper (docs/modules/05-appointment-management.md §5.7, FR-7).
+    "arq>=0.26.0,<1.0.0",
 
     # HTTP client (for AI providers, external APIs)
     "httpx>=0.28.0,<1.0.0",

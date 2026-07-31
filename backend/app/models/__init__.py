@@ -9,6 +9,12 @@ Placement rule (``docs/09-PROJECT_STRUCTURE.md``): a new model goes in
 ``app/models/<domain>.py`` and is re-exported below.
 """
 
+from app.models.appointment import (
+    Appointment,
+    AppointmentStatus,
+    AppointmentStatusHistory,
+    AppointmentType,
+)
 from app.models.base import (
     Base,
     CommonColumnsMixin,
@@ -57,6 +63,11 @@ __all__ = [
     "MrnSequence",
     "Patient",
     "PatientStatus",
+    # Appointment
+    "Appointment",
+    "AppointmentStatus",
+    "AppointmentStatusHistory",
+    "AppointmentType",
     # Department
     "Department",
     "DepartmentStatus",

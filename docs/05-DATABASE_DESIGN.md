@@ -281,9 +281,41 @@ slot bookable and back-to-back leaves do not count as overlapping.
 | checked_in_at | TIMESTAMPTZ | |
 | started_at | TIMESTAMPTZ | |
 | completed_at | TIMESTAMPTZ | |
+| idempotency_key | VARCHAR(200) | client retry key, business rule 8 |
 | + audit columns | | |
 
-**Indexes:** `ix_appointments_hospital_scheduled_start (hospital_id, scheduled_start)`, `ix_appointments_doctor_scheduled_start (doctor_id, scheduled_start)`, `ix_appointments_patient (patient_id)`
+**Indexes:** `ix_appointments_hospital_scheduled_start (hospital_id, scheduled_start)`,
+`ix_appointments_doctor_scheduled_start (doctor_id, scheduled_start)`,
+`ix_appointments_patient_scheduled_start (patient_id, scheduled_start DESC)`,
+`ix_appointments_status (hospital_id, status)`,
+`uq_appointments_hospital_idempotency_key (hospital_id, idempotency_key) WHERE idempotency_key IS NOT NULL`
+
+Check: `ck_appointments_time_order` (`scheduled_end > scheduled_start`).
+
+**No double-booking, enforced by Postgres:**
+
+```sql
+ALTER TABLE appointments
+ADD CONSTRAINT no_overlap_per_doctor
+EXCLUDE USING gist (
+  doctor_id WITH =,
+  tstzrange(scheduled_start, scheduled_end, '[)') WITH &&
+) WHERE (deleted_at IS NULL AND status NOT IN ('cancelled', 'no_show'));
+```
+
+This requires the **`btree_gist` extension** (for `doctor_id WITH =`), which
+migration `0008` installs. A role applying migrations therefore needs
+`CREATE EXTENSION`; on a locked-down production database that may have to be
+granted or the extension installed out of band before deploy.
+
+The constraint is what makes AC-2 real: two receptionists booking the same slot
+concurrently cannot be separated by an application check, because both
+transactions read before either writes. Cancelled and no-show appointments are
+excluded from it, so they release their slot.
+
+The idempotency index is **partial** so the many rows without a key do not
+collide with one another, and scoped per hospital so two tenants cannot clash
+on the same generated key.
 
 ### 2.12 `appointment_status_history`
 
@@ -292,12 +324,30 @@ Every status change is recorded here. Immutable.
 | Column | Type | Notes |
 |---|---|---|
 | id | UUID PK | |
-| appointment_id | UUID FK NOT NULL | |
-| from_status | appointment_status | |
+| appointment_id | UUID FK NOT NULL | `ON DELETE CASCADE` |
+| hospital_id | UUID FK hospitals(id) NOT NULL | tenant column, see note below |
+| from_status | appointment_status | NULL on the first row — booking comes from nothing |
 | to_status | appointment_status NOT NULL | |
-| changed_by | UUID FK users(id) NOT NULL | |
+| changed_by | UUID FK users(id) NULL | NULL means the system acted, see note below |
 | changed_at | TIMESTAMPTZ NOT NULL DEFAULT now() | |
 | reason | TEXT | |
+
+**Index:** `ix_appt_status_history_appointment (appointment_id, changed_at)`
+
+Append-only: no `updated_at`, no soft delete. There is nothing to update and
+nothing to retract.
+
+> **`changed_by` is nullable, not `NOT NULL`.** The no-show sweeper (module
+> spec §5.7) is a background job with no acting user, and FR-7 requires it to
+> write a history row like any other transition. NULL means "system", matching
+> how the audit mixins already document `created_by` ("NULL for system rows").
+> The alternative — a synthetic system user — would put a fake row in `users`
+> that permission checks and user lists would have to special-case forever.
+
+> **`hospital_id` is carried here** for the same reason as the doctor child
+> tables: CLAUDE.md rules 4 and 5 require every tenant table to have one and to
+> be filtered on it directly, rather than depending on each call site to
+> resolve the parent first.
 
 ### 2.13 `consultations`
 

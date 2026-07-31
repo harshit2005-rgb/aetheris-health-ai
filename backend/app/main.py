@@ -19,6 +19,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.api.v1 import (
+    appointment_router,
     auth_router,
     department_router,
     doctor_router,
@@ -170,6 +171,12 @@ def _register_routers(app: FastAPI) -> None:
     # Doctor management routes
     app.include_router(
         doctor_router,
+        prefix=API_V1_PREFIX,
+    )
+
+    # Appointment management routes
+    app.include_router(
+        appointment_router,
         prefix=API_V1_PREFIX,
     )
 

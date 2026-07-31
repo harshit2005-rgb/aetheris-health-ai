@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies.db import get_db_session
 from app.repositories import (
+    AppointmentRepository,
     DepartmentRepository,
     DoctorRepository,
     HospitalRepository,
@@ -94,3 +95,8 @@ def get_department_repository(session: DbSession) -> DepartmentRepository:
 def get_doctor_repository(session: DbSession) -> DoctorRepository:
     """Provide a :class:`DoctorRepository` bound to the request session."""
     return DoctorRepository(session)
+
+
+def get_appointment_repository(session: DbSession) -> AppointmentRepository:
+    """Provide an :class:`AppointmentRepository` bound to the request session."""
+    return AppointmentRepository(session)
