@@ -524,7 +524,11 @@ class AuthService:
             )
         )
         await self._uow.commit()
-        logger.info("admin_password_reset", user_id=str(user_id), actor_id=str(actor_id) if actor_id else None)
+        logger.info(
+            "admin_password_reset",
+            user_id=str(user_id),
+            actor_id=str(actor_id) if actor_id else None,
+        )
 
     # ── MFA ─────────────────────────────────────────────────────────────────
 

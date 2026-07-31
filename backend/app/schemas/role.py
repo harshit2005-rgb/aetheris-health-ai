@@ -30,6 +30,7 @@ if TYPE_CHECKING:
     from app.models.role import Role
 
 __all__ = [
+    "PermissionListQuery",
     "PermissionResponse",
     "RoleDetailResponse",
     "RoleListQuery",
@@ -93,3 +94,21 @@ class RoleListQuery(PaginationParams):
     """
 
     pass
+
+
+class PermissionListQuery(RoleListQuery):
+    """Query parameters for ``GET /api/v1/permissions``.
+
+    ``module`` lives on the model rather than beside it in the route
+    signature deliberately. FastAPI expands a Pydantic query model into its
+    individual fields only while every *other* parameter is a dependency:
+    add one loose ``Query(...)`` argument and the model collapses back into a
+    single required parameter named after the argument, so the endpoint 422s
+    on every call. Filters therefore belong on the model.
+    """
+
+    module: str | None = Field(
+        default=None,
+        max_length=50,
+        description="Filter to one owning module, e.g. 'patient'.",
+    )

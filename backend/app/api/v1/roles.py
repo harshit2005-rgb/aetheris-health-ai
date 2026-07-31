@@ -32,6 +32,7 @@ from app.schemas.common import (
     SuccessResponse,
 )
 from app.schemas.role import (
+    PermissionListQuery,
     PermissionResponse,
     RoleDetailResponse,
     RoleListQuery,
@@ -145,15 +146,14 @@ async def get_role(
     responses={200: {"description": "Page of permissions returned."}, **_COMMON_RESPONSES},
 )
 async def list_permissions(
-    query: Annotated[RoleListQuery, Query()],
-    module: str | None = Query(None, max_length=50, description="Filter by module name."),
+    query: Annotated[PermissionListQuery, Query()],
     current_user: User = Depends(require_permission("role.read")),
     service: RoleService = Depends(get_role_service),
 ) -> PaginatedResponse[PermissionResponse]:
     """List the permissions catalog (module spec §9)."""
     page_result = await service.list_permissions(
         pagination=query,
-        module=module,
+        module=query.module,
     )
 
     return PaginatedResponse[PermissionResponse](

@@ -346,7 +346,9 @@ class UserService:
         logger.info("user_deactivated", user_id=str(user_id), actor_id=str(actor_user_id))
         return user
 
-    async def reactivate_user(self, user_id: uuid.UUID, *, actor_id: uuid.UUID | None = None) -> User:
+    async def reactivate_user(
+        self, user_id: uuid.UUID, *, actor_id: uuid.UUID | None = None
+    ) -> User:
         """Reactivate a suspended user.
 
         :param user_id: The user's UUID.

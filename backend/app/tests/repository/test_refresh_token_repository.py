@@ -31,9 +31,7 @@ def repository(db_session: AsyncSession) -> RefreshTokenRepository:
     return RefreshTokenRepository(db_session)
 
 
-async def _create_user(
-    db_session: AsyncSession, hospital_id: uuid.UUID
-) -> uuid.UUID:
+async def _create_user(db_session: AsyncSession, hospital_id: uuid.UUID) -> uuid.UUID:
     """Insert a user row and return its UUID."""
     user = User(
         id=uuid.uuid4(),
@@ -91,7 +89,10 @@ class TestRotationChain:
         """A rotated (revoked) token must fail the validity check."""
         user_id = await _create_user(db_session, hospital_id)
         token = await _create_token(repository, user_id)
-        await repository.revoke(token, rotated_by_id=uuid.uuid4())
+        # The replacement must be a real row: rotated_by_token_id is a
+        # self-referencing foreign key, so a synthetic UUID fails the insert.
+        replacement = await _create_token(repository, user_id)
+        await repository.revoke(token, rotated_by_id=replacement.id)
 
         assert token.is_revoked is True
         assert token.is_valid is False
@@ -146,9 +147,7 @@ class TestExpiry:
     ) -> None:
         """An expired token fails ``is_expired`` and ``is_valid``."""
         user_id = await _create_user(db_session, hospital_id)
-        token = await _create_token(
-            repository, user_id, expires_in=timedelta(seconds=-10)
-        )
+        token = await _create_token(repository, user_id, expires_in=timedelta(seconds=-10))
 
         assert token.is_expired is True
         assert token.is_valid is False
@@ -162,11 +161,9 @@ class TestExpiry:
         """``list_valid_by_user`` returns only live tokens."""
         user_id = await _create_user(db_session, hospital_id)
         live = await _create_token(repository, user_id)
-        expired = await _create_token(
-            repository, user_id, expires_in=timedelta(seconds=-10)
-        )
-        await _create_token(repository, user_id)
-        await repository.revoke(expired, rotated_by_id=uuid.uuid4())
+        await _create_token(repository, user_id, expires_in=timedelta(seconds=-10))
+        revoked = await _create_token(repository, user_id)
+        await repository.revoke(revoked)
 
         valid = await repository.list_valid_by_user(user_id)
 

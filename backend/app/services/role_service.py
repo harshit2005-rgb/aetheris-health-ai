@@ -156,9 +156,7 @@ class RoleService:
         :param role: The ORM instance with ``role_permissions`` loaded.
         :returns: The populated DTO.
         """
-        codes = sorted(
-            rp.permission.code for rp in (role.role_permissions or []) if rp.permission
-        )
+        codes = sorted(rp.permission.code for rp in (role.role_permissions or []) if rp.permission)
         return RoleDetailResponse(
             id=role.id,
             name=role.name,
