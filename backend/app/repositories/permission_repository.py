@@ -80,3 +80,17 @@ class PermissionRepository(BaseRepository[Permission]):
         stmt = select(Permission.code).order_by(Permission.code)
         result = await self._session.execute(stmt)
         return list(result.scalars().all())
+
+    async def count_all(self, *, module: str | None = None) -> int:
+        """Count permissions, optionally filtered by module.
+
+        Takes the identical filter as :meth:`list_all` so the total in a
+        paginated response can never disagree with the rows on the page.
+
+        :param module: Optional module filter.
+        :returns: The permission count.
+        """
+        stmt = select(Permission)
+        if module is not None:
+            stmt = stmt.where(Permission.module == module)
+        return await self.count(stmt)
