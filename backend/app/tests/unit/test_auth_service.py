@@ -46,6 +46,7 @@ def auth_service(
     mock_refresh_token_repo: AsyncMock,
     mock_password_reset_repo: AsyncMock,
     mock_uow: AsyncMock,
+    audit_sink: Any,
 ) -> Any:
     """Create an AuthService with mocked repositories."""
     from app.services.auth_service import AuthService
@@ -55,6 +56,7 @@ def auth_service(
         refresh_token_repo=mock_refresh_token_repo,
         password_reset_repo=mock_password_reset_repo,
         uow=mock_uow,
+        audit=audit_sink,
     )
 
 

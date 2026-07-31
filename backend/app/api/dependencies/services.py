@@ -82,6 +82,7 @@ from app.services.doctor_service import (
 )
 from app.services.mrn_service import MRNService
 from app.services.patient_service import PatientService
+from app.services.role_service import RoleService
 from app.services.user_service import UserService
 
 # ── Dependency type aliases ──────────────────────────────────────────────────
@@ -98,42 +99,6 @@ def get_unit_of_work(session: AsyncSession = Depends(get_db_session)) -> UnitOfW
 
 
 # ── Auth service ────────────────────────────────────────────────────────────
-def get_auth_service(
-    user_repo: UserRepository = Depends(get_user_repository),
-    refresh_token_repo: RefreshTokenRepository = Depends(get_refresh_token_repository),
-    password_reset_repo: PasswordResetTokenRepository = Depends(
-        get_password_reset_token_repository
-    ),
-    uow: UnitOfWork = Depends(get_unit_of_work),
-) -> AuthService:
-    """Provide an :class:`AuthService` composed with its repository dependencies."""
-    return AuthService(
-        user_repo=user_repo,
-        refresh_token_repo=refresh_token_repo,
-        password_reset_repo=password_reset_repo,
-        uow=uow,
-    )
-
-
-# ── User service ────────────────────────────────────────────────────────────
-def get_user_service(
-    user_repo: UserRepository = Depends(get_user_repository),
-    role_repo: RoleRepository = Depends(get_role_repository),
-    permission_repo: PermissionRepository = Depends(get_permission_repository),
-    auth_service: AuthService = Depends(get_auth_service),
-    uow: UnitOfWork = Depends(get_unit_of_work),
-) -> UserService:
-    """Provide a :class:`UserService` composed with its repository dependencies."""
-    return UserService(
-        user_repo=user_repo,
-        role_repo=role_repo,
-        permission_repo=permission_repo,
-        auth_service=auth_service,
-        uow=uow,
-    )
-
-
-# ── Patient module ──────────────────────────────────────────────────────────
 def get_audit_sink() -> AuditSink:
     """Provide the audit sink every service records mutations to.
 
@@ -144,6 +109,60 @@ def get_audit_sink() -> AuditSink:
     return StructlogAuditSink()
 
 
+def get_auth_service(
+    user_repo: UserRepository = Depends(get_user_repository),
+    refresh_token_repo: RefreshTokenRepository = Depends(get_refresh_token_repository),
+    password_reset_repo: PasswordResetTokenRepository = Depends(
+        get_password_reset_token_repository
+    ),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+    audit: AuditSink = Depends(get_audit_sink),
+) -> AuthService:
+    """Provide an :class:`AuthService` composed with its repository dependencies."""
+    return AuthService(
+        user_repo=user_repo,
+        refresh_token_repo=refresh_token_repo,
+        password_reset_repo=password_reset_repo,
+        uow=uow,
+        audit=audit,
+    )
+
+
+# ── User service ────────────────────────────────────────────────────────────
+def get_user_service(
+    user_repo: UserRepository = Depends(get_user_repository),
+    role_repo: RoleRepository = Depends(get_role_repository),
+    permission_repo: PermissionRepository = Depends(get_permission_repository),
+    auth_service: AuthService = Depends(get_auth_service),
+    uow: UnitOfWork = Depends(get_unit_of_work),
+    audit: AuditSink = Depends(get_audit_sink),
+) -> UserService:
+    """Provide a :class:`UserService` composed with its repository dependencies."""
+    return UserService(
+        user_repo=user_repo,
+        role_repo=role_repo,
+        permission_repo=permission_repo,
+        auth_service=auth_service,
+        uow=uow,
+        audit=audit,
+    )
+
+
+# ── Roles & Permissions module ────────────────────────────────────────────────
+def get_role_service(
+    role_repo: RoleRepository = Depends(get_role_repository),
+    permission_repo: PermissionRepository = Depends(get_permission_repository),
+) -> RoleService:
+    """Provide a :class:`RoleService` bound to the request session.
+
+    Read-only in the MVP (``docs/modules/02-user-management.md`` §9), so no
+    session or audit sink is needed — the two repositories share the
+    request-scoped session already.
+    """
+    return RoleService(role_repo, permission_repo)
+
+
+# ── Patient module ──────────────────────────────────────────────────────────
 def get_mrn_service(
     sequences: MrnSequenceRepository = Depends(get_mrn_sequence_repository),
 ) -> MRNService:
@@ -304,6 +323,8 @@ __all__ = [
     "get_auth_service",
     "get_unit_of_work",
     "get_user_service",
+    # Roles & Permissions module
+    "get_role_service",
     # Patient module
     "get_audit_sink",
     "get_mrn_service",

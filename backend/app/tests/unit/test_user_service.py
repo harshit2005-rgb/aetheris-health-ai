@@ -46,6 +46,7 @@ def user_service(
     mock_permission_repo: AsyncMock,
     mock_auth_service: AsyncMock,
     mock_uow: AsyncMock,
+    audit_sink: Any,
 ) -> Any:
     """Create a UserService with mocked dependencies."""
     from app.services.user_service import UserService
@@ -56,6 +57,7 @@ def user_service(
         permission_repo=mock_permission_repo,
         auth_service=mock_auth_service,
         uow=mock_uow,
+        audit=audit_sink,
     )
 
 

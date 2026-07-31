@@ -25,6 +25,8 @@ from app.api.v1 import (
     doctor_router,
     health_router,
     patient_router,
+    permission_router,
+    role_router,
     user_router,
 )
 from app.core.config import settings
@@ -177,6 +179,18 @@ def _register_routers(app: FastAPI) -> None:
     # Appointment management routes
     app.include_router(
         appointment_router,
+        prefix=API_V1_PREFIX,
+    )
+
+    # Roles & Permissions routes (read-only catalog in MVP)
+    app.include_router(
+        role_router,
+        prefix=API_V1_PREFIX,
+    )
+
+    # Permissions catalog routes (read-only)
+    app.include_router(
+        permission_router,
         prefix=API_V1_PREFIX,
     )
 
