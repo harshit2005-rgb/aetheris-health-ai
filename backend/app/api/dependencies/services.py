@@ -33,6 +33,7 @@ from app.api.dependencies.db import get_db_session
 from app.api.dependencies.repositories import (  # noqa: F401
     DbSession,
     get_department_repository,
+    get_doctor_repository,
     get_hospital_repository,
     get_mrn_sequence_repository,
     get_password_reset_token_repository,
@@ -46,6 +47,8 @@ from app.core.audit import AuditSink, StructlogAuditSink
 from app.database.unit_of_work import UnitOfWork
 from app.repositories import (
     DepartmentRepository,
+    DoctorRepository,
+    HospitalRepository,
     MrnSequenceRepository,
     PasswordResetTokenRepository,
     PatientRepository,
@@ -55,10 +58,12 @@ from app.repositories import (
     UserRepository,
 )
 from app.services.auth_service import AuthService
-from app.services.department_service import (
-    DepartmentService,
-    DepartmentUsageSource,
-    NullDepartmentUsageSource,
+from app.services.department_service import DepartmentService, DepartmentUsageSource
+from app.services.doctor_service import (
+    BookedIntervalSource,
+    DoctorDepartmentUsageSource,
+    DoctorService,
+    NullBookedIntervalSource,
 )
 from app.services.mrn_service import MRNService
 from app.services.patient_service import PatientService
@@ -146,16 +151,20 @@ def get_patient_service(
 
 
 # ── Department module ───────────────────────────────────────────────────────
-def get_department_usage_source() -> DepartmentUsageSource:
+def get_department_usage_source(
+    doctors: DoctorRepository = Depends(get_doctor_repository),
+) -> DepartmentUsageSource:
     """Provide the source that answers how many doctors a department has.
 
-    Returns the interim null implementation, which reports zero assignments
-    because no ``doctors`` table exists yet. When
-    ``docs/modules/04-doctor-management.md`` ships, this provider returns a
-    ``DoctorRepository``-backed adapter instead and
-    :class:`DepartmentService` does not change.
+    This is the swap the Department module was built for. It shipped against
+    ``NullDepartmentUsageSource``, which reported zero because no ``doctors``
+    table existed. Now that Doctor Management provides one, returning the real
+    adapter activates business rule 13 — "a department cannot be deactivated
+    while active doctors are assigned to it" — with **no change to any
+    department module code**. The guard's tests were written against both
+    branches when it shipped, so they cover this without modification.
     """
-    return NullDepartmentUsageSource()
+    return DoctorDepartmentUsageSource(doctors)
 
 
 def get_department_service(
@@ -172,10 +181,46 @@ def get_department_service(
     return DepartmentService(departments, session, audit, usage)
 
 
+# ── Doctor module ───────────────────────────────────────────────────────────
+def get_booked_interval_source() -> BookedIntervalSource:
+    """Provide the source of appointment facts slot generation needs.
+
+    Returns the interim null implementation, which reports an empty calendar
+    because no ``appointments`` table exists yet. When
+    ``docs/modules/05-appointment-management.md`` ships, this provider returns
+    an appointment-repository-backed adapter and neither
+    :class:`DoctorService` nor ``generate_slots`` changes — the same seam
+    pattern that let Doctor Management close the department guard above.
+    """
+    return NullBookedIntervalSource()
+
+
+def get_doctor_service(
+    doctors: DoctorRepository = Depends(get_doctor_repository),
+    users: UserRepository = Depends(get_user_repository),
+    departments: DepartmentRepository = Depends(get_department_repository),
+    hospitals: HospitalRepository = Depends(get_hospital_repository),
+    session: AsyncSession = Depends(get_db_session),
+    audit: AuditSink = Depends(get_audit_sink),
+    booked: BookedIntervalSource = Depends(get_booked_interval_source),
+) -> DoctorService:
+    """Provide a :class:`DoctorService` bound to the request session.
+
+    Every repository shares the request-scoped session, so the service's
+    ``commit()`` covers all writes. The user, department, and hospital
+    repositories are here because the service orchestrates across aggregates —
+    validating the linked user, the assigned department, and reading the
+    hospital's timezone for slot generation. Repositories never call each
+    other; the service composes (``backend/CLAUDE.md``, "The Layer Rule").
+    """
+    return DoctorService(doctors, users, departments, hospitals, session, audit, booked)
+
+
 __all__ = [
     # Re-exports from repositories
     "DbSession",
     "get_department_repository",
+    "get_doctor_repository",
     "get_hospital_repository",
     "get_password_reset_token_repository",
     "get_permission_repository",
@@ -193,4 +238,7 @@ __all__ = [
     # Department module
     "get_department_service",
     "get_department_usage_source",
+    # Doctor module
+    "get_booked_interval_source",
+    "get_doctor_service",
 ]

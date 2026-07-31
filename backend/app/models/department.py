@@ -10,9 +10,10 @@ see :attr:`Department.status`. This mirrors :mod:`app.models.patient`: a stored
 status column would duplicate the soft-delete state and let the two disagree.
 "Deactivate" is a soft delete; "activate" clears ``deleted_at``.
 
-**No ``head_doctor_id`` yet.** ``departments`` and ``doctors`` reference each
-other, so the column is added by a follow-up migration in the Doctor Management
-module rather than at table creation.
+**``head_doctor_id`` arrives in migration 0007.** ``departments`` and
+``doctors`` reference each other, so neither table could carry its foreign key
+at creation time: ``0005`` created this table without the column, ``0006``
+created ``doctors`` with ``department_id``, and ``0007`` closed the loop.
 """
 
 from __future__ import annotations
@@ -28,6 +29,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base, CommonColumnsMixin, UUIDPrimaryKeyMixin
 
 if TYPE_CHECKING:
+    from app.models.doctor import Doctor
     from app.models.hospital import Hospital
 
 #: Allowed shape of a department code, kept identical to the
@@ -86,6 +88,7 @@ class Department(UUIDPrimaryKeyMixin, CommonColumnsMixin, Base):
             "hospital_id",
             text("lower(name) varchar_pattern_ops"),
         ),
+        Index("ix_departments_head_doctor", "head_doctor_id"),
     )
 
     hospital_id: Mapped[uuid.UUID] = mapped_column(
@@ -118,6 +121,14 @@ class Department(UUIDPrimaryKeyMixin, CommonColumnsMixin, Base):
     location: Mapped[str | None] = mapped_column(
         String(150), nullable=True, comment="Physical location — floor, wing, or block."
     )
+    head_doctor_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        # SET NULL, not RESTRICT: a department must outlive its head doctor
+        # being deactivated. Most departments have no designated head at all.
+        ForeignKey("doctors.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Doctor designated as head of this department. NULL when unset.",
+    )
 
     # ── Relationships ───────────────────────────────────────────────────
     # `foreign_keys` is mandatory on every relationship touching a table the
@@ -134,9 +145,23 @@ class Department(UUIDPrimaryKeyMixin, CommonColumnsMixin, Base):
         lazy="raise",
     )
 
-    # `doctors` back-populates onto this model when the Doctor Management
-    # module lands. It is not declared here: a relationship to a model that
-    # does not exist yet fails mapper configuration at import time.
+    # Doctors assigned to this department. `lazy="raise"` on purpose: the
+    # department endpoints never need the collection — the "is this department
+    # in use" question is answered by a COUNT in the repository, not by loading
+    # every doctor — and a large department would make each read expensive.
+    doctors: Mapped[list[Doctor]] = relationship(
+        "Doctor",
+        foreign_keys="Doctor.department_id",
+        back_populates="department",
+        lazy="raise",
+    )
+    # The designated head. Separate join path from `doctors`, hence the explicit
+    # `foreign_keys` on both (backend/CLAUDE.md, "Common Pitfalls").
+    head_doctor: Mapped[Doctor | None] = relationship(
+        "Doctor",
+        foreign_keys="Department.head_doctor_id",
+        lazy="joined",
+    )
 
     @property
     def status(self) -> DepartmentStatus:

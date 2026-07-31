@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1 import (
     auth_router,
     department_router,
+    doctor_router,
     health_router,
     patient_router,
     user_router,
@@ -163,6 +164,12 @@ def _register_routers(app: FastAPI) -> None:
     # Department routes (Hospital Settings module, feature 17.2)
     app.include_router(
         department_router,
+        prefix=API_V1_PREFIX,
+    )
+
+    # Doctor management routes
+    app.include_router(
+        doctor_router,
         prefix=API_V1_PREFIX,
     )
 

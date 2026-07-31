@@ -159,12 +159,16 @@ Indexes: `slug` (unique), `is_active` (partial index for active hospitals).
 |--------|------|-------------|
 | id | UUID | PK |
 | hospital_id | UUID | FK hospitals.id, NOT NULL |
-| day_of_week | SMALLINT | NOT NULL, 0=Sunday..6=Saturday |
+| day_of_week | SMALLINT | NOT NULL, 0=Monday..6=Sunday |
 | open_time | TIME | NULL (NULL = closed that day) |
 | close_time | TIME | NULL |
 | is_24h | BOOLEAN | NOT NULL, default false |
 
 Unique constraint: `(hospital_id, day_of_week)`.
+
+Monday=0 aligns this with `doctor_availability.day_of_week`
+(`05-DATABASE_DESIGN.md` §2.9), Python's `date.weekday()`, and ISO 8601 — so
+scheduling code never needs a translation table between the two.
 
 ### Table: `hospital_feature_flags`
 
