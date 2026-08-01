@@ -60,7 +60,9 @@ async def viewer(db_session: AsyncSession, hospital_id: uuid.UUID) -> dict[str, 
     )
     db_session.add(user)
     await db_session.flush()
-    await grant_permissions(db_session, hospital_id=hospital_id, user_id=user.id, codes=["role.read"])
+    await grant_permissions(
+        db_session, hospital_id=hospital_id, user_id=user.id, codes=["role.read"]
+    )
     token = create_access_token(user_id=user.id, hospital_id=hospital_id)
     return {"id": user.id, "headers": {"Authorization": f"Bearer {token}"}}
 
@@ -73,7 +75,12 @@ async def _seed_role_with_permissions(
     is_system: bool = False,
 ) -> Role:
     """Insert a role with one permission row attached."""
-    role = Role(id=uuid.uuid4(), hospital_id=None if is_system else hospital_id, name=name, is_system=is_system)
+    role = Role(
+        id=uuid.uuid4(),
+        hospital_id=None if is_system else hospital_id,
+        name=name,
+        is_system=is_system,
+    )
     db_session.add(role)
     await db_session.flush()
 
@@ -83,7 +90,10 @@ async def _seed_role_with_permissions(
     perm = permission.unique().scalar_one_or_none()
     if perm is None:
         perm = Permission(
-            id=uuid.uuid4(), code="patient.read", module="patient", description="View patient records."
+            id=uuid.uuid4(),
+            code="patient.read",
+            module="patient",
+            description="View patient records.",
         )
         db_session.add(perm)
         await db_session.flush()
@@ -97,10 +107,16 @@ class TestListRoles:
     """``GET /api/v1/roles``."""
 
     async def test_lists_system_and_own_roles(
-        self, api: AsyncClient, viewer: dict[str, Any], db_session: AsyncSession, hospital_id: uuid.UUID
+        self,
+        api: AsyncClient,
+        viewer: dict[str, Any],
+        db_session: AsyncSession,
+        hospital_id: uuid.UUID,
     ) -> None:
         await _seed_role_with_permissions(db_session, hospital_id, name="Receptionist")
-        await _seed_role_with_permissions(db_session, hospital_id, name="Super Admin", is_system=True)
+        await _seed_role_with_permissions(
+            db_session, hospital_id, name="Super Admin", is_system=True
+        )
 
         response = await api.get("/api/v1/roles", headers=viewer["headers"])
 
@@ -124,12 +140,12 @@ class TestListRoles:
         )
         db_session.add(plain)
         await db_session.flush()
-        await grant_permissions(db_session, hospital_id=hospital_id, user_id=plain.id, codes=["user.read"])
+        await grant_permissions(
+            db_session, hospital_id=hospital_id, user_id=plain.id, codes=["user.read"]
+        )
         token = create_access_token(user_id=plain.id, hospital_id=hospital_id)
 
-        response = await api.get(
-            "/api/v1/roles", headers={"Authorization": f"Bearer {token}"}
-        )
+        response = await api.get("/api/v1/roles", headers={"Authorization": f"Bearer {token}"})
 
         assert response.status_code == 403
 
@@ -143,7 +159,11 @@ class TestGetRole:
     """``GET /api/v1/roles/{id}``."""
 
     async def test_get_role_includes_permission_codes(
-        self, api: AsyncClient, viewer: dict[str, Any], db_session: AsyncSession, hospital_id: uuid.UUID
+        self,
+        api: AsyncClient,
+        viewer: dict[str, Any],
+        db_session: AsyncSession,
+        hospital_id: uuid.UUID,
     ) -> None:
         role = await _seed_role_with_permissions(db_session, hospital_id, name="Receptionist")
 
@@ -155,9 +175,15 @@ class TestGetRole:
         assert "patient.read" in data["permission_codes"]
 
     async def test_get_system_role_is_visible(
-        self, api: AsyncClient, viewer: dict[str, Any], db_session: AsyncSession, hospital_id: uuid.UUID
+        self,
+        api: AsyncClient,
+        viewer: dict[str, Any],
+        db_session: AsyncSession,
+        hospital_id: uuid.UUID,
     ) -> None:
-        role = await _seed_role_with_permissions(db_session, hospital_id, name="Super Admin", is_system=True)
+        role = await _seed_role_with_permissions(
+            db_session, hospital_id, name="Super Admin", is_system=True
+        )
 
         response = await api.get(f"/api/v1/roles/{role.id}", headers=viewer["headers"])
 
@@ -190,9 +216,7 @@ class TestGetRole:
 class TestListPermissions:
     """``GET /api/v1/permissions``."""
 
-    async def test_lists_the_catalog(
-        self, api: AsyncClient, viewer: dict[str, Any]
-    ) -> None:
+    async def test_lists_the_catalog(self, api: AsyncClient, viewer: dict[str, Any]) -> None:
         response = await api.get("/api/v1/permissions", headers=viewer["headers"])
 
         assert response.status_code == 200, response.text
@@ -201,15 +225,23 @@ class TestListPermissions:
         assert body["metadata"]["pagination"]["total_records"] >= 1
 
     async def test_filters_by_module(
-        self, api: AsyncClient, viewer: dict[str, Any]
+        self, api: AsyncClient, db_session: AsyncSession, viewer: dict[str, Any]
     ) -> None:
-        response = await api.get(
-            "/api/v1/permissions?module=patient", headers=viewer["headers"]
-        )
+        # Each test rolls back, so the seeded catalog is not present — the
+        # rows the filter is asserted against have to be created here.
+        for code, module in (
+            ("patient.read", "patient"),
+            ("patient.create", "patient"),
+            ("billing.read", "billing"),
+        ):
+            db_session.add(Permission(id=uuid.uuid4(), code=code, module=module, description=code))
+        await db_session.flush()
 
-        assert response.status_code == 200
+        response = await api.get("/api/v1/permissions?module=patient", headers=viewer["headers"])
+
+        assert response.status_code == 200, response.text
         codes = {item["code"] for item in response.json()["data"]}
-        assert codes and all(code.startswith("patient.") for code in codes)
+        assert codes == {"patient.read", "patient.create"}
 
     async def test_list_requires_role_read_permission(
         self, api: AsyncClient, db_session: AsyncSession, hospital_id: uuid.UUID
@@ -224,7 +256,9 @@ class TestListPermissions:
         )
         db_session.add(plain)
         await db_session.flush()
-        await grant_permissions(db_session, hospital_id=hospital_id, user_id=plain.id, codes=["user.read"])
+        await grant_permissions(
+            db_session, hospital_id=hospital_id, user_id=plain.id, codes=["user.read"]
+        )
         token = create_access_token(user_id=plain.id, hospital_id=hospital_id)
 
         response = await api.get(

@@ -113,15 +113,11 @@ async def _create_role_granting(
         db_session.add(permission)
         await db_session.flush()
 
-    role = Role(
-        id=uuid.uuid4(), hospital_id=hospital_id, name=f"test-role-{uuid.uuid4().hex[:8]}"
-    )
+    role = Role(id=uuid.uuid4(), hospital_id=hospital_id, name=f"test-role-{uuid.uuid4().hex[:8]}")
     db_session.add(role)
     await db_session.flush()
 
-    db_session.add(
-        RolePermission(id=uuid.uuid4(), role_id=role.id, permission_id=permission.id)
-    )
+    db_session.add(RolePermission(id=uuid.uuid4(), role_id=role.id, permission_id=permission.id))
     await db_session.flush()
     return role.id
 

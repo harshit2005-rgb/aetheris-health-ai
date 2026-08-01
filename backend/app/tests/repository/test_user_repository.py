@@ -190,9 +190,7 @@ class TestUserRoleManagement:
     ) -> None:
         """Adding a role makes ``has_role`` true."""
         user = await _create_user(repository, hospital_id=hospital_id)
-        role = Role(
-            id=uuid.uuid4(), hospital_id=hospital_id, name=f"Role {uuid.uuid4().hex[:8]}"
-        )
+        role = Role(id=uuid.uuid4(), hospital_id=hospital_id, name=f"Role {uuid.uuid4().hex[:8]}")
         db_session.add(role)
         await db_session.flush()
 
@@ -209,9 +207,7 @@ class TestUserRoleManagement:
     ) -> None:
         """Removing a role returns True and clears ``has_role``."""
         user = await _create_user(repository, hospital_id=hospital_id)
-        role = Role(
-            id=uuid.uuid4(), hospital_id=hospital_id, name=f"Role {uuid.uuid4().hex[:8]}"
-        )
+        role = Role(id=uuid.uuid4(), hospital_id=hospital_id, name=f"Role {uuid.uuid4().hex[:8]}")
         db_session.add(role)
         await db_session.flush()
         await repository.add_role(user.id, role.id)
@@ -238,9 +234,7 @@ class TestUserRoleManagement:
     ) -> None:
         """``assigned_by`` is stamped per module spec §4 rule 9."""
         user = await _create_user(repository, hospital_id=hospital_id)
-        role = Role(
-            id=uuid.uuid4(), hospital_id=hospital_id, name=f"Role {uuid.uuid4().hex[:8]}"
-        )
+        role = Role(id=uuid.uuid4(), hospital_id=hospital_id, name=f"Role {uuid.uuid4().hex[:8]}")
         db_session.add(role)
         await db_session.flush()
 
@@ -249,10 +243,12 @@ class TestUserRoleManagement:
         from sqlalchemy import select
 
         row = (
-            await db_session.execute(
-                select(UserRole).where(
-                    UserRole.user_id == user.id, UserRole.role_id == role.id
+            (
+                await db_session.execute(
+                    select(UserRole).where(UserRole.user_id == user.id, UserRole.role_id == role.id)
                 )
             )
-        ).unique().scalar_one()
+            .unique()
+            .scalar_one()
+        )
         assert row.assigned_by == actor_id

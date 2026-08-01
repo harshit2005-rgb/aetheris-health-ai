@@ -58,9 +58,7 @@ def _make_role(**overrides: Any) -> MagicMock:
 class TestListRoles:
     """``RoleService.list_roles``."""
 
-    async def test_list_returns_page_of_summaries(
-        self, service: Any, mock_role_repo: Any
-    ) -> None:
+    async def test_list_returns_page_of_summaries(self, service: Any, mock_role_repo: Any) -> None:
         """Rows are converted to RoleResponse and wrapped in a Page."""
         hospital_id = uuid.uuid4()
         mock_role_repo.list_by_hospital.return_value = [
@@ -75,18 +73,16 @@ class TestListRoles:
         assert page.total_pages == 1
         assert [item.name for item in page.items] == ["Doctor", "Receptionist"]
         mock_role_repo.list_by_hospital.assert_awaited_once()
-        mock_role_repo.count_by_hospital.assert_awaited_once_with(
-            hospital_id, include_system=True
-        )
+        mock_role_repo.count_by_hospital.assert_awaited_once_with(hospital_id, include_system=True)
 
-    async def test_list_passes_pagination(
-        self, service: Any, mock_role_repo: Any
-    ) -> None:
+    async def test_list_passes_pagination(self, service: Any, mock_role_repo: Any) -> None:
         """Offset/limit are derived from the pagination params."""
         mock_role_repo.list_by_hospital.return_value = []
         mock_role_repo.count_by_hospital.return_value = 0
 
-        await service.list_roles(uuid.uuid4(), pagination=MagicMock(offset=10, limit=5, page=3, page_size=5))
+        await service.list_roles(
+            uuid.uuid4(), pagination=MagicMock(offset=10, limit=5, page=3, page_size=5)
+        )
 
         _, kwargs = mock_role_repo.list_by_hospital.await_args
         assert kwargs["skip"] == 10
@@ -167,9 +163,7 @@ class TestListPermissions:
         assert isinstance(page.items[0], PermissionResponse)
         assert page.items[0].code == "patient.read"
         assert page.items[0].module == "patient"
-        mock_permission_repo.list_all.assert_awaited_once_with(
-            skip=0, limit=25, module="patient"
-        )
+        mock_permission_repo.list_all.assert_awaited_once_with(skip=0, limit=25, module="patient")
         mock_permission_repo.count_all.assert_awaited_once_with(module="patient")
 
     async def test_list_permissions_without_module(
@@ -181,7 +175,5 @@ class TestListPermissions:
 
         await service.list_permissions()
 
-        mock_permission_repo.list_all.assert_awaited_once_with(
-            skip=0, limit=25, module=None
-        )
+        mock_permission_repo.list_all.assert_awaited_once_with(skip=0, limit=25, module=None)
         mock_permission_repo.count_all.assert_awaited_once_with(module=None)

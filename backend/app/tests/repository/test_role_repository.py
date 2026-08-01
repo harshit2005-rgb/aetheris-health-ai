@@ -48,9 +48,7 @@ async def _create_role(
     return await repository.create(hospital_id=hospital_id, **values)
 
 
-async def _create_permission(
-    db_session: AsyncSession, *, code: str
-) -> Permission:
+async def _create_permission(db_session: AsyncSession, *, code: str) -> Permission:
     """Insert a global permission row."""
     permission = Permission(
         id=uuid.uuid4(),
@@ -104,7 +102,9 @@ class TestVisibility:
         await _create_role(repository, hospital_id=None, name="Super Admin", is_system=True)
         await _create_role(repository, hospital_id=hospital_id, name="Receptionist")
 
-        names = {r.name for r in await repository.list_by_hospital(hospital_id, include_system=False)}
+        names = {
+            r.name for r in await repository.list_by_hospital(hospital_id, include_system=False)
+        }
 
         assert names == {"Receptionist"}
 
@@ -119,9 +119,7 @@ class TestVisibility:
 
         assert [r.name for r in rows] == ["Alpha", "Mike", "Zulu"]
 
-    async def test_list_paginates(
-        self, repository: RoleRepository, hospital_id: uuid.UUID
-    ) -> None:
+    async def test_list_paginates(self, repository: RoleRepository, hospital_id: uuid.UUID) -> None:
         """Offset and limit slice the ordered result."""
         for index in range(5):
             await _create_role(repository, hospital_id=hospital_id, name=f"Role {index}")
@@ -147,15 +145,20 @@ class TestGetWithPermissions:
         perm_a = await _create_permission(db_session, code="patient.read")
         perm_b = await _create_permission(db_session, code="appointment.book")
 
-        db_session.add(
-            RolePermission(id=uuid.uuid4(), role_id=role.id, permission_id=perm_a.id)
-        )
-        db_session.add(
-            RolePermission(id=uuid.uuid4(), role_id=role.id, permission_id=perm_b.id)
-        )
+        db_session.add(RolePermission(id=uuid.uuid4(), role_id=role.id, permission_id=perm_a.id))
+        db_session.add(RolePermission(id=uuid.uuid4(), role_id=role.id, permission_id=perm_b.id))
         await db_session.flush()
+        # The role was created through this same session, so its (empty)
+        # role_permissions collection is already loaded in the identity map,
+        # and SQLAlchemy will not overwrite a loaded collection on a later
+        # query. Expiring first makes the eager load observable — a request
+        # gets a fresh session and never hits this. Read the id before
+        # expiring: touching an expired attribute would refresh it here, and
+        # that IO cannot happen outside the async context.
+        role_id = role.id
+        db_session.expire_all()
 
-        found = await repository.get_with_permissions(role.id, hospital_id=hospital_id)
+        found = await repository.get_with_permissions(role_id, hospital_id=hospital_id)
 
         assert found is not None
         codes = {rp.permission.code for rp in found.role_permissions}
@@ -186,10 +189,7 @@ class TestGetWithPermissions:
         """A hospital-scoped role is invisible from another tenant."""
         role = await _create_role(repository, hospital_id=hospital_id, name="Receptionist")
 
-        assert (
-            await repository.get_with_permissions(role.id, hospital_id=other_hospital_id)
-            is None
-        )
+        assert await repository.get_with_permissions(role.id, hospital_id=other_hospital_id) is None
 
     async def test_get_without_tenant_scoping_reads_any_role(
         self,
@@ -209,7 +209,4 @@ class TestGetWithPermissions:
         self, repository: RoleRepository, hospital_id: uuid.UUID
     ) -> None:
         """An unknown role id resolves to ``None``, not an error."""
-        assert (
-            await repository.get_with_permissions(uuid.uuid4(), hospital_id=hospital_id)
-            is None
-        )
+        assert await repository.get_with_permissions(uuid.uuid4(), hospital_id=hospital_id) is None
