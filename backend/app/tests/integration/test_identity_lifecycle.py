@@ -280,7 +280,11 @@ class TestLoginRejectsSuspendedAccounts:
         auth_service: AuthService,
         audit_sink: RecordingAuditSink,
     ) -> None:
-        from app.core.exceptions import AccountSuspendedError
+        # Anti-enumeration: the login must fail with the same generic error as
+        # invalid credentials — never a distinct ACCOUNT_SUSPENDED that would
+        # confirm the email belongs to a real account. The real reason stays in
+        # the audit trail (CLAUDE.md rule 9).
+        from app.core.exceptions import AuthenticationError
 
         user = User(
             id=uuid.uuid4(),
@@ -294,7 +298,7 @@ class TestLoginRejectsSuspendedAccounts:
         db_session.add(user)
         await db_session.flush()
 
-        with pytest.raises(AccountSuspendedError):
+        with pytest.raises(AuthenticationError, match="Invalid credentials."):
             await auth_service.login(email=user.email, password=PASSWORD)
 
         assert audit_sink.last().action == "auth.login.failed"

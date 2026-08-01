@@ -158,10 +158,17 @@ class AuthenticationError(AetherisError):
 class AccountLockedError(AetherisError):
     """Raised when login is attempted against a temporarily locked account.
 
-    Maps to HTTP 403 with ``ACCOUNT_LOCKED``
-    (``docs/modules/01-authentication.md`` §5.2). The lockout is time-limited,
-    so the unlock instant is returned to let the client tell the user when to
-    retry rather than leaving them to guess.
+    .. note::
+
+       Reserved for non-login flows. The login path intentionally raises the
+       generic :class:`AuthenticationError` instead so a failed login cannot
+       be used to enumerate valid email addresses (anti-enumeration) — do not
+       re-raise this from ``AuthService._check_account_status``.
+
+    If raised, maps to HTTP 403 with ``ACCOUNT_LOCKED`` (lockout is
+    time-limited, so the unlock instant lets the client tell the user when to
+    retry). Note the login contract has moved to a generic 401; the 403 form
+    applies only to non-login callers.
 
     :param unlock_at: When the lock expires. Serialized into ``errors`` as an
         ISO 8601 UTC timestamp (``docs/06-API_STANDARDS.md`` §17).
@@ -184,9 +191,17 @@ class AccountLockedError(AetherisError):
 class AccountSuspendedError(AetherisError):
     """Raised when login is attempted against a suspended account.
 
-    Maps to HTTP 403 with ``ACCOUNT_SUSPENDED``
-    (``docs/modules/01-authentication.md`` §5.2). Unlike a lockout this carries
-    no unlock time: suspension is lifted by an administrator, not by the clock.
+    .. note::
+
+       Reserved for non-login flows. The login path intentionally raises the
+       generic :class:`AuthenticationError` instead so a failed login cannot
+       be used to enumerate valid email addresses (anti-enumeration) — do not
+       re-raise this from ``AuthService._check_account_status``.
+
+    If raised, maps to HTTP 403 with ``ACCOUNT_SUSPENDED``. Unlike a lockout
+    this carries no unlock time: suspension is lifted by an administrator, not
+    by the clock. The login contract has moved to a generic 401; the 403 form
+    applies only to non-login callers.
     """
 
     def __init__(self, message: str = "Account is suspended.") -> None:

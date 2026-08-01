@@ -16,8 +16,6 @@ import structlog
 from app.core.audit import AuditEvent
 from app.core.config import settings
 from app.core.exceptions import (
-    AccountLockedError,
-    AccountSuspendedError,
     AuthenticationError,
     BusinessRuleError,
 )
@@ -654,10 +652,15 @@ class AuthService:
     async def _check_account_status(self, user: User) -> None:
         """Check if the user's account is usable.
 
+        Every failure raises the generic ``AuthenticationError("Invalid
+        credentials.")`` — never a distinct ``ACCOUNT_SUSPENDED``/
+        ``ACCOUNT_LOCKED`` — so a login attempt cannot be used to enumerate
+        valid email addresses (docs/07-SECURITY.md rule 10). The real reason
+        is recorded only in the audit event and the log line.
+
         :param user: The user to check.
-        :raises AccountSuspendedError: If the account is suspended.
-        :raises AccountLockedError: If the account is temporarily locked.
-        :raises AuthenticationError: If the account has no usable credential.
+        :raises AuthenticationError: Always, with the generic message, whether
+            the account is suspended, locked, or has no usable credential.
         """
         if user.status == UserStatus.SUSPENDED:
             await self._audit.record(
@@ -671,7 +674,7 @@ class AuthService:
                 )
             )
             logger.info("login_attempt_suspended_account", user_id=str(user.id))
-            raise AccountSuspendedError
+            raise AuthenticationError("Invalid credentials.")
 
         if user.locked_until and datetime.now(UTC) < user.locked_until:
             await self._audit.record(
@@ -689,7 +692,7 @@ class AuthService:
                 user_id=str(user.id),
                 locked_until=str(user.locked_until),
             )
-            raise AccountLockedError(user.locked_until)
+            raise AuthenticationError("Invalid credentials.")
 
         if user.status == UserStatus.INVITED and user.password_hash is None:
             logger.info("login_attempt_invited_account", user_id=str(user.id))
