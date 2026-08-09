@@ -1,11 +1,13 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
+import type { Role } from '@/lib/rbac'
+
 export interface User {
   id: string
   name: string
   email: string
-  role: 'clinician' | 'admin' | 'patient'
+  role: Role
 }
 
 interface AuthState {

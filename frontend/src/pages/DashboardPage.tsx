@@ -1,5 +1,6 @@
 import { Icon } from '@/components/ui/icon'
 import { RadialProgress } from '@/components/charts/RadialProgress'
+import { useAuthStore } from '@/store/auth-store'
 import { cn } from '@/lib/utils'
 
 type Priority = 'Critical' | 'Important' | 'Standard'
@@ -97,25 +98,21 @@ function TaskCard({ task, index }: { task: Task; index: number }) {
 }
 
 export default function DashboardPage() {
+  const name = useAuthStore((s) => s.user?.name) ?? 'there'
+
   return (
     <div className="flex flex-col gap-6 xl:flex-row">
       {/* Left column */}
       <div className="flex flex-1 flex-col gap-6">
         {/* Welcome card */}
-        <div className="neo-extruded bg-surface animate-in fade-in slide-in-from-bottom-2 relative overflow-hidden rounded-2xl p-6 duration-500 md:p-8">
-          <Icon
-            name="assignment_ind"
-            className="text-secondary pointer-events-none absolute top-1/2 right-8 hidden -translate-y-1/2 text-[120px] opacity-20 sm:block"
-          />
-          <div className="relative z-10 sm:w-2/3">
-            <h2 className="font-display text-primary mb-2 text-2xl font-bold md:text-headline-lg">
-              Your Clinical Workspace
-            </h2>
-            <p className="font-body text-body-sm text-on-surface-variant">
-              Here you can edit, reschedule, rearrange &amp; prioritize your clinical tasks
-              efficiently with AI assistance.
-            </p>
-          </div>
+        <div className="neo-extruded bg-surface animate-in fade-in slide-in-from-bottom-2 rounded-2xl p-6 duration-500 md:p-8">
+          <h2 className="font-display text-primary mb-2 text-2xl font-bold md:text-headline-lg">
+            Good morning, {name}
+          </h2>
+          <p className="font-body text-body-sm text-on-surface-variant max-w-xl">
+            Here's your clinical workspace. Edit, reschedule, and prioritize your tasks with AI
+            assistance.
+          </p>
         </div>
 
         {/* Task grid */}
@@ -128,19 +125,6 @@ export default function DashboardPage() {
 
       {/* Right stats rail */}
       <aside className="neo-extruded bg-surface animate-in fade-in slide-in-from-right-2 flex w-full flex-shrink-0 flex-col rounded-2xl p-6 duration-500 md:p-8 xl:w-80 xl:items-center">
-        {/* Profile: compact row on mobile, centered column at xl */}
-        <div className="border-outline-variant/20 mb-6 flex w-full items-center gap-4 border-b pb-6 xl:mb-8 xl:flex-col xl:pb-8 xl:text-center">
-          <span className="neo-extruded bg-primary-container flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-full text-lg font-bold text-white xl:mb-4 xl:h-24 xl:w-24 xl:text-2xl">
-            AC
-          </span>
-          <div>
-            <h2 className="font-display text-title-lg text-primary font-bold xl:text-headline-md">
-              Good morning, Dr. Chen!
-            </h2>
-            <p className="font-body text-body-sm text-outline mt-1">Monday, 08/05/26</p>
-          </div>
-        </div>
-
         <div className="mb-6 xl:mb-8 xl:text-center">
           <h3 className="font-display text-title-lg text-primary font-bold xl:text-headline-md">
             Your Tasks

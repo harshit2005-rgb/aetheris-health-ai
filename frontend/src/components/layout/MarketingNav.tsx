@@ -5,9 +5,8 @@ import { Icon } from '@/components/ui/icon'
 import { cn } from '@/lib/utils'
 
 const NAV = [
-  { to: '/how-it-works', label: 'How it Works' },
-  { to: '/technology', label: 'Technology' },
   { to: '/pricing', label: 'Pricing' },
+  { to: '/contact', label: 'Contact' },
 ]
 
 /**
@@ -55,7 +54,7 @@ export default function MarketingNav() {
             Log in
           </Link>
           <Link
-            to="/signup"
+            to="/login"
             className="shadow-neo-base bg-primary text-on-primary font-label text-label-caps hidden rounded-full px-5 py-2.5 font-bold transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0 md:inline-block"
           >
             Get Started
@@ -108,7 +107,7 @@ export default function MarketingNav() {
                   Log in
                 </Link>
                 <Link
-                  to="/signup"
+                  to="/login"
                   onClick={close}
                   className="shadow-neo-base bg-primary text-on-primary font-label text-label-caps rounded-full px-5 py-3 text-center font-bold"
                 >

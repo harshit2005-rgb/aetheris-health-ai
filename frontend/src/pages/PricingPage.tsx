@@ -23,7 +23,7 @@ const PLANS: Plan[] = [
     period: '/mo',
     features: ['Standard API access', 'Basic analytics', 'Community support', 'Up to 3 clinicians'],
     cta: 'Get Started',
-    to: '/signup',
+    to: '/login',
   },
   {
     name: 'Professional',
@@ -37,7 +37,7 @@ const PLANS: Plan[] = [
       'Real-time vitals monitoring',
     ],
     cta: 'Upgrade to Pro',
-    to: '/signup',
+    to: '/login',
     featured: true,
   },
   {

@@ -51,7 +51,7 @@ export default function LoginPage() {
         id: 'demo-user',
         name: 'Dr. A. Chen',
         email: values.email,
-        role: 'clinician',
+        role: 'hospital_admin',
       },
       'demo-token',
     )
@@ -167,7 +167,7 @@ export default function LoginPage() {
 
         <p className="font-body text-body-sm text-on-surface-variant mt-8 text-center">
           New to Aetheris?{' '}
-          <Link to="/signup" className="text-secondary font-bold hover:underline">
+          <Link to="/contact" className="text-secondary font-bold hover:underline">
             Get started
           </Link>
         </p>

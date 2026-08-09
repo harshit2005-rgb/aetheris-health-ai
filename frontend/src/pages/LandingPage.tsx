@@ -41,19 +41,19 @@ const OUTCOMES = [
 
 const CAPABILITIES = [
   {
-    to: '/diagnostics',
+    to: '/dashboard',
     icon: 'clinical_notes',
     title: 'AI Diagnostic Engine',
     body: 'Analyze scans, labs, and vitals in real time, with an agentic second opinion on every finding.',
   },
   {
-    to: '/records',
+    to: '/patients',
     icon: 'folder_shared',
     title: 'Clinical Records',
     body: 'Every patient history, medication, and result in one searchable, HIPAA-aligned record.',
   },
   {
-    to: '/diagnostics',
+    to: '/dashboard',
     icon: 'monitor_heart',
     title: 'Real-time Vitals',
     body: 'Live heart rate, blood pressure, and oxygen tracking with instant anomaly alerts.',
@@ -91,13 +91,13 @@ export default function LandingPage() {
             </p>
             <div className="flex flex-wrap gap-4 pt-4">
               <Link
-                to="/signup"
+                to="/login"
                 className="shadow-neo-base text-on-primary bg-primary text-body-md rounded-xl px-8 py-4 font-bold transition-all duration-300 hover:-translate-y-1 hover:shadow-lg active:translate-y-0"
               >
                 Get Started
               </Link>
               <Link
-                to="/how-it-works"
+                to="/contact"
                 className="glassmorphism shadow-neo-base text-primary text-body-md flex items-center gap-2 rounded-xl px-8 py-4 font-bold transition-all duration-300 hover:bg-white/50"
               >
                 See how it works
@@ -220,13 +220,13 @@ export default function LandingPage() {
           </p>
           <div className="mt-8 flex flex-wrap justify-center gap-4">
             <Link
-              to="/signup"
+              to="/login"
               className="shadow-neo-base text-on-primary bg-primary text-body-md inline-block rounded-xl px-8 py-4 font-bold transition-all duration-300 hover:-translate-y-1 active:translate-y-0"
             >
               Get Started
             </Link>
             <Link
-              to="/how-it-works"
+              to="/contact"
               className="glassmorphism shadow-neo-base text-primary text-body-md inline-block rounded-xl px-8 py-4 font-bold transition-all duration-300 hover:bg-white/50"
             >
               For Hospitals
