@@ -1,0 +1,177 @@
+import { useState } from 'react'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { z } from 'zod'
+import { toast } from 'sonner'
+import { Icon } from '@/components/ui/icon'
+import { Logo } from '@/components/brand/Logo'
+import { useAuthStore } from '@/store/auth-store'
+import { cn } from '@/lib/utils'
+
+const loginSchema = z.object({
+  email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  remember: z.boolean().optional(),
+})
+
+type LoginValues = z.infer<typeof loginSchema>
+
+interface LocationState {
+  from?: { pathname?: string }
+}
+
+export default function LoginPage() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  const setAuth = useAuthStore((s) => s.setAuth)
+  const [showPassword, setShowPassword] = useState(false)
+
+  const from = (location.state as LocationState | null)?.from?.pathname ?? '/dashboard'
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<LoginValues>({
+    resolver: zodResolver(loginSchema),
+    defaultValues: { email: '', password: '', remember: true },
+  })
+
+  async function onSubmit(values: LoginValues) {
+    // ── Backend seam ─────────────────────────────────────────────
+    // TODO(backend): replace this mock with a real call, e.g.
+    //   const { data } = await api.post('/auth/login', values)
+    //   setAuth(data.user, data.token)
+    // The Axios client (src/lib/api.ts) already attaches the token
+    // on subsequent requests. Everything below is a frontend stand-in.
+    await new Promise((r) => setTimeout(r, 700))
+    setAuth(
+      {
+        id: 'demo-user',
+        name: 'Dr. A. Chen',
+        email: values.email,
+        role: 'clinician',
+      },
+      'demo-token',
+    )
+    toast.success('Welcome back, Dr. Chen')
+    navigate(from, { replace: true })
+  }
+
+  return (
+    <div className="relative flex min-h-[100dvh] items-center justify-center overflow-hidden px-4 py-12">
+      {/* Floating decorative shapes */}
+      <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
+        <div className="bg-primary-fixed-dim/30 absolute -top-[10%] -left-[5%] h-96 w-96 rounded-full blur-3xl" />
+        <div className="bg-secondary-fixed/30 absolute right-[-10%] bottom-[5%] h-[500px] w-[500px] rounded-full blur-3xl" />
+      </div>
+
+      <div className="glassmorphism shadow-glass-panel animate-in fade-in zoom-in-95 w-full max-w-md rounded-3xl p-8 duration-500 sm:p-10">
+        <Link to="/" className="mb-8 flex justify-center">
+          <Logo variant="mark" className="h-14" />
+        </Link>
+
+        <div className="mb-8 text-center">
+          <h1 className="font-display text-headline-lg text-primary">Welcome back</h1>
+          <p className="font-body text-body-sm text-on-surface-variant mt-2">
+            Sign in to your clinical workspace.
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-5" noValidate>
+          {/* Email */}
+          <div className="space-y-2">
+            <label htmlFor="email" className="font-label text-label-caps text-on-surface-variant">
+              Email
+            </label>
+            <input
+              id="email"
+              type="email"
+              autoComplete="email"
+              placeholder="clinician@hospital.org"
+              aria-invalid={!!errors.email}
+              className={cn(
+                'neo-pressed bg-surface font-body text-body-sm text-on-surface placeholder:text-outline-variant w-full rounded-xl px-4 py-3 outline-none focus:ring-2',
+                errors.email ? 'focus:ring-error' : 'focus:ring-secondary',
+              )}
+              {...register('email')}
+            />
+            {errors.email && (
+              <p className="font-body text-error text-xs">{errors.email.message}</p>
+            )}
+          </div>
+
+          {/* Password */}
+          <div className="space-y-2">
+            <label htmlFor="password" className="font-label text-label-caps text-on-surface-variant">
+              Password
+            </label>
+            <div className="relative">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                placeholder="••••••••"
+                aria-invalid={!!errors.password}
+                className={cn(
+                  'neo-pressed bg-surface font-body text-body-sm text-on-surface placeholder:text-outline-variant w-full rounded-xl px-4 py-3 pr-11 outline-none focus:ring-2',
+                  errors.password ? 'focus:ring-error' : 'focus:ring-secondary',
+                )}
+                {...register('password')}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((v) => !v)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+                className="text-outline hover:text-secondary absolute top-1/2 right-3 -translate-y-1/2 transition-colors"
+              >
+                <Icon name={showPassword ? 'visibility_off' : 'visibility'} className="text-lg" />
+              </button>
+            </div>
+            {errors.password && (
+              <p className="font-body text-error text-xs">{errors.password.message}</p>
+            )}
+          </div>
+
+          {/* Options */}
+          <div className="flex items-center justify-between">
+            <label className="font-body text-body-sm text-on-surface-variant flex cursor-pointer items-center gap-2">
+              <input
+                type="checkbox"
+                className="accent-secondary h-4 w-4 rounded"
+                {...register('remember')}
+              />
+              Remember me
+            </label>
+            <a href="#" className="font-body text-body-sm text-secondary hover:underline">
+              Forgot password?
+            </a>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="shadow-neo-base bg-primary text-on-primary font-label text-label-caps flex w-full items-center justify-center gap-2 rounded-xl py-3.5 font-bold transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0 disabled:cursor-not-allowed disabled:opacity-70"
+          >
+            {isSubmitting ? (
+              <>
+                <Icon name="progress_activity" className="animate-spin text-lg" />
+                Signing in...
+              </>
+            ) : (
+              'Sign in'
+            )}
+          </button>
+        </form>
+
+        <p className="font-body text-body-sm text-on-surface-variant mt-8 text-center">
+          New to Aetheris?{' '}
+          <Link to="/signup" className="text-secondary font-bold hover:underline">
+            Get started
+          </Link>
+        </p>
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,24 @@
+import { cn } from '@/lib/utils'
+import lockup from '@/assets/logo-lockup.png'
+import mark from '@/assets/logo-mark.png'
+
+interface LogoProps {
+  /** "lockup" = full mark + "Aetheris Health AI" wordmark; "mark" = icon only. */
+  variant?: 'lockup' | 'mark'
+  className?: string
+}
+
+/**
+ * Official Aetheris Health AI logo. The wordmark is baked into the lockup
+ * artwork, so it already carries the brand name — no separate text needed.
+ */
+export function Logo({ variant = 'lockup', className }: LogoProps) {
+  return (
+    <img
+      src={variant === 'mark' ? mark : lockup}
+      alt="Aetheris Health AI"
+      className={cn('block w-auto select-none', className)}
+      draggable={false}
+    />
+  )
+}

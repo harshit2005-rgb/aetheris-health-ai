@@ -51,3 +51,12 @@ dist/
 
 # Misc
 coverage/
+
+# Claude Code local tooling (installed skills, agents, lockfile, launch config)
+/.agents/
+/.claude/skills/
+/.claude/launch.json
+/skills-lock.json
+
+# Design-reference downloads (local scratch, not needed at runtime)
+frontend/.stitch-reference/

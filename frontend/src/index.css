@@ -1,0 +1,255 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+/* ============================================================================
+ * Aetheris Health AI — "Clinical Glass" design system
+ * Ported from the Stitch project design.md + generated screen configs.
+ * Philosophy: Minimalism + Glassmorphism + soft Neomorphism, deep medical
+ * blues anchored by an AI-electric cyan accent.
+ * ==========================================================================*/
+
+@theme {
+  /* -- Brand / Material color tokens (names match the Stitch markup) ------- */
+  --color-primary: #000f22; /* deep navy — primary actions, headings   */
+  --color-on-primary: #ffffff;
+  --color-primary-container: #0a2540; /* structural navy surfaces          */
+  --color-on-primary-container: #768dad;
+  --color-primary-fixed: #d2e4ff;
+  --color-primary-fixed-dim: #b0c8eb;
+  --color-inverse-primary: #b0c8eb;
+
+  --color-secondary: #00677e; /* soft teal — supportive UI               */
+  --color-on-secondary: #ffffff;
+  --color-secondary-container: #00d2fd; /* AI-electric cyan — the accent   */
+  --color-on-secondary-container: #005669;
+  --color-secondary-fixed: #b4ebff;
+  --color-secondary-fixed-dim: #3cd7ff;
+
+  --color-tertiary: #457b9d;
+  --color-on-tertiary: #ffffff;
+  --color-tertiary-container: #00273a;
+  --color-on-tertiary-container: #5c91b4;
+
+  --color-error: #ba1a1a;
+  --color-on-error: #ffffff;
+  --color-error-container: #ffdad6;
+  --color-on-error-container: #93000a;
+
+  /* Status (from design.md component specs) */
+  --color-critical: #e63946;
+  --color-stable: #2a9d8f;
+
+  /* Surfaces */
+  --color-background: #faf9fb;
+  --color-on-background: #1b1c1e;
+  --color-surface: #faf9fb;
+  --color-surface-dim: #dbd9dc;
+  --color-surface-bright: #faf9fb;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-container-low: #f5f3f6;
+  --color-surface-container: #efedf0;
+  --color-surface-container-high: #e9e8ea;
+  --color-surface-container-highest: #e3e2e5;
+  --color-surface-variant: #e3e2e5;
+  --color-on-surface: #1b1c1e;
+  --color-on-surface-variant: #43474d;
+  --color-inverse-surface: #2f3033;
+  --color-inverse-on-surface: #f2f0f3;
+
+  --color-outline: #74777e;
+  --color-outline-variant: #c4c6ce;
+
+  /* -- shadcn/ui semantic bridge (keeps ui/* components on-brand) --------- */
+  --color-foreground: #1b1c1e;
+  --color-primary-foreground: #ffffff;
+  --color-secondary-foreground: #ffffff;
+  --color-card: #ffffff;
+  --color-card-foreground: #1b1c1e;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #1b1c1e;
+  --color-muted: #efedf0;
+  --color-muted-foreground: #43474d;
+  --color-accent: #00d2fd;
+  --color-accent-foreground: #003544;
+  --color-destructive: #ba1a1a;
+  --color-border: #c4c6ce;
+  --color-input: #c4c6ce;
+  --color-ring: #00d2fd;
+
+  /* Chart palette (Recharts) — cyan/teal/navy family */
+  --color-chart-1: #00d2fd;
+  --color-chart-2: #00677e;
+  --color-chart-3: #0a2540;
+  --color-chart-4: #457b9d;
+  --color-chart-5: #b0c8eb;
+
+  /* -- Typography --------------------------------------------------------- */
+  --font-sans: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  --font-body: 'Manrope', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Public Sans', 'Manrope', ui-sans-serif, sans-serif;
+  --font-label: 'Geist', 'Inter', ui-sans-serif, sans-serif;
+  --font-mono: 'Geist', ui-monospace, monospace;
+
+  --text-headline-xl: 40px;
+  --text-headline-xl--line-height: 52px;
+  --text-headline-xl--letter-spacing: -0.02em;
+  --text-headline-xl--font-weight: 800;
+
+  --text-headline-lg: 32px;
+  --text-headline-lg--line-height: 40px;
+  --text-headline-lg--letter-spacing: -0.01em;
+  --text-headline-lg--font-weight: 700;
+
+  --text-headline-md: 24px;
+  --text-headline-md--line-height: 32px;
+  --text-headline-md--font-weight: 700;
+
+  --text-title-lg: 20px;
+  --text-title-lg--line-height: 28px;
+  --text-title-lg--font-weight: 600;
+
+  --text-body-lg: 16px;
+  --text-body-lg--line-height: 24px;
+
+  --text-body-md: 16px;
+  --text-body-md--line-height: 24px;
+  --text-body-md--font-weight: 500;
+
+  --text-body-sm: 14px;
+  --text-body-sm--line-height: 20px;
+
+  --text-label-caps: 12px;
+  --text-label-caps--line-height: 16px;
+  --text-label-caps--letter-spacing: 0.05em;
+  --text-label-caps--font-weight: 600;
+
+  --text-label-mono: 13px;
+  --text-label-mono--line-height: 18px;
+
+  /* -- Spacing (8px rhythm + named layout units) -------------------------- */
+  --spacing-unit: 8px;
+  --spacing-card-gap: 20px;
+  --spacing-gutter: 24px;
+  --spacing-container-padding: 32px;
+  --spacing-section-margin: 48px;
+
+  /* -- Radii -------------------------------------------------------------- */
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.75rem; /* interactive elements (buttons, inputs)  */
+  --radius-2xl: 1rem; /* large glass cards                        */
+  --radius-3xl: 2rem;
+
+  /* -- Elevation: soft neomorphism + glass ------------------------------- */
+  --shadow-neo-base: -8px -8px 16px #ffffff, 8px 8px 16px #d1d9e6;
+  --shadow-neo-pressed: inset 4px 4px 8px #d1d9e6, inset -4px -4px 8px #ffffff;
+  --shadow-glass-panel: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+  --shadow-ai-glow: 0 0 0 1px rgba(0, 210, 253, 0.4), 0 0 24px 0 rgba(0, 210, 253, 0.25);
+}
+
+/* shadcn radius scale derives from --radius */
+:root {
+  --radius: 0.75rem;
+}
+
+/* ============================================================================
+ * Signature utilities
+ * ==========================================================================*/
+@layer utilities {
+  /* Clinical Glass card surface: translucent white + 20px backdrop blur */
+  .glassmorphism {
+    background: rgba(255, 255, 255, 0.4);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+  }
+
+  /* Navy → cyan diagonal text gradient used on hero headlines */
+  .text-gradient {
+    background: linear-gradient(135deg, #0a2540 0%, #00d2fd 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    color: transparent;
+  }
+
+  /* Soft neomorphic surfaces (extruded / pressed) */
+  .neo-extruded {
+    box-shadow: var(--shadow-neo-base);
+    background-image: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.5),
+      rgba(255, 255, 255, 0)
+    );
+  }
+  .neo-pressed {
+    box-shadow: var(--shadow-neo-pressed);
+  }
+
+}
+
+/*
+ * Material Symbols icon class. Named `.msym` (not Google's own
+ * `.material-symbols-outlined`) on purpose: Google's font stylesheet ships an
+ * UNLAYERED `.material-symbols-outlined { display:inline-block; font-size:24px }`
+ * rule, and unlayered CSS beats Tailwind's layered utilities — which would
+ * silently override `hidden`, `text-[..]`, etc. on every icon. Living in the
+ * `components` layer, this provides the font + a default size that Tailwind
+ * utilities (size, display) can still override.
+ */
+@layer components {
+  .msym {
+    font-family: 'Material Symbols Outlined';
+    font-weight: normal;
+    font-style: normal;
+    font-size: 1.5rem;
+    line-height: 1;
+    letter-spacing: normal;
+    text-transform: none;
+    white-space: nowrap;
+    word-wrap: normal;
+    direction: ltr;
+    -webkit-font-feature-settings: 'liga';
+    font-feature-settings: 'liga';
+    -webkit-font-smoothing: antialiased;
+  }
+  .msym.fill {
+    font-variation-settings: 'FILL' 1;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-outline-variant;
+  }
+  html {
+    scroll-behavior: smooth;
+  }
+
+  @keyframes scanline {
+    0%,
+    100% {
+      transform: translateY(-120%);
+    }
+    50% {
+      transform: translateY(320%);
+    }
+  }
+  .animate-scanline {
+    animation: scanline 3.2s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    .animate-scanline {
+      animation: none;
+    }
+  }
+  body {
+    @apply bg-background font-body text-on-background antialiased;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+}
