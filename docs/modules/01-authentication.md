@@ -72,8 +72,19 @@ Anonymous:
 ### 5.2 Login (failure)
 
 - Invalid credentials → increment failed attempts, return 401 `AUTHENTICATION_REQUIRED`.
-- Account locked → return 403 `ACCOUNT_LOCKED` with unlock time.
-- Account suspended → 403 `ACCOUNT_SUSPENDED`.
+- Account locked → return `401 AUTHENTICATION_REQUIRED` with the generic
+  "Invalid credentials." message — byte-identical to every other failure path
+  so a login attempt can never confirm that an email is a valid account
+  (anti-enumeration). Lockout still engages server-side
+  (`failed_login_attempts` / `locked_until`), and the real reason is recorded
+  in the audit log.
+- Account suspended → `401 AUTHENTICATION_REQUIRED` with the same generic
+  message, for the same reason.
+- The distinct `403 ACCOUNT_LOCKED` / `403 ACCOUNT_SUSPENDED` responses are
+  reserved for non-login flows only, never for login.
+- A locked-out user learns they are locked and when to retry out-of-band
+  (e.g. an email from the Notifications module), since the login response
+  itself is intentionally indistinguishable from a wrong password.
 
 ### 5.3 Refresh
 
