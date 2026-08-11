@@ -189,36 +189,6 @@
 
 }
 
-/*
- * Material Symbols icon class. Named `.msym` (not Google's own
- * `.material-symbols-outlined`) on purpose: Google's font stylesheet ships an
- * UNLAYERED `.material-symbols-outlined { display:inline-block; font-size:24px }`
- * rule, and unlayered CSS beats Tailwind's layered utilities — which would
- * silently override `hidden`, `text-[..]`, etc. on every icon. Living in the
- * `components` layer, this provides the font + a default size that Tailwind
- * utilities (size, display) can still override.
- */
-@layer components {
-  .msym {
-    font-family: 'Material Symbols Outlined';
-    font-weight: normal;
-    font-style: normal;
-    font-size: 1.5rem;
-    line-height: 1;
-    letter-spacing: normal;
-    text-transform: none;
-    white-space: nowrap;
-    word-wrap: normal;
-    direction: ltr;
-    -webkit-font-feature-settings: 'liga';
-    font-feature-settings: 'liga';
-    -webkit-font-smoothing: antialiased;
-  }
-  .msym.fill {
-    font-variation-settings: 'FILL' 1;
-  }
-}
-
 @layer base {
   * {
     @apply border-outline-variant;

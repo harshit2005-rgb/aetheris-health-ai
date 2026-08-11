@@ -4,7 +4,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Icon } from '@/components/ui/icon'
+import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { Logo } from '@/components/brand/Logo'
 import { useAuthStore } from '@/store/auth-store'
 import { cn } from '@/lib/utils'
@@ -126,7 +126,7 @@ export default function LoginPage() {
                 aria-label={showPassword ? 'Hide password' : 'Show password'}
                 className="text-outline hover:text-secondary absolute top-1/2 right-3 -translate-y-1/2 transition-colors"
               >
-                <Icon name={showPassword ? 'visibility_off' : 'visibility'} className="text-lg" />
+                {showPassword ? <EyeOff className="size-5" /> : <Eye className="size-5" />}
               </button>
             </div>
             {errors.password && (
@@ -156,7 +156,7 @@ export default function LoginPage() {
           >
             {isSubmitting ? (
               <>
-                <Icon name="progress_activity" className="animate-spin text-lg" />
+                <Loader2 className="size-5 animate-spin" />
                 Signing in...
               </>
             ) : (

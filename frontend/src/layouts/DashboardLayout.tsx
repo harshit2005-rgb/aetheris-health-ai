@@ -28,7 +28,7 @@ export default function DashboardLayout() {
       />
 
       <div className={cn('transition-all duration-300', collapsed ? 'lg:pl-20' : 'lg:pl-64')}>
-        <div className="mx-auto max-w-[1600px] p-3 md:p-4">
+        <div className="w-full px-3 py-3 md:px-6 md:py-4 2xl:px-10">
           <TopBar
             onOpenSidebar={() => setMobileOpen(true)}
             onOpenCopilot={() => setCopilotOpen(true)}

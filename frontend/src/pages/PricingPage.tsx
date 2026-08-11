@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Icon } from '@/components/ui/icon'
+import { CheckCircle2 } from 'lucide-react'
 import MarketingNav from '@/components/layout/MarketingNav'
 import MarketingFooter from '@/components/layout/MarketingFooter'
 import { cn } from '@/lib/utils'
@@ -83,7 +83,7 @@ function PlanCard({ plan }: { plan: Plan }) {
       <ul className="mb-8 flex-1 space-y-4">
         {plan.features.map((f) => (
           <li key={f} className="flex items-center gap-3">
-            <Icon name="check_circle" filled className="text-secondary" />
+            <CheckCircle2 className="text-secondary size-5 shrink-0" />
             <span className="font-body text-body-md text-on-surface">{f}</span>
           </li>
         ))}

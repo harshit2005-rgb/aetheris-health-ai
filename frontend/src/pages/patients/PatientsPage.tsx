@@ -47,7 +47,7 @@ function StatusBadge({ status }: { status: Status }) {
 
 export default function PatientsPage() {
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="w-full">
       <PageHeader
         title="Patients"
         subtitle="Patient registry, admissions and AI-assisted summaries."

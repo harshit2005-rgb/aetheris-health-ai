@@ -2,7 +2,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Icon } from '@/components/ui/icon'
+import { Mail, Headset, ShieldCheck, Loader2 } from 'lucide-react'
 import MarketingNav from '@/components/layout/MarketingNav'
 import MarketingFooter from '@/components/layout/MarketingFooter'
 import { cn } from '@/lib/utils'
@@ -17,9 +17,9 @@ const contactSchema = z.object({
 type ContactValues = z.infer<typeof contactSchema>
 
 const CHANNELS = [
-  { icon: 'mail', label: 'Sales', value: 'sales@aetheris.health' },
-  { icon: 'support_agent', label: 'Support', value: 'support@aetheris.health' },
-  { icon: 'shield_lock', label: 'Privacy & compliance', value: 'privacy@aetheris.health' },
+  { icon: Mail, label: 'Sales', value: 'sales@aetheris.health' },
+  { icon: Headset, label: 'Support', value: 'support@aetheris.health' },
+  { icon: ShieldCheck, label: 'Privacy & compliance', value: 'privacy@aetheris.health' },
 ]
 
 export default function ContactPage() {
@@ -73,7 +73,7 @@ export default function ContactPage() {
             {CHANNELS.map((c) => (
               <div key={c.label} className="flex items-center gap-4">
                 <span className="neo-extruded bg-secondary/10 text-secondary flex h-11 w-11 items-center justify-center rounded-xl">
-                  <Icon name={c.icon} filled />
+                  <c.icon className="size-5" />
                 </span>
                 <div>
                   <p className="font-label text-label-caps text-outline">{c.label}</p>
@@ -167,7 +167,7 @@ export default function ContactPage() {
             >
               {isSubmitting ? (
                 <>
-                  <Icon name="progress_activity" className="animate-spin text-lg" />
+                  <Loader2 className="size-5 animate-spin" />
                   Sending...
                 </>
               ) : (

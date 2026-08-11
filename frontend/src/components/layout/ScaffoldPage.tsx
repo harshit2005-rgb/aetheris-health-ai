@@ -20,7 +20,7 @@ export default function ScaffoldPage({
   specRef,
 }: ScaffoldPageProps) {
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="w-full">
       <PageHeader title={title} subtitle={subtitle} />
 
       <div className="neo-extruded bg-surface rounded-2xl p-8 md:p-12">

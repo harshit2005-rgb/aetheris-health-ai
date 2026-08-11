@@ -1,21 +1,32 @@
 import { Link } from 'react-router-dom'
-import { Icon } from '@/components/ui/icon'
+import {
+  Share2,
+  Brain,
+  Bot,
+  Zap,
+  ShieldCheck,
+  Clock,
+  ClipboardPlus,
+  FolderOpen,
+  HeartPulse,
+  ArrowRight,
+} from 'lucide-react'
 import MarketingNav from '@/components/layout/MarketingNav'
 import MarketingFooter from '@/components/layout/MarketingFooter'
 
 const STEPS = [
   {
-    icon: 'hub',
+    icon: Share2,
     title: 'Connect',
     body: 'Ingest EHR, imaging, and bedside device data into one live view.',
   },
   {
-    icon: 'neurology',
+    icon: Brain,
     title: 'Analyze',
     body: 'AI reviews vitals, scans, and history the moment they arrive.',
   },
   {
-    icon: 'smart_toy',
+    icon: Bot,
     title: 'Recommend',
     body: 'Agents surface the next step and flag risks for your approval.',
   },
@@ -23,17 +34,17 @@ const STEPS = [
 
 const OUTCOMES = [
   {
-    icon: 'bolt',
+    icon: Zap,
     title: 'Act faster',
     body: 'Findings surface the instant data arrives, so triage never waits on a full schedule.',
   },
   {
-    icon: 'health_and_safety',
+    icon: ShieldCheck,
     title: 'Miss less',
     body: 'Agentic review catches the anomalies a long clinical shift can easily overlook.',
   },
   {
-    icon: 'schedule',
+    icon: Clock,
     title: 'Less admin',
     body: 'One unified record cuts the time your team spends hunting for patient context.',
   },
@@ -42,31 +53,33 @@ const OUTCOMES = [
 const CAPABILITIES = [
   {
     to: '/dashboard',
-    icon: 'clinical_notes',
+    icon: ClipboardPlus,
     title: 'AI Diagnostic Engine',
     body: 'Analyze scans, labs, and vitals in real time, with an agentic second opinion on every finding.',
   },
   {
     to: '/patients',
-    icon: 'folder_shared',
+    icon: FolderOpen,
     title: 'Clinical Records',
     body: 'Every patient history, medication, and result in one searchable, HIPAA-aligned record.',
   },
   {
     to: '/dashboard',
-    icon: 'monitor_heart',
+    icon: HeartPulse,
     title: 'Real-time Vitals',
     body: 'Live heart rate, blood pressure, and oxygen tracking with instant anomaly alerts.',
   },
   {
     to: '/dashboard',
-    icon: 'smart_toy',
+    icon: Bot,
     title: 'Agentic Recommendations',
     body: 'AI agents surface the next step and flag risks. You approve every decision.',
   },
 ]
 
 export default function LandingPage() {
+  const LeadIcon = CAPABILITIES[0].icon
+
   return (
     <div className="min-h-screen overflow-x-hidden">
       <MarketingNav />
@@ -101,7 +114,7 @@ export default function LandingPage() {
                 className="glassmorphism shadow-neo-base text-primary text-body-md flex items-center gap-2 rounded-xl px-8 py-4 font-bold transition-all duration-300 hover:bg-white/50"
               >
                 See how it works
-                <Icon name="arrow_forward" className="text-lg" />
+                <ArrowRight className="size-5" />
               </Link>
             </div>
           </div>
@@ -118,7 +131,7 @@ export default function LandingPage() {
                       <span className="bg-outline-variant/40 absolute top-12 left-[23px] h-[calc(100%-2.5rem)] w-px" />
                     )}
                     <span className="neo-extruded bg-secondary/10 text-secondary z-10 flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full">
-                      <Icon name={step.icon} filled />
+                      <step.icon className="size-6" />
                     </span>
                     <div className="pt-1">
                       <h3 className="font-display text-title-lg text-primary font-bold">
@@ -147,7 +160,7 @@ export default function LandingPage() {
           {OUTCOMES.map((o) => (
             <div key={o.title} className="border-outline-variant/40 border-t pt-6">
               <span className="bg-secondary/10 text-secondary mb-4 flex h-11 w-11 items-center justify-center rounded-xl">
-                <Icon name={o.icon} filled />
+                <o.icon className="size-6" />
               </span>
               <h3 className="font-display text-title-lg text-primary font-bold">{o.title}</h3>
               <p className="font-body text-body-sm text-on-surface-variant mt-2">{o.body}</p>
@@ -176,7 +189,7 @@ export default function LandingPage() {
           >
             <div className="bg-secondary-container/20 absolute -top-10 -right-10 h-40 w-40 rounded-full blur-2xl" />
             <div className="bg-secondary/20 text-secondary-container flex h-12 w-12 items-center justify-center rounded-xl">
-              <Icon name={CAPABILITIES[0].icon} filled />
+              <LeadIcon className="size-6" />
             </div>
             <div className="relative">
               <h3 className="font-display text-headline-md font-bold text-white">
@@ -185,7 +198,7 @@ export default function LandingPage() {
               <p className="font-body text-body-sm mt-2 text-white/70">{CAPABILITIES[0].body}</p>
               <span className="font-label text-label-caps text-secondary-container mt-5 inline-flex items-center gap-1">
                 Explore
-                <Icon name="arrow_forward" className="text-base transition-transform group-hover:translate-x-1" />
+                <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
               </span>
             </div>
           </Link>
@@ -199,7 +212,7 @@ export default function LandingPage() {
               }`}
             >
               <div className="bg-secondary/10 text-secondary flex h-11 w-11 items-center justify-center rounded-xl">
-                <Icon name={cap.icon} filled />
+                <cap.icon className="size-6" />
               </div>
               <h3 className="font-display text-title-lg text-primary font-bold">{cap.title}</h3>
               <p className="font-body text-body-sm text-on-surface-variant">{cap.body}</p>

@@ -1,4 +1,4 @@
-import { Icon } from '@/components/ui/icon'
+import { EllipsisVertical } from 'lucide-react'
 import { RadialProgress } from '@/components/charts/RadialProgress'
 import { useAuthStore } from '@/store/auth-store'
 import { cn } from '@/lib/utils'
@@ -45,7 +45,7 @@ function TaskCard({ task, index }: { task: Task; index: number }) {
       <div className="mb-3 flex items-start justify-between">
         <h3 className="font-body text-body-md text-on-surface font-bold">{task.title}</h3>
         <button className="text-outline-variant hover:text-primary transition-colors active:scale-90">
-          <Icon name="more_vert" className="text-base" />
+          <EllipsisVertical className="size-4" />
         </button>
       </div>
       <div className="font-body text-body-sm text-outline mb-4 flex gap-4">
@@ -74,7 +74,7 @@ function TaskCard({ task, index }: { task: Task; index: number }) {
           <div className="mb-3 flex items-start justify-between">
             <h3 className="font-body text-body-md text-primary font-bold">{task.title}</h3>
             <button className="text-outline-variant hover:text-primary transition-colors active:scale-90">
-              <Icon name="more_vert" className="text-base" />
+              <EllipsisVertical className="size-4" />
             </button>
           </div>
           <div className="font-body text-body-sm text-outline mb-4 flex gap-4">
@@ -116,7 +116,7 @@ export default function DashboardPage() {
         </div>
 
         {/* Task grid */}
-        <div className="gap-card-gap grid grid-cols-1 md:grid-cols-2">
+        <div className="gap-card-gap grid grid-cols-1 md:grid-cols-2 2xl:grid-cols-3">
           {TASKS.map((task, i) => (
             <TaskCard key={task.title} task={task} index={i} />
           ))}

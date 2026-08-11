@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, NavLink } from 'react-router-dom'
 import { Logo } from '@/components/brand/Logo'
-import { Icon } from '@/components/ui/icon'
+import { Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 const NAV = [
@@ -66,7 +66,7 @@ export default function MarketingNav() {
             aria-expanded={open}
             className="text-primary flex h-10 w-10 items-center justify-center md:hidden"
           >
-            <Icon name={open ? 'close' : 'menu'} className="text-2xl" />
+            {open ? <X className="size-6" /> : <Menu className="size-6" />}
           </button>
         </div>
       </div>
