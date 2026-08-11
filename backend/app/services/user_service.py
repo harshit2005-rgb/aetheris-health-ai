@@ -112,9 +112,7 @@ class UserService:
             search=search,
         )
 
-        total = await self._user_repo.count_by_hospital(
-            hospital_id, status=status, search=search
-        )
+        total = await self._user_repo.count_by_hospital(hospital_id, status=status, search=search)
 
         # Enrich with roles
         user_list = []

@@ -196,9 +196,7 @@ class TestCrossTenantIsolation:
     ]
 
     @pytest_asyncio.fixture
-    async def admin(
-        self, db_session: AsyncSession, hospital_id: uuid.UUID
-    ) -> dict[str, Any]:
+    async def admin(self, db_session: AsyncSession, hospital_id: uuid.UUID) -> dict[str, Any]:
         """An admin holding every permission the endpoints below check."""
         user = User(
             id=uuid.uuid4(),
@@ -243,9 +241,7 @@ class TestCrossTenantIsolation:
         """A role id for the role endpoints (the user 404 must fire first)."""
         from app.models.role import Role
 
-        role = Role(
-            id=uuid.uuid4(), hospital_id=hospital_id, name=f"Role {uuid.uuid4().hex[:8]}"
-        )
+        role = Role(id=uuid.uuid4(), hospital_id=hospital_id, name=f"Role {uuid.uuid4().hex[:8]}")
         db_session.add(role)
         await db_session.flush()
         return role.id
@@ -253,9 +249,7 @@ class TestCrossTenantIsolation:
     async def test_get_user_foreign_uuid_is_404(
         self, api: AsyncClient, admin: dict[str, Any], foreign_user: uuid.UUID
     ) -> None:
-        response = await api.get(
-            f"/api/v1/users/{foreign_user}", headers=admin["headers"]
-        )
+        response = await api.get(f"/api/v1/users/{foreign_user}", headers=admin["headers"])
         assert response.status_code == 404
 
     async def test_deactivate_foreign_uuid_is_404(
@@ -285,9 +279,7 @@ class TestCrossTenantIsolation:
     async def test_get_roles_foreign_uuid_is_404(
         self, api: AsyncClient, admin: dict[str, Any], foreign_user: uuid.UUID
     ) -> None:
-        response = await api.get(
-            f"/api/v1/users/{foreign_user}/roles", headers=admin["headers"]
-        )
+        response = await api.get(f"/api/v1/users/{foreign_user}/roles", headers=admin["headers"])
         assert response.status_code == 404
 
     async def test_assign_role_foreign_uuid_is_404(

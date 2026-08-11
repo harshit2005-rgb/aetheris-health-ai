@@ -319,7 +319,9 @@ class TestPasswordReset:
 
         mock_user_repo.update.side_effect = _update_in_place
 
-        await auth_service.reset_password(raw_token="invite-token", new_password="Str0ng!Passw0rd123")
+        await auth_service.reset_password(
+            raw_token="invite-token", new_password="Str0ng!Passw0rd123"
+        )
 
         assert user.status == UserStatus.ACTIVE
         assert user.password_changed_at is not None
@@ -346,7 +348,9 @@ class TestPasswordReset:
 
         mock_user_repo.update.side_effect = _update_in_place
 
-        await auth_service.reset_password(raw_token="reset-token", new_password="Str0ng!Passw0rd123")
+        await auth_service.reset_password(
+            raw_token="reset-token", new_password="Str0ng!Passw0rd123"
+        )
 
         assert user.status == UserStatus.ACTIVE
 
@@ -407,20 +411,16 @@ class TestMFA:
 class TestLogDiscriminator:
     """B3: raw email addresses never reach the logs."""
 
-    async def test_discriminator_is_stable_and_non_reversible(
-        self: Any, auth_service: Any
-    ) -> None:
+    async def test_discriminator_is_stable_and_non_reversible(self: Any, auth_service: Any) -> None:
         """Same email hashes identically; different emails differ."""
-        assert auth_service._email_discriminator("User@Example.com") == auth_service._email_discriminator(
-            "user@example.com"
-        )
+        assert auth_service._email_discriminator(
+            "User@Example.com"
+        ) == auth_service._email_discriminator("user@example.com")
         assert auth_service._email_discriminator("a@b.co") != auth_service._email_discriminator(
             "c@d.co"
         )
 
-    async def test_discriminator_contains_no_email_parts(
-        self: Any, auth_service: Any
-    ) -> None:
+    async def test_discriminator_contains_no_email_parts(self: Any, auth_service: Any) -> None:
         """The hash prefix cannot leak any part of the address."""
         email = "patient.one@hospital.example"
         digest = auth_service._email_discriminator(email)

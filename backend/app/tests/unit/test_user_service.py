@@ -514,9 +514,7 @@ class TestRoleManagement:
         mock_user_repo.get_by_id.return_value = user
 
         with pytest.raises(NotFoundError, match="User not found."):
-            await user_service.list_user_roles(
-                user_id=user.id, actor_hospital_id=uuid.uuid4()
-            )
+            await user_service.list_user_roles(user_id=user.id, actor_hospital_id=uuid.uuid4())
 
     async def test_update_user_fails_closed_without_permission(
         self: Any, user_service: Any, mock_user_repo: Any
