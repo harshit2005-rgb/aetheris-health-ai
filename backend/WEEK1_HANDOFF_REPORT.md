@@ -108,3 +108,4 @@ Three PRs carry the work:
 - PR #13 (Section A, merged): https://github.com/harshit2005-rgb/aetheris-health-ai/pull/13
 - PR #14 (B1–B6 + review items): https://github.com/harshit2005-rgb/aetheris-health-ai/pull/14
 - PR #16 (anti-enumeration + §5.2 docs proposal): https://github.com/harshit2005-rgb/aetheris-health-ai/pull/16
+- This report (raised via): https://github.com/harshit2005-rgb/aetheris-health-ai/pull/17
