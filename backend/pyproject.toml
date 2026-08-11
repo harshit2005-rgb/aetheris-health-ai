@@ -24,15 +24,37 @@ dependencies = [
     "pydantic>=2.10.0,<3.0.0",
     "pydantic-settings>=2.7.0,<3.0.0",
     "pydantic-extra-types>=2.10.0,<3.0.0",
+    # Required by pydantic.EmailStr, which app/schemas/{auth,user}.py already
+    # use. Without it `from app.main import create_app` raises ImportError, so
+    # the application cannot start. Declaring an existing requirement, not
+    # adding a new dependency.
+    "email-validator>=2.0.0,<3.0.0",
 
     # Logging
     "structlog>=24.4.0,<25.0.0",
 
+    # Auth
+    "passlib[argon2]>=1.7.4,<2.0.0",
+    "pyjwt>=2.10.0,<3.0.0",
+    "bcrypt>=4.2.0,<5.0.0",
+    "pyotp>=2.9.0,<3.0.0",
+
+    # Cryptography
+    "cryptography>=44.0.0,<45.0.0",
+
     # Caching & queues
     "redis>=5.2.0,<6.0.0",
+    # Background jobs. `backend/CLAUDE.md` sanctions Celery or Arq; Arq is the
+    # async-native one, so it needs no sync bridge in an all-async stack, and it
+    # runs on the Redis connection already configured above. Required by the
+    # no-show sweeper (docs/modules/05-appointment-management.md §5.7, FR-7).
+    "arq>=0.26.0,<1.0.0",
 
     # HTTP client (for AI providers, external APIs)
     "httpx>=0.28.0,<1.0.0",
+
+    # YAML (for prompt templates)
+    "pyyaml>=6.0,<7.0",
 
     # Metrics
     "prometheus-client>=0.21.0,<1.0.0",
@@ -53,63 +75,28 @@ requires = ["setuptools>=75.0.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools.packages.find]
-where = ["app"]
+where = ["."]
 include = ["app*"]
 
-[tool.ruff]
-target-version = "py313"
-line-length = 100
-
-[tool.ruff.lint]
-select = [
-    "E",   # pycodestyle errors
-    "F",   # pyflakes
-    "I",   # isort
-    "N",   # pep8-naming
-    "W",   # pycodestyle warnings
-    "UP",  # pyupgrade
-    "B",   # flake8-bugbear
-    "SIM", # flake8-simplify
-    "TCH", # flake8-type-checking
-]
-ignore = [
-    "E501",  # line too long (handled by formatter)
-    "B008",  # function call in default argument (FastAPI Depends uses this)
-]
-
-[tool.ruff.format]
-quote-style = "double"
-indent-style = "space"
-line-ending = "lf"
-
-[tool.mypy]
-python_version = "3.13"
-strict = true
-warn_unused_ignores = true
-warn_redundant_casts = true
-warn_unused_configs = true
-disallow_any_unimported = false
-disallow_any_expr = false
-disallow_any_decorated = false
-disallow_any_explicit = false
-
-[[tool.mypy.overrides]]
-module = [
-    "alembic.*",
-    "alembic.context",
-    "asyncpg.*",
-    "pydantic_extra_types.*",
-]
-ignore_missing_imports = true
-
+# Ruff config lives in ruff.toml; mypy config lives in mypy.ini.
+# See docs/09-PROJECT_STRUCTURE.md (backend root file list).
 [tool.pytest.ini_options]
 minversion = "8.0"
-testpaths = ["tests"]
+testpaths = ["app/tests"]
 asyncio_mode = "auto"
+# One event loop for the whole session. The database engine and connection pool
+# are session-scoped, and an asyncpg connection is bound to the loop that
+# created it — per-test loops make every database fixture fail with
+# "attached to a different loop".
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 python_files = ["test_*.py"]
 filterwarnings = [
     "error",
     "ignore::DeprecationWarning:alembic.*",
+    "ignore::DeprecationWarning:argon2.*",
+    "ignore::DeprecationWarning:passlib.*",
+    "ignore::PendingDeprecationWarning",
 ]
 
 [tool.coverage.run]

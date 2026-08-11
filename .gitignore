@@ -60,3 +60,6 @@ coverage/
 
 # Design-reference downloads (local scratch, not needed at runtime)
 frontend/.stitch-reference/
+
+# Freebuff Desktop — local runtime database, not part of the project
+.freebuff/

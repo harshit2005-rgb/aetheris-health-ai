@@ -7,7 +7,24 @@ to the standard HTTP response envelope.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
+
+from app.core.error_codes import ErrorCode
+
+
+def _to_iso_utc(value: datetime) -> str:
+    """Render a datetime as an ISO 8601 UTC string with a ``Z`` suffix.
+
+    ``docs/06-API_STANDARDS.md`` §17: no naive datetimes cross the API
+    boundary. A value without tzinfo is assumed to be UTC, matching how every
+    timestamp is stored.
+
+    :param value: The datetime to render.
+    :returns: e.g. ``2026-07-29T13:20:29Z``.
+    """
+    aware = value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+    return aware.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
 class AetherisError(Exception):
@@ -28,7 +45,7 @@ class AetherisError(Exception):
         message: str = "An unexpected error occurred.",
         detail: dict[str, Any] | None = None,
         status_code: int = 500,
-        error_code: str = "INTERNAL_ERROR",
+        error_code: ErrorCode = ErrorCode.INTERNAL_ERROR,
     ) -> None:
         self.message = message
         self.detail = detail or {}
@@ -45,8 +62,17 @@ class ConfigurationError(AetherisError):
     traffic.
     """
 
-    def __init__(self, message: str = "Application configuration error.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=500, error_code="CONFIGURATION_ERROR")
+    def __init__(
+        self,
+        message: str = "Application configuration error.",
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            detail=detail,
+            status_code=500,
+            error_code=ErrorCode.CONFIGURATION_ERROR,
+        )
 
 
 class NotFoundError(AetherisError):
@@ -55,8 +81,12 @@ class NotFoundError(AetherisError):
     Maps to HTTP 404.
     """
 
-    def __init__(self, message: str = "Resource not found.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=404, error_code="RESOURCE_NOT_FOUND")
+    def __init__(
+        self, message: str = "Resource not found.", detail: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(
+            message=message, detail=detail, status_code=404, error_code=ErrorCode.RESOURCE_NOT_FOUND
+        )
 
 
 class ValidationError(AetherisError):
@@ -66,8 +96,12 @@ class ValidationError(AetherisError):
     by FastAPI's built-in exception handler.)
     """
 
-    def __init__(self, message: str = "Validation failed.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=422, error_code="VALIDATION_ERROR")
+    def __init__(
+        self, message: str = "Validation failed.", detail: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(
+            message=message, detail=detail, status_code=422, error_code=ErrorCode.VALIDATION_ERROR
+        )
 
 
 class BusinessRuleError(AetherisError):
@@ -79,8 +113,15 @@ class BusinessRuleError(AetherisError):
     - Applying a discount above the allowed threshold.
     """
 
-    def __init__(self, message: str = "Business rule violation.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=400, error_code="BUSINESS_RULE_VIOLATION")
+    def __init__(
+        self, message: str = "Business rule violation.", detail: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(
+            message=message,
+            detail=detail,
+            status_code=400,
+            error_code=ErrorCode.BUSINESS_RULE_VIOLATION,
+        )
 
 
 class PermissionDeniedError(AetherisError):
@@ -89,8 +130,12 @@ class PermissionDeniedError(AetherisError):
     Maps to HTTP 403.
     """
 
-    def __init__(self, message: str = "Permission denied.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=403, error_code="PERMISSION_DENIED")
+    def __init__(
+        self, message: str = "Permission denied.", detail: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(
+            message=message, detail=detail, status_code=403, error_code=ErrorCode.PERMISSION_DENIED
+        )
 
 
 class AuthenticationError(AetherisError):
@@ -99,8 +144,58 @@ class AuthenticationError(AetherisError):
     Maps to HTTP 401. Used by the auth module (Sprint 2+).
     """
 
-    def __init__(self, message: str = "Authentication required.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=401, error_code="AUTHENTICATION_REQUIRED")
+    def __init__(
+        self, message: str = "Authentication required.", detail: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(
+            message=message,
+            detail=detail,
+            status_code=401,
+            error_code=ErrorCode.AUTHENTICATION_REQUIRED,
+        )
+
+
+class AccountLockedError(AetherisError):
+    """Raised when login is attempted against a temporarily locked account.
+
+    Maps to HTTP 403 with ``ACCOUNT_LOCKED``
+    (``docs/modules/01-authentication.md`` §5.2). The lockout is time-limited,
+    so the unlock instant is returned to let the client tell the user when to
+    retry rather than leaving them to guess.
+
+    :param unlock_at: When the lock expires. Serialized into ``errors`` as an
+        ISO 8601 UTC timestamp (``docs/06-API_STANDARDS.md`` §17).
+    :param message: Human-readable description.
+    """
+
+    def __init__(
+        self,
+        unlock_at: datetime,
+        message: str = "Account is locked.",
+    ) -> None:
+        super().__init__(
+            message=message,
+            detail={"unlock_at": _to_iso_utc(unlock_at)},
+            status_code=403,
+            error_code=ErrorCode.ACCOUNT_LOCKED,
+        )
+
+
+class AccountSuspendedError(AetherisError):
+    """Raised when login is attempted against a suspended account.
+
+    Maps to HTTP 403 with ``ACCOUNT_SUSPENDED``
+    (``docs/modules/01-authentication.md`` §5.2). Unlike a lockout this carries
+    no unlock time: suspension is lifted by an administrator, not by the clock.
+    """
+
+    def __init__(self, message: str = "Account is suspended.") -> None:
+        super().__init__(
+            message=message,
+            detail=None,
+            status_code=403,
+            error_code=ErrorCode.ACCOUNT_SUSPENDED,
+        )
 
 
 class ConflictError(AetherisError):
@@ -112,8 +207,12 @@ class ConflictError(AetherisError):
     - Duplicate invoice number.
     """
 
-    def __init__(self, message: str = "Resource conflict.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=409, error_code="RESOURCE_CONFLICT")
+    def __init__(
+        self, message: str = "Resource conflict.", detail: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(
+            message=message, detail=detail, status_code=409, error_code=ErrorCode.RESOURCE_CONFLICT
+        )
 
 
 class RateLimitError(AetherisError):
@@ -122,8 +221,14 @@ class RateLimitError(AetherisError):
     Maps to HTTP 429.
     """
 
-    def __init__(self, message: str = "Rate limit exceeded. Try again later.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=429, error_code="RATE_LIMITED")
+    def __init__(
+        self,
+        message: str = "Rate limit exceeded. Try again later.",
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message, detail=detail, status_code=429, error_code=ErrorCode.RATE_LIMITED
+        )
 
 
 class ServiceUnavailableError(AetherisError):
@@ -132,5 +237,14 @@ class ServiceUnavailableError(AetherisError):
     Maps to HTTP 503.
     """
 
-    def __init__(self, message: str = "Service temporarily unavailable.", detail: dict[str, Any] | None = None) -> None:
-        super().__init__(message=message, detail=detail, status_code=503, error_code="SERVICE_UNAVAILABLE")
+    def __init__(
+        self,
+        message: str = "Service temporarily unavailable.",
+        detail: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            message=message,
+            detail=detail,
+            status_code=503,
+            error_code=ErrorCode.SERVICE_UNAVAILABLE,
+        )

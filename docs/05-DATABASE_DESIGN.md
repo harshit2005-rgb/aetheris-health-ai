@@ -194,6 +194,7 @@ Composite PK `(role_id, permission_id)`.
 | id | UUID PK | |
 | user_id | UUID FK users(id) UNIQUE NOT NULL | doctor is a user + doctor row |
 | hospital_id | UUID FK hospitals(id) NOT NULL | |
+| department_id | UUID FK departments(id) NULL | assignment target, feature 5.2 |
 | specialization | VARCHAR(100) NOT NULL | |
 | qualifications | JSONB NOT NULL DEFAULT '[]' | |
 | license_number | VARCHAR(50) NOT NULL | |
@@ -202,30 +203,65 @@ Composite PK `(role_id, permission_id)`.
 | languages | JSONB NOT NULL DEFAULT '[]' | |
 | + audit columns | | |
 
+**Indexes:** `uq_doctors_user_id (user_id)`,
+`ix_doctors_hospital_specialization (hospital_id, specialization)`,
+`ix_doctors_department (department_id)`,
+`ix_doctors_hospital_active (hospital_id) WHERE deleted_at IS NULL`
+
+`department_id` is nullable — a doctor can be onboarded before their
+department is decided. It pairs with `departments.head_doctor_id` (§2.23); the
+two tables reference each other, so the columns are added by separate
+migrations (`0006` and `0007`) rather than at table creation.
+
 ### 2.9 `doctor_availability`
 
 | Column | Type | Notes |
 |---|---|---|
 | id | UUID PK | |
-| doctor_id | UUID FK doctors(id) NOT NULL | |
-| day_of_week | INT NOT NULL | 0=Mon .. 6=Sun |
-| start_time | TIME NOT NULL | |
-| end_time | TIME NOT NULL | |
+| doctor_id | UUID FK doctors(id) NOT NULL | `ON DELETE CASCADE` — replaced wholesale on every update |
+| hospital_id | UUID FK hospitals(id) NOT NULL | tenant column, see note below |
+| day_of_week | SMALLINT NOT NULL | 0=Mon .. 6=Sun, matching `date.weekday()` |
+| start_time | TIME NOT NULL | wall-clock in the hospital's timezone |
+| end_time | TIME NOT NULL | wall-clock in the hospital's timezone |
 | slot_duration_minutes | INT NOT NULL DEFAULT 15 | |
 | + audit columns | | |
 
-Check: `end_time > start_time`.
+**Indexes:** `ix_doctor_avail_doctor_day (doctor_id, day_of_week)`
+
+Checks: `ck_doctor_availability_time_order` (`end_time > start_time`),
+`ck_doctor_availability_day_of_week_range` (`day_of_week BETWEEN 0 AND 6`),
+`ck_doctor_availability_slot_duration` (one of 10, 15, 20, 30, 45, 60).
+
+Times are **wall-clock**, not instants: slot generation resolves them against
+the hospital's IANA timezone on the requested date, so a daylight-saving
+transition changes how many slots a day yields.
 
 ### 2.10 `doctor_leaves`
 
 | Column | Type | Notes |
 |---|---|---|
 | id | UUID PK | |
-| doctor_id | UUID FK doctors(id) NOT NULL | |
-| starts_at | TIMESTAMPTZ NOT NULL | |
-| ends_at | TIMESTAMPTZ NOT NULL | |
+| doctor_id | UUID FK doctors(id) NOT NULL | `ON DELETE RESTRICT` — leaves are auditable records |
+| hospital_id | UUID FK hospitals(id) NOT NULL | tenant column, see note below |
+| starts_at | TIMESTAMPTZ NOT NULL | inclusive, UTC |
+| ends_at | TIMESTAMPTZ NOT NULL | exclusive, UTC |
 | reason | VARCHAR(200) | |
 | + audit columns | | |
+
+**Indexes:** `ix_doctor_leaves_doctor_range (doctor_id, starts_at, ends_at)`,
+`ix_doctor_leaves_hospital_active (hospital_id) WHERE deleted_at IS NULL`
+
+Check: `ck_doctor_leaves_range_order` (`ends_at > starts_at`).
+
+Intervals are half-open, so a leave ending at 09:00 leaves the 08:30–09:00
+slot bookable and back-to-back leaves do not count as overlapping.
+
+> **Note on `hospital_id` in §2.9 and §2.10.** These two child tables carry a
+> tenant column even though they could be reached through `doctor_id` alone.
+> CLAUDE.md rules 4 and 5 require a `hospital_id` on every tenant table and a
+> filter on it at the repository layer; carrying the column means a child row
+> is directly tenant-filterable instead of depending on every call site to
+> resolve its parent first.
 
 ### 2.11 `appointments`
 
@@ -245,9 +281,41 @@ Check: `end_time > start_time`.
 | checked_in_at | TIMESTAMPTZ | |
 | started_at | TIMESTAMPTZ | |
 | completed_at | TIMESTAMPTZ | |
+| idempotency_key | VARCHAR(200) | client retry key, business rule 8 |
 | + audit columns | | |
 
-**Indexes:** `ix_appointments_hospital_scheduled_start (hospital_id, scheduled_start)`, `ix_appointments_doctor_scheduled_start (doctor_id, scheduled_start)`, `ix_appointments_patient (patient_id)`
+**Indexes:** `ix_appointments_hospital_scheduled_start (hospital_id, scheduled_start)`,
+`ix_appointments_doctor_scheduled_start (doctor_id, scheduled_start)`,
+`ix_appointments_patient_scheduled_start (patient_id, scheduled_start DESC)`,
+`ix_appointments_status (hospital_id, status)`,
+`uq_appointments_hospital_idempotency_key (hospital_id, idempotency_key) WHERE idempotency_key IS NOT NULL`
+
+Check: `ck_appointments_time_order` (`scheduled_end > scheduled_start`).
+
+**No double-booking, enforced by Postgres:**
+
+```sql
+ALTER TABLE appointments
+ADD CONSTRAINT no_overlap_per_doctor
+EXCLUDE USING gist (
+  doctor_id WITH =,
+  tstzrange(scheduled_start, scheduled_end, '[)') WITH &&
+) WHERE (deleted_at IS NULL AND status NOT IN ('cancelled', 'no_show'));
+```
+
+This requires the **`btree_gist` extension** (for `doctor_id WITH =`), which
+migration `0008` installs. A role applying migrations therefore needs
+`CREATE EXTENSION`; on a locked-down production database that may have to be
+granted or the extension installed out of band before deploy.
+
+The constraint is what makes AC-2 real: two receptionists booking the same slot
+concurrently cannot be separated by an application check, because both
+transactions read before either writes. Cancelled and no-show appointments are
+excluded from it, so they release their slot.
+
+The idempotency index is **partial** so the many rows without a key do not
+collide with one another, and scoped per hospital so two tenants cannot clash
+on the same generated key.
 
 ### 2.12 `appointment_status_history`
 
@@ -256,12 +324,30 @@ Every status change is recorded here. Immutable.
 | Column | Type | Notes |
 |---|---|---|
 | id | UUID PK | |
-| appointment_id | UUID FK NOT NULL | |
-| from_status | appointment_status | |
+| appointment_id | UUID FK NOT NULL | `ON DELETE CASCADE` |
+| hospital_id | UUID FK hospitals(id) NOT NULL | tenant column, see note below |
+| from_status | appointment_status | NULL on the first row — booking comes from nothing |
 | to_status | appointment_status NOT NULL | |
-| changed_by | UUID FK users(id) NOT NULL | |
+| changed_by | UUID FK users(id) NULL | NULL means the system acted, see note below |
 | changed_at | TIMESTAMPTZ NOT NULL DEFAULT now() | |
 | reason | TEXT | |
+
+**Index:** `ix_appt_status_history_appointment (appointment_id, changed_at)`
+
+Append-only: no `updated_at`, no soft delete. There is nothing to update and
+nothing to retract.
+
+> **`changed_by` is nullable, not `NOT NULL`.** The no-show sweeper (module
+> spec §5.7) is a background job with no acting user, and FR-7 requires it to
+> write a history row like any other transition. NULL means "system", matching
+> how the audit mixins already document `created_by` ("NULL for system rows").
+> The alternative — a synthetic system user — would put a fake row in `users`
+> that permission checks and user lists would have to special-case forever.
+
+> **`hospital_id` is carried here** for the same reason as the doctor child
+> tables: CLAUDE.md rules 4 and 5 require every tenant table to have one and to
+> be filtered on it directly, rather than depending on each call site to
+> resolve the parent first.
 
 ### 2.13 `consultations`
 
@@ -432,6 +518,39 @@ Every AI call is logged for observability, cost tracking, and evaluation.
 | created_at | TIMESTAMPTZ NOT NULL DEFAULT now() | |
 
 **Never** store the full prompt or response in this table by default — separate opt-in storage with retention policies for those.
+
+### 2.23 `departments`
+
+Organisational units within a hospital — Cardiology, Radiology, Emergency.
+Doctors are assigned to one; Reports and Inventory filter by it.
+
+Numbered 2.23 rather than inserted beside `doctors` so the existing §2.x
+numbering stays stable — module specs and code docstrings cite these numbers.
+
+| Column | Type | Notes |
+|---|---|---|
+| id | UUID PK | |
+| hospital_id | UUID FK hospitals(id) NOT NULL | |
+| code | VARCHAR(20) NOT NULL | short code, e.g. `CARD`; uppercase-normalised on write |
+| name | VARCHAR(150) NOT NULL | |
+| description | TEXT | |
+| phone_extension | VARCHAR(10) | internal extension |
+| email | VARCHAR(200) | department inbox |
+| location | VARCHAR(150) | floor / wing / block |
+| head_doctor_id | UUID FK doctors(id) NULL | `ON DELETE SET NULL`; added by migration `0007` |
+| + audit columns | | |
+
+**Indexes:** `uq_departments_hospital_code (hospital_id, code)`,
+`uq_departments_hospital_name_lower (hospital_id, lower(name))`,
+`ix_departments_hospital_active (hospital_id) WHERE deleted_at IS NULL`,
+`ix_departments_name_lower (hospital_id, lower(name) varchar_pattern_ops)`
+
+Check: `ck_departments_code_format` — `code ~ '^[A-Z0-9][A-Z0-9_-]{1,19}$'`.
+
+`doctors.department_id` and `departments.head_doctor_id` reference each other,
+so neither could carry its foreign key at creation. `0005` created this table
+without `head_doctor_id`, `0006` created `doctors` with `department_id`, and
+`0007` added `head_doctor_id` to close the loop.
 
 ---
 

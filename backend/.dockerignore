@@ -38,7 +38,7 @@ Dockerfile
 .dockerignore
 
 # Alembic
-!alembic/
+!migrations/
 
 # Logs
 *.log

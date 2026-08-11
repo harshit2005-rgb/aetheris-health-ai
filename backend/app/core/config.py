@@ -53,10 +53,16 @@ class Settings(BaseSettings):
     )
 
     # ── App ────────────────────────────────────────────────────────────────
-    APP_NAME: str = Field(default="Aetheris Health AI", description="Human-readable application name")
+    APP_NAME: str = Field(
+        default="Aetheris Health AI", description="Human-readable application name"
+    )
     APP_ENV: AppEnv = Field(default=AppEnv.DEVELOPMENT, description="Deployment environment")
-    APP_DEBUG: bool = Field(default=True, description="Enable debug mode (stack traces in responses)")
-    APP_BASE_URL: str = Field(default="http://localhost:8000", description="Public base URL of the API")
+    APP_DEBUG: bool = Field(
+        default=True, description="Enable debug mode (stack traces in responses)"
+    )
+    APP_BASE_URL: str = Field(
+        default="http://localhost:8000", description="Public base URL of the API"
+    )
     APP_SECRET_KEY: str = Field(
         default="change-me-to-a-long-random-string-in-production",
         description="Secret key for signing internal tokens and encryption",
@@ -68,16 +74,26 @@ class Settings(BaseSettings):
         default="postgresql+asyncpg://aetheris:aetheris@localhost:5432/aetheris",
         description="Async PostgreSQL connection string (asyncpg driver)",
     )
-    DATABASE_POOL_SIZE: int = Field(default=20, ge=1, le=100, description="Maximum connections in the pool")
-    DATABASE_MAX_OVERFLOW: int = Field(default=10, ge=0, description="Max overflow connections beyond pool_size")
-    DATABASE_ECHO: bool = Field(default=False, description="Log all SQL statements (development only)")
+    DATABASE_POOL_SIZE: int = Field(
+        default=20, ge=1, le=100, description="Maximum connections in the pool"
+    )
+    DATABASE_MAX_OVERFLOW: int = Field(
+        default=10, ge=0, description="Max overflow connections beyond pool_size"
+    )
+    DATABASE_ECHO: bool = Field(
+        default=False, description="Log all SQL statements (development only)"
+    )
 
     # ── Redis ──────────────────────────────────────────────────────────────
     REDIS_URL: str = Field(default="redis://localhost:6379/0", description="Redis connection URL")
 
     # ── Logging ────────────────────────────────────────────────────────────
-    LOG_LEVEL: str = Field(default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR)")
-    LOG_FORMAT: LogFormat = Field(default=LogFormat.JSON, description="Log output format: json or console")
+    LOG_LEVEL: str = Field(
+        default="INFO", description="Logging level (DEBUG, INFO, WARNING, ERROR)"
+    )
+    LOG_FORMAT: LogFormat = Field(
+        default=LogFormat.JSON, description="Log output format: json or console"
+    )
 
     # ── CORS ───────────────────────────────────────────────────────────────
     CORS_ORIGINS: list[str] = Field(
@@ -103,10 +119,36 @@ class Settings(BaseSettings):
             return [origin.strip() for origin in value.split(",") if origin.strip()]
         return []
 
+    # ── JWT / Auth ─────────────────────────────────────────────────────────
+    JWT_PRIVATE_KEY: str | None = Field(
+        default=None,
+        description="RSA private key for JWT signing (PEM). If None, uses HS256 with APP_SECRET_KEY.",
+    )
+    JWT_PUBLIC_KEY: str | None = Field(
+        default=None,
+        description="RSA public key for JWT verification (PEM). If None, uses HS256 with APP_SECRET_KEY.",
+    )
+    JWT_ISSUER: str = Field(default="aetheris", description="JWT issuer claim (iss)")
+    JWT_ACCESS_TTL_SECONDS: int = Field(default=900, ge=60, le=86400, description="Access token TTL in seconds (default 15 min)")
+    JWT_REFRESH_TTL_SECONDS: int = Field(default=604800, ge=3600, le=2592000, description="Refresh token TTL in seconds (default 7 days)")
+    JWT_LEEWAY_SECONDS: int = Field(default=60, description="Clock skew leeway for JWT validation (seconds)")
+
+    # ── Auth Policy ─────────────────────────────────────────────────────────
+    PASSWORD_MIN_LENGTH: int = Field(default=12, ge=8, le=128, description="Minimum password length")
+    MAX_FAILED_LOGIN_ATTEMPTS: int = Field(default=5, ge=1, le=20, description="Max failed attempts before lockout")
+    ACCOUNT_LOCKOUT_MINUTES: int = Field(default=30, ge=1, le=1440, description="Account lockout duration in minutes")
+    PASSWORD_RESET_TOKEN_TTL_MINUTES: int = Field(default=30, ge=5, le=1440, description="Password reset token lifetime in minutes")
+
     # ── Rate Limiting ──────────────────────────────────────────────────────
-    RATE_LIMIT_ANON_PER_MIN: int = Field(default=60, ge=1, description="Anonymous requests per minute")
-    RATE_LIMIT_USER_PER_MIN: int = Field(default=300, ge=1, description="Authenticated requests per minute")
-    RATE_LIMIT_AI_PER_MIN: int = Field(default=30, ge=1, description="AI endpoint requests per minute")
+    RATE_LIMIT_ANON_PER_MIN: int = Field(
+        default=60, ge=1, description="Anonymous requests per minute"
+    )
+    RATE_LIMIT_USER_PER_MIN: int = Field(
+        default=300, ge=1, description="Authenticated requests per minute"
+    )
+    RATE_LIMIT_AI_PER_MIN: int = Field(
+        default=30, ge=1, description="AI endpoint requests per minute"
+    )
 
     @property
     def is_development(self) -> bool:

@@ -33,6 +33,9 @@ dev: ## Start the development server with hot-reload
 	cp -n .env.example .env 2>/dev/null || true
 	$(UVICORN) app.main:app --reload --host 0.0.0.0 --port 8000
 
+worker: ## Start the Arq background worker (no-show sweeper)
+	$(UV) run arq app.background.worker.WorkerSettings
+
 dev-no-reload: ## Start the development server without hot-reload
 	$(UVICORN) app.main:app --host 0.0.0.0 --port 8000
 
@@ -52,16 +55,16 @@ format-check: ## Check formatting without changing files
 
 # ── Testing ──────────────────────────────────────────────────────────────────
 test: ## Run all tests with coverage
-	$(PYTEST) tests/ -v --cov=app --cov-report=term-missing --cov-report=html
+	$(PYTEST) app/tests/ -v --cov=app --cov-report=term-missing --cov-report=html
 
 test-unit: ## Run unit tests only
-	$(PYTEST) tests/unit/ -v
+	$(PYTEST) app/tests/unit/ -v
 
 test-short: ## Run tests without coverage (faster)
-	$(PYTEST) tests/ -v
+	$(PYTEST) app/tests/ -v
 
 test-watch: ## Run tests in watch mode
-	$(PYTEST) tests/ -v --looponfail
+	$(PYTEST) app/tests/ -v --looponfail
 
 # ── Database Migrations ──────────────────────────────────────────────────────
 migrate: ## Apply pending migrations
@@ -95,7 +98,7 @@ db-shell: ## Open a PostgreSQL shell (requires psql)
 
 # ── Python Shell ─────────────────────────────────────────────────────────────
 shell: ## Open an IPython shell with the app loaded
-	$(UV) run ipython -i -c "import sys; sys.path.insert(0, '.'); from app.core.config import settings; from app.shared.database import Base; print('App loaded. settings and Base are available.')"
+	$(UV) run ipython -i -c "import sys; sys.path.insert(0, '.'); from app.core.config import settings; from app.database import Base; print('App loaded. settings and Base are available.')"
 
 # ── Cleanup ──────────────────────────────────────────────────────────────────
 clean: ## Clean up cache, build artifacts, and virtual environments
