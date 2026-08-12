@@ -1,6 +1,7 @@
 import { createBrowserRouter } from 'react-router-dom'
 import DashboardLayout from '@/layouts/DashboardLayout'
 import { RequireAuth } from '@/components/auth/RequireAuth'
+import { RequirePermission } from '@/components/auth/RequirePermission'
 import LandingPage from '@/pages/LandingPage'
 import LoginPage from '@/pages/LoginPage'
 import ContactPage from '@/pages/ContactPage'
@@ -35,12 +36,54 @@ export const router = createBrowserRouter([
     ),
     children: [
       { path: '/dashboard', element: <DashboardPage /> },
-      { path: '/patients', element: <PatientsPage /> },
-      { path: '/doctors', element: <DoctorsPage /> },
-      { path: '/appointments', element: <AppointmentsPage /> },
-      { path: '/billing', element: <BillingPage /> },
-      { path: '/reports', element: <ReportsPage /> },
-      { path: '/settings', element: <SettingsPage /> },
+      {
+        path: '/patients',
+        element: (
+          <RequirePermission permission="patient.read">
+            <PatientsPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: '/doctors',
+        element: (
+          <RequirePermission permission="doctor.read">
+            <DoctorsPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: '/appointments',
+        element: (
+          <RequirePermission permission="appointment.read">
+            <AppointmentsPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: '/billing',
+        element: (
+          <RequirePermission permission="billing.read">
+            <BillingPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: '/reports',
+        element: (
+          <RequirePermission permission="report.read">
+            <ReportsPage />
+          </RequirePermission>
+        ),
+      },
+      {
+        path: '/settings',
+        element: (
+          <RequirePermission permission="settings.manage">
+            <SettingsPage />
+          </RequirePermission>
+        ),
+      },
     ],
   },
 

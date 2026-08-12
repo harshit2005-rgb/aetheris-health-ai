@@ -1,19 +1,19 @@
 import { useAuthStore } from '@/store/auth-store'
-import { navForRole, type Role } from '@/lib/rbac'
+import { navForPermissions, hasPermission, type Permission } from '@/lib/rbac'
 
 /**
- * Role/permission helpers for the current user. Use to filter nav, guard
- * routes, and hide unauthorized actions (spec: "hide unauthorized cards and
- * actions completely").
+ * Authorization for the current user, modelled on PERMISSION CODES (defect F5).
+ * Components ask `can('patient.read')` — never `hasRole(...)`. Roles are display
+ * only. This is a UX affordance, not a security boundary: the backend enforces.
  */
 export function usePermissions() {
-  const role = useAuthStore((s) => s.user?.role)
+  const user = useAuthStore((s) => s.user)
+  const permissions = user?.permissions
 
   return {
-    role,
-    /** True if the current user has one of the given roles. */
-    hasRole: (...roles: Role[]) => !!role && roles.includes(role),
-    /** Nav items the current role may see. */
-    nav: navForRole(role),
+    role: user?.role,
+    can: (permission: Permission) => hasPermission(permissions, permission),
+    /** Nav items the current permission set may see. */
+    nav: navForPermissions(permissions),
   }
 }

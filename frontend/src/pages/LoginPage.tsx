@@ -7,7 +7,13 @@ import { toast } from 'sonner'
 import { Eye, EyeOff, Loader2 } from 'lucide-react'
 import { Logo } from '@/components/brand/Logo'
 import { useAuthStore } from '@/store/auth-store'
+import { api } from '@/lib/api'
+import { MOCK_PERMISSIONS_BY_ROLE } from '@/lib/rbac'
 import { cn } from '@/lib/utils'
+
+// Mock auth only runs in dev AND when explicitly enabled. Production builds
+// can never authenticate against the mock (defect F1).
+const USE_MOCK_AUTH = import.meta.env.DEV && import.meta.env.VITE_USE_MOCK_AUTH === 'true'
 
 const loginSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
@@ -39,24 +45,36 @@ export default function LoginPage() {
   })
 
   async function onSubmit(values: LoginValues) {
-    // ── Backend seam ─────────────────────────────────────────────
-    // TODO(backend): replace this mock with a real call, e.g.
-    //   const { data } = await api.post('/auth/login', values)
-    //   setAuth(data.user, data.token)
-    // The Axios client (src/lib/api.ts) already attaches the token
-    // on subsequent requests. Everything below is a frontend stand-in.
-    await new Promise((r) => setTimeout(r, 700))
-    setAuth(
-      {
-        id: 'demo-user',
-        name: 'Dr. A. Chen',
-        email: values.email,
-        role: 'hospital_admin',
-      },
-      'demo-token',
-    )
-    toast.success('Welcome back, Dr. Chen')
-    navigate(from, { replace: true })
+    try {
+      if (USE_MOCK_AUTH) {
+        // Dev-only stand-in. Never reachable in a production build.
+        await new Promise((r) => setTimeout(r, 400))
+        const role = 'hospital_admin'
+        setAuth(
+          {
+            id: 'demo-user',
+            name: 'Dr. A. Chen',
+            email: values.email,
+            role,
+            permissions: MOCK_PERMISSIONS_BY_ROLE[role],
+          },
+          'demo-access-token',
+        )
+      } else {
+        // Real login: server sets the HTTP-only refresh cookie and returns the
+        // access token + user (with permission codes) in the standard envelope.
+        const { data } = await api.post('/auth/login', {
+          email: values.email,
+          password: values.password,
+        })
+        setAuth(data.data.user, data.data.access_token)
+      }
+      toast.success('Welcome back')
+      navigate(from, { replace: true })
+    } catch {
+      // Never reveal whether the email exists (spec 2B §12).
+      toast.error('Invalid credentials, or the server is unavailable.')
+    }
   }
 
   return (

@@ -1,42 +1,40 @@
 import { create } from 'zustand'
-import { persist } from 'zustand/middleware'
-
-import type { Role } from '@/lib/rbac'
+import type { Permission, Role } from '@/lib/rbac'
+import { tokenStore } from '@/services/tokenStore'
 
 export interface User {
   id: string
   name: string
   email: string
   role: Role
+  /** Permission codes issued by the server (spec / defect F5). */
+  permissions: Permission[]
 }
 
 interface AuthState {
   user: User | null
-  token: string | null
+  /** Derived, in-memory only. Never persisted, so it cannot be forged from
+   *  devtools (defect F2). A reload drops it; the app re-auths via /auth/refresh. */
   isAuthenticated: boolean
-  setAuth: (user: User, token: string) => void
+  setAuth: (user: User, accessToken: string) => void
   logout: () => void
 }
 
 /**
- * Global auth store. The token is mirrored into localStorage under
- * `aetheris.token` so the Axios interceptor can read it outside React.
+ * Auth store. Intentionally NOT persisted: the access token lives in
+ * `tokenStore` (memory), the refresh token is an HTTP-only cookie set by the
+ * backend, and `isAuthenticated` is derived state — not a flag a visitor can
+ * write to localStorage to become an admin (defects F2, F3).
  */
-export const useAuthStore = create<AuthState>()(
-  persist(
-    (set) => ({
-      user: null,
-      token: null,
-      isAuthenticated: false,
-      setAuth: (user, token) => {
-        localStorage.setItem('aetheris.token', token)
-        set({ user, token, isAuthenticated: true })
-      },
-      logout: () => {
-        localStorage.removeItem('aetheris.token')
-        set({ user: null, token: null, isAuthenticated: false })
-      },
-    }),
-    { name: 'aetheris.auth' },
-  ),
-)
+export const useAuthStore = create<AuthState>((set) => ({
+  user: null,
+  isAuthenticated: false,
+  setAuth: (user, accessToken) => {
+    tokenStore.set(accessToken)
+    set({ user, isAuthenticated: true })
+  },
+  logout: () => {
+    tokenStore.clear()
+    set({ user: null, isAuthenticated: false })
+  },
+}))
