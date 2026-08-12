@@ -51,7 +51,7 @@ export function RadialProgress({
           background={{ fill: 'var(--color-surface-container-high)' }}
           isAnimationActive
           animationDuration={900}
-          style={{ filter: 'drop-shadow(1px 1px 2px rgba(0,0,0,0.12))' }}
+          className="[filter:drop-shadow(1px_1px_2px_rgba(0,0,0,0.12))]"
         />
       </RadialBarChart>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
