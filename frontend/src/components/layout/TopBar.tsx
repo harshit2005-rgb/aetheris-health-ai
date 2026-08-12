@@ -35,30 +35,33 @@ export default function TopBar({ onOpenSidebar, onOpenCopilot }: TopBarProps) {
         <Breadcrumbs />
       </div>
 
-      {/* Global search */}
+      {/* Global search — not wired yet; disabled so it doesn't read as broken (F10) */}
       <div className="relative mx-auto w-full max-w-md">
         <Search className="text-outline pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
         <input
           type="text"
-          placeholder="Search patients, doctors, invoices..."
-          className="neo-pressed bg-surface/60 font-body text-body-sm placeholder:text-outline-variant focus:ring-secondary w-full rounded-full py-2.5 pr-16 pl-9 outline-none focus:ring-2"
+          disabled
+          title="Global search — coming soon"
+          placeholder="Search (coming soon)"
+          className="neo-pressed bg-surface/60 font-body text-body-sm placeholder:text-outline-variant w-full cursor-not-allowed rounded-full py-2.5 pr-4 pl-9 opacity-60 outline-none"
         />
-        <kbd className="font-label text-outline border-outline-variant/50 bg-surface/80 pointer-events-none absolute top-1/2 right-2.5 hidden -translate-y-1/2 rounded border px-1.5 py-0.5 text-[10px] sm:block">
-          ⌘K
-        </kbd>
       </div>
 
       {/* Actions */}
       <div className="flex items-center gap-1.5">
+        {/* Notifications — no data source yet; disabled, no unread dot (F10) */}
         <button
-          aria-label="Notifications"
-          className="text-on-surface-variant hover:bg-white/30 relative flex size-10 items-center justify-center rounded-lg transition-colors"
+          type="button"
+          disabled
+          aria-label="Notifications (coming soon)"
+          title="Notifications — coming soon"
+          className="text-outline-variant flex size-10 cursor-not-allowed items-center justify-center rounded-lg opacity-60"
         >
           <Bell className="size-5" />
-          <span className="bg-error absolute top-2 right-2.5 size-2 rounded-full" />
         </button>
 
         <button
+          type="button"
           onClick={onOpenCopilot}
           aria-label="AI Copilot"
           className="text-secondary hover:bg-white/30 hidden size-10 items-center justify-center rounded-lg transition-colors sm:flex"
@@ -66,7 +69,8 @@ export default function TopBar({ onOpenSidebar, onOpenCopilot }: TopBarProps) {
           <Sparkles className="size-5" />
         </button>
 
-        <button className="hover:bg-white/30 flex items-center gap-2 rounded-full py-1 pr-1 pl-2 transition-colors">
+        {/* User identity — display only; logout lives in the sidebar (F10) */}
+        <div className="flex items-center gap-2 py-1 pr-1 pl-2">
           <div className="hidden text-right leading-tight md:block">
             <p className="font-body text-body-sm text-primary font-bold">{name}</p>
             <p className="font-body text-outline text-[11px]">{roleLabel}</p>
@@ -74,7 +78,7 @@ export default function TopBar({ onOpenSidebar, onOpenCopilot }: TopBarProps) {
           <span className="neo-extruded bg-primary-container flex size-9 items-center justify-center rounded-full text-xs font-bold text-white">
             {initials(name)}
           </span>
-        </button>
+        </div>
       </div>
     </header>
   )

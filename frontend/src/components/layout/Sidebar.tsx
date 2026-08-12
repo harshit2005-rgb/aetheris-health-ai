@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { ChevronsLeft, ChevronsRight, LogOut, Sparkles } from 'lucide-react'
@@ -34,6 +35,14 @@ export default function Sidebar({
 
   const name = user?.name ?? 'User'
   const roleLabel = role ? ROLE_LABELS[role] : ''
+
+  // Close the mobile drawer on Escape (F11).
+  useEffect(() => {
+    if (!mobileOpen) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onMobileClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mobileOpen, onMobileClose])
 
   function handleLogout() {
     logout()

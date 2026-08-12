@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { X, Sparkles, ArrowUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -19,6 +20,14 @@ interface CopilotPanelProps {
  * prompts + composer. Wiring to the AI provider is a backend task.
  */
 export default function CopilotPanel({ open, onClose }: CopilotPanelProps) {
+  // Close on Escape while open (F11).
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
+
   return (
     <>
       {open && (
@@ -28,12 +37,14 @@ export default function CopilotPanel({ open, onClose }: CopilotPanelProps) {
           className="fixed inset-0 z-50 bg-black/20 backdrop-blur-sm"
         />
       )}
+      {/* `inert` when closed removes the off-screen panel from the tab order and
+          the a11y tree, so its controls aren't silently focusable (F9). */}
       <aside
+        inert={!open}
         className={cn(
           'bg-surface fixed top-0 right-0 z-50 flex h-dvh w-full flex-col shadow-2xl transition-transform duration-300 sm:w-[420px]',
           open ? 'translate-x-0' : 'translate-x-full',
         )}
-        aria-hidden={!open}
       >
         {/* Header */}
         <div className="border-outline-variant/30 flex items-center justify-between border-b px-5 py-4">
