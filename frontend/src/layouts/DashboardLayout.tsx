@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import Sidebar from '@/components/layout/Sidebar'
 import TopBar from '@/components/layout/TopBar'
@@ -12,10 +12,13 @@ export default function DashboardLayout() {
   const [copilotOpen, setCopilotOpen] = useState(false)
   const location = useLocation()
 
-  // Close the mobile drawer on navigation.
-  useEffect(() => {
+  // Close the mobile drawer on navigation — derived during render (the
+  // React-recommended "previous value" pattern, no effect needed).
+  const [prevPath, setPrevPath] = useState(location.pathname)
+  if (location.pathname !== prevPath) {
+    setPrevPath(location.pathname)
     setMobileOpen(false)
-  }, [location.pathname])
+  }
 
   return (
     <div className="bg-background min-h-dvh">
