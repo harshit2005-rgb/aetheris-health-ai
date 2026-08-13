@@ -17,7 +17,10 @@ export function Logo({ variant = 'lockup', className }: LogoProps) {
     <img
       src={variant === 'mark' ? mark : lockup}
       alt="Aetheris Health AI"
-      className={cn('block w-auto select-none', className)}
+      // The brand artwork is navy ink + cyan, which loses contrast on dark
+      // surfaces. Until a light logo asset ships, render it as a white monochrome
+      // in dark mode so the wordmark stays legible.
+      className={cn('block w-auto select-none dark:brightness-0 dark:invert', className)}
       draggable={false}
     />
   )

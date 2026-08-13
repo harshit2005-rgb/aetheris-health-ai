@@ -1,5 +1,6 @@
 import { Menu, Search, Bell, Sparkles } from 'lucide-react'
 import Breadcrumbs from '@/components/layout/Breadcrumbs'
+import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { useAuthStore } from '@/store/auth-store'
 import { ROLE_LABELS } from '@/lib/rbac'
 
@@ -49,6 +50,8 @@ export default function TopBar({ onOpenSidebar, onOpenCopilot }: TopBarProps) {
 
       {/* Actions */}
       <div className="flex items-center gap-1.5">
+        <ThemeToggle />
+
         {/* Notifications — no data source yet; disabled, no unread dot (F10) */}
         <button
           type="button"

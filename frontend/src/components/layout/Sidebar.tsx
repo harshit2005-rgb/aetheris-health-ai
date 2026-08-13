@@ -90,7 +90,7 @@ function SidebarBody({ collapsed, onToggleCollapse, onNavigate, onOpenCopilot }:
       <button
         onClick={onOpenCopilot}
         className={cn(
-          'shadow-neo-base bg-primary-container text-on-primary flex items-center gap-3 rounded-xl px-3 py-2.5 font-bold transition-transform active:scale-[0.98]',
+          'neo-extruded bg-primary-container flex items-center gap-3 rounded-xl px-3 py-2.5 font-bold text-white transition-transform active:scale-[0.98]',
           collapsed && 'justify-center',
         )}
         title="AI Copilot"

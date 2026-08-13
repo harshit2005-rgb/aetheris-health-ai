@@ -154,6 +154,85 @@
 }
 
 /* ============================================================================
+ * Dark theme — reassigns the design tokens for the `.dark` subtree (toggled by
+ * next-themes on <html>). Deep navy-charcoal surfaces, light ink, cyan accent.
+ * ==========================================================================*/
+.dark {
+  /* Primary flips to light so headings (text-primary) and primary buttons read
+     on dark surfaces; on-primary becomes the dark ink for the button label. */
+  --color-primary: #cfe1ff;
+  --color-on-primary: #002a4e;
+  --color-primary-container: #1c2a45;
+  --color-on-primary-container: #b8ccef;
+  --color-primary-fixed: #d2e4ff;
+  --color-primary-fixed-dim: #b0c8eb;
+  --color-inverse-primary: #2a4a78;
+
+  --color-secondary: #5cd9ff;
+  --color-on-secondary: #00344a;
+  --color-secondary-container: #00d2fd;
+  --color-on-secondary-container: #00252f;
+  --color-secondary-fixed: #b4ebff;
+  --color-secondary-fixed-dim: #3cd7ff;
+
+  --color-tertiary: #a6c8e6;
+  --color-on-tertiary: #0a2436;
+  --color-tertiary-container: #24425c;
+  --color-on-tertiary-container: #c9def0;
+
+  --color-error: #ffb4ab;
+  --color-on-error: #690005;
+  --color-error-container: #93000a;
+  --color-on-error-container: #ffdad6;
+
+  --color-critical: #ff6b74;
+  --color-stable: #4fd1c0;
+
+  /* Surfaces */
+  --color-background: #0a1120;
+  --color-on-background: #e6e9f0;
+  --color-surface: #0e1626;
+  --color-surface-dim: #090f1c;
+  --color-surface-bright: #1c2a45;
+  --color-surface-container-lowest: #0a1120;
+  --color-surface-container-low: #111b2e;
+  --color-surface-container: #16223a;
+  --color-surface-container-high: #1c2a45;
+  --color-surface-container-highest: #223150;
+  --color-surface-variant: #223150;
+  --color-on-surface: #e6e9f0;
+  --color-on-surface-variant: #b3bccd;
+  --color-inverse-surface: #e3e2e5;
+  --color-inverse-on-surface: #2f3033;
+
+  --color-outline: #8b96a8;
+  --color-outline-variant: #33415c;
+
+  /* shadcn semantic bridge */
+  --color-foreground: #e6e9f0;
+  --color-primary-foreground: #002a4e;
+  --color-secondary-foreground: #00344a;
+  --color-card: #111b2e;
+  --color-card-foreground: #e6e9f0;
+  --color-popover: #111b2e;
+  --color-popover-foreground: #e6e9f0;
+  --color-muted: #16223a;
+  --color-muted-foreground: #b3bccd;
+  --color-accent: #00d2fd;
+  --color-accent-foreground: #00252f;
+  --color-destructive: #ffb4ab;
+  --color-border: #33415c;
+  --color-input: #33415c;
+  --color-ring: #00d2fd;
+
+  /* Neomorphic elevation recomputed for dark surfaces (light highlight fails on
+     dark). Highlight = a lighter navy; shadow = near-black. */
+  --shadow-neo-base: -8px -8px 16px #1a2740, 8px 8px 16px #05090f;
+  --shadow-neo-pressed: inset 4px 4px 8px #05090f, inset -4px -4px 8px #1a2740;
+  --shadow-glass-panel: 0 8px 32px 0 rgba(0, 0, 0, 0.35);
+}
+
+/* ============================================================================
  * Signature utilities
  * ==========================================================================*/
 @layer utilities {
@@ -187,6 +266,19 @@
     box-shadow: var(--shadow-neo-pressed);
   }
 
+  /* Dark-theme surface treatments: the light frosted glass and white extrude
+     highlight are recomputed for dark backgrounds. */
+  .dark .glassmorphism {
+    background: rgba(18, 28, 46, 0.55);
+    border-color: rgba(255, 255, 255, 0.08);
+  }
+  .dark .neo-extruded {
+    background-image: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.05),
+      rgba(255, 255, 255, 0)
+    );
+  }
 }
 
 @layer base {
