@@ -279,6 +279,13 @@
       rgba(255, 255, 255, 0)
     );
   }
+  /* The navy start of the brand gradient vanishes on dark backgrounds; begin
+     from a light blue so headline text stays legible. */
+  .dark .text-gradient {
+    background: linear-gradient(135deg, #b0c8eb 0%, #00d2fd 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+  }
 }
 
 @layer base {

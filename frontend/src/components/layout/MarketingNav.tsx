@@ -51,13 +51,13 @@ export default function MarketingNav() {
             to="/login"
             className="font-label text-label-caps text-on-surface-variant hover:text-secondary hidden px-3 py-2 transition-colors md:inline-block"
           >
-            Log in
+            Sign in
           </Link>
           <Link
-            to="/login"
-            className="shadow-neo-base bg-primary text-on-primary font-label text-label-caps hidden rounded-full px-5 py-2.5 font-bold transition-all duration-300 hover:-translate-y-0.5 active:translate-y-0 md:inline-block"
+            to="/contact"
+            className="neo-extruded bg-primary text-on-primary font-label text-label-caps hidden rounded-full px-5 py-2.5 font-bold transition-transform duration-300 hover:-translate-y-0.5 active:translate-y-0 md:inline-block"
           >
-            Get Started
+            Book a demo
           </Link>
           <button
             type="button"
@@ -104,14 +104,14 @@ export default function MarketingNav() {
                   onClick={close}
                   className="font-body text-body-md text-on-surface-variant rounded-xl px-4 py-3 text-center transition-colors"
                 >
-                  Log in
+                  Sign in
                 </Link>
                 <Link
-                  to="/login"
+                  to="/contact"
                   onClick={close}
-                  className="shadow-neo-base bg-primary text-on-primary font-label text-label-caps rounded-full px-5 py-3 text-center font-bold"
+                  className="neo-extruded bg-primary text-on-primary font-label text-label-caps rounded-full px-5 py-3 text-center font-bold"
                 >
-                  Get Started
+                  Book a demo
                 </Link>
               </div>
             </div>
