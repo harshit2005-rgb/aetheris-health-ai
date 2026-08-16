@@ -12,10 +12,10 @@ function toApiError(err: unknown): ApiError {
   if (err instanceof AxiosError) {
     const body = err.response?.data as ApiResponse<unknown> | undefined
     return new ApiError(
-      body?.error?.message ?? err.message,
-      body?.error?.code ?? 'network_error',
+      body?.message ?? err.message,
+      body?.error_code ?? 'network_error',
       err.response?.status,
-      body?.error?.details,
+      body?.errors,
     )
   }
   return new ApiError(err instanceof Error ? err.message : 'Unexpected error')
@@ -30,13 +30,21 @@ async function request<T>(config: AxiosRequestConfig): Promise<T> {
   }
 }
 
-/** GET that returns items + pagination together, reading `meta.pagination`. */
+/** GET that returns items + pagination together, reading `metadata.pagination`. */
 async function getPaginated<T>(url: string, config?: AxiosRequestConfig): Promise<Paginated<T>> {
   try {
     const res = await api.get<ApiResponse<T[]>>(url, config)
-    const pagination = res.data.meta?.pagination
-    if (!pagination) throw new ApiError('Response is missing pagination metadata', 'bad_response')
-    return { items: res.data.data, pagination }
+    const wire = res.data.metadata?.pagination
+    if (!wire) throw new ApiError('Response is missing pagination metadata', 'bad_response')
+    return {
+      items: res.data.data,
+      pagination: {
+        page: wire.page,
+        pageSize: wire.page_size,
+        total: wire.total_records,
+        totalPages: wire.total_pages,
+      },
+    }
   } catch (err) {
     throw err instanceof ApiError ? err : toApiError(err)
   }

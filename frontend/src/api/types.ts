@@ -1,11 +1,28 @@
-/** Standard API envelope — every backend response follows this shape (CLAUDE.md). */
+/**
+ * Standard API envelope — every backend response follows this shape
+ * (`docs/06-API_STANDARDS.md` §5). The failure fields are flat: the backend
+ * emits `message` / `error_code` / `errors` at the top level, not a nested
+ * `error` object.
+ */
 export interface ApiResponse<T> {
   success: boolean
+  message: string
   data: T
-  meta?: { pagination?: PaginationMeta }
-  error?: { code: string; message: string; details?: unknown }
+  metadata?: { request_id?: string | null; pagination?: WirePaginationMeta }
+  /** Field-level detail on failure. Shape varies by error code. */
+  errors?: unknown
+  error_code?: string
 }
 
+/** Pagination as the backend sends it, in wire (snake_case) form. */
+export interface WirePaginationMeta {
+  page: number
+  page_size: number
+  total_records: number
+  total_pages: number
+}
+
+/** Pagination as the app consumes it. Mapped from the wire shape in `http.ts`. */
 export interface PaginationMeta {
   page: number
   pageSize: number

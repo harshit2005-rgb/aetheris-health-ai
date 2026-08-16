@@ -6,9 +6,13 @@ import { useAuthStore } from '@/store/auth-store'
  * Central Axios instance. `withCredentials` lets the browser send the HTTP-only
  * refresh cookie to /auth/refresh (the access token itself is attached from
  * memory below).
+ *
+ * The default includes the `/v1` API version segment: every backend route is
+ * mounted under `/api/v1` (`docs/06-API_STANDARDS.md`), so a bare `/api` base
+ * makes every call 404. In dev the Vite proxy forwards `/api` to the backend.
  */
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? '/api',
+  baseURL: import.meta.env.VITE_API_URL ?? '/api/v1',
   headers: { 'Content-Type': 'application/json' },
   withCredentials: true,
 })
