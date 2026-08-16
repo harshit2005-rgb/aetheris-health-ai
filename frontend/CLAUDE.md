@@ -6,42 +6,50 @@ You are in the frontend of Aetheris Health AI. The root `../CLAUDE.md` is in eff
 
 ## Stack
 
-- **Framework:** React 18 + Vite
+> Reconciled with the built frontend and team ruling (2026-08-09): React 19,
+> npm, and the `pages/<module>/` layout from `docs/09-PROJECT_STRUCTURE.md`.
+
+- **Framework:** React 19 + Vite
 - **Language:** TypeScript (strict mode)
-- **Styling:** Tailwind CSS (utility-first)
-- **Component library:** Shadcn UI (extend, don't fork)
+- **Styling:** Tailwind CSS v4 (utility-first)
+- **Component library:** shadcn/ui (extend, don't fork)
 - **Server state:** TanStack React Query
 - **Client state:** Zustand (only when React Query isn't enough)
 - **Forms:** React Hook Form + Zod validation
-- **Routing:** React Router v6
+- **Routing:** React Router v7
 - **HTTP:** Axios (wrapped in a typed client)
 - **Testing:** Vitest + Testing Library + Playwright (E2E)
-- **Package manager:** `pnpm`
+- **Package manager:** `npm`
+- **Design language:** "Clinical Glass" (glassmorphism + soft neomorphism, navy
+  `#0A2540` + cyan `#00D4FF`) — an approved override of Spec Part 11's flat
+  mandate. See `docs/17-FRONTEND_BUILD_PLAN.md`.
 
 ---
 
 ## Directory Layout
 
+> Team ruling: follow `docs/09-PROJECT_STRUCTURE.md` (`pages/<module>/`), not the
+> earlier `features/` proposal.
+
 ```
 frontend/src/
-├── api/               # API client, generated types, hooks (React Query)
+├── app/ (or root)     # App.tsx, router.tsx, providers
+├── api/               # axios client + typed React Query hooks per module
 ├── components/
-│   ├── ui/            # Shadcn primitives (Button, Input, Dialog, etc.)
-│   └── shared/        # cross-module components
-├── features/          # one folder per module (auth, patients, appointments...)
-│   └── <module>/
-│       ├── components/
-│       ├── hooks/
-│       ├── pages/
-│       └── schemas/
-├── layouts/           # AppShell, AuthLayout
-├── lib/               # utils, formatters, constants
-├── router/            # route definitions
-├── stores/            # Zustand stores
+│   ├── ui/            # shadcn primitives (Button, Input, Dialog, ...)
+│   ├── layout/        # shell: Sidebar, TopBar, Breadcrumbs, CopilotPanel
+│   ├── charts/        # chart wrappers
+│   └── <shared>/      # brand/, glass/ cross-module UI
+├── layouts/           # DashboardLayout, AuthLayout, PublicLayout
+├── pages/             # one folder per module: patients/ doctors/ billing/ ...
+├── hooks/             # useAuth, usePermissions, usePagination, ...
+├── lib/               # utils, rbac, constants
+├── store/             # Zustand stores
 └── main.tsx
 ```
 
-**Feature folders are self-contained.** A component in `features/patients/` should not import from `features/billing/`. Shared cross-module UI goes to `components/shared/`.
+**Cross-module isolation still applies:** `pages/patients/` should not import from
+`pages/billing/`. Shared cross-module UI goes in `components/`.
 
 ---
 
