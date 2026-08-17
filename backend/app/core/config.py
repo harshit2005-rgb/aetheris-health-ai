@@ -149,6 +149,8 @@ class Settings(BaseSettings):
     RATE_LIMIT_AI_PER_MIN: int = Field(
         default=30, ge=1, description="AI endpoint requests per minute"
     )
+    RATE_LIMIT_HOSPITAL_PER_MIN: int = Field(default=1000, ge=1, description="Requests per minute per hospital (tenant)")
+    RATE_LIMIT_TRUST_PROXY_HEADER: bool = Field(default=False, description="Trust X-Forwarded-For for the client IP. Enable ONLY behind a proxy that overwrites the header, otherwise clients can spoof it and evade the anonymous limit.")
 
     @property
     def is_development(self) -> bool:
