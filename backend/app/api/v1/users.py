@@ -151,6 +151,7 @@ async def invite_user(
         phone=payload.phone,
         role_ids=payload.role_ids,
         actor_permissions=actor_permissions,
+        actor_id=current_user.id,
     )
     roles = [
         {
@@ -226,6 +227,7 @@ async def update_user(
         user_id=uuid.UUID(user_id),
         actor_hospital_id=current_user.hospital_id,
         actor_permissions=actor_permissions,
+        actor_id=current_user.id,
         first_name=payload.first_name,
         last_name=payload.last_name,
         phone=payload.phone,
@@ -297,7 +299,10 @@ async def reactivate_user(
     user_service: UserService = Depends(get_user_service),
 ) -> dict[str, Any]:
     """Reactivate a user."""
-    user = await user_service.reactivate_user(user_id=uuid.UUID(user_id))
+    user = await user_service.reactivate_user(
+        user_id=uuid.UUID(user_id),
+        actor_id=current_user.id,
+    )
     roles = [
         {
             "id": r.role.id,
@@ -329,7 +334,10 @@ async def admin_reset_password(
     auth_service: AuthService = Depends(get_auth_service),
 ) -> dict[str, Any]:
     """Admin-initiated password reset."""
-    await auth_service.admin_reset_password(user_id=uuid.UUID(user_id))
+    await auth_service.admin_reset_password(
+        user_id=uuid.UUID(user_id),
+        actor_id=current_user.id,
+    )
     return success_envelope(
         "Password reset initiated. The user will be required to set a new password on next login."
     )
@@ -376,6 +384,7 @@ async def assign_role(
         user_id=uuid.UUID(user_id),
         role_id=payload.role_id,
         actor_permissions=actor_permissions,
+        actor_id=current_user.id,
     )
     return success_envelope("Role assigned.")
 
@@ -402,6 +411,7 @@ async def remove_role(
         user_id=uuid.UUID(user_id),
         role_id=uuid.UUID(role_id),
         actor_permissions=actor_permissions,
+        actor_id=current_user.id,
     )
     return success_envelope("Role removed.")
 

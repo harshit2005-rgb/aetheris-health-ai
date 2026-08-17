@@ -445,12 +445,11 @@ async def grant_permissions(
     """
     from app.models.permission import Permission
     from app.models.role import Role, RolePermission
-    from app.models.user import UserRole
+    from app.models.user import User, UserRole
 
-    role = Role(id=uuid.uuid4(), hospital_id=hospital_id, name=f"test-role-{uuid.uuid4().hex[:8]}")
-    session.add(role)
-    await session.flush()
-
+    # Resolve every permission row first, because creating one needs a flush and
+    # flushing would make `role` below persistent before its graph is built.
+    permissions: list[Permission] = []
     for code in codes:
         # Permission codes are globally unique and seeded once, so reuse an
         # existing row when the suite has already created it.
@@ -462,10 +461,46 @@ async def grant_permissions(
             )
             session.add(permission)
             await session.flush()
-        session.add(RolePermission(id=uuid.uuid4(), role_id=role.id, permission_id=permission.id))
+        permissions.append(permission)
+
+    # Build the role's graph while it is still *pending*. Touching a collection
+    # on a pending object never emits SQL; on a flushed (persistent) one it
+    # triggers a lazy load, which in async SQLAlchemy raises MissingGreenlet
+    # because plain attribute access cannot await IO.
+    role = Role(id=uuid.uuid4(), hospital_id=hospital_id, name=f"test-role-{uuid.uuid4().hex[:8]}")
+    for permission in permissions:
+        # `permission` is passed as an object, not just an id, so both
+        # `role.role_permissions` and `RolePermission.permission` are correct in
+        # memory as well as on disk.
+        role.role_permissions.append(
+            RolePermission(id=uuid.uuid4(), permission_id=permission.id, permission=permission)
+        )
+    session.add(role)
+    await session.flush()
 
     session.add(UserRole(id=uuid.uuid4(), user_id=user_id, role_id=role.id))
     await session.flush()
+
+    # Re-load the user's role collection so the in-memory graph matches the rows.
+    #
+    # The UserRole above is inserted by raw foreign key, which leaves any
+    # already-cached `User.user_roles` untouched — and `lazy="selectin"` will not
+    # re-read a collection it believes is populated. Callers create the user and
+    # flush it before calling this helper, so by the time a request resolves
+    # permissions the stale value can win.
+    #
+    # The symptom when this is missing: `require_permission` walks
+    # `user.user_roles`, finds it empty, and returns 403 to a user who genuinely
+    # holds the permission. It surfaces only for the second and later users built
+    # within one test, which makes it read as a flake rather than a bug.
+    #
+    # `refresh` rather than `expire`: both fix the staleness, but refresh is
+    # awaited and leaves the attribute *loaded*, so a later plain attribute
+    # access cannot trigger lazy IO and raise MissingGreenlet. Expiring would
+    # simply move the problem to whoever touched it next.
+    user = await session.get(User, user_id)
+    assert user is not None, f"grant_permissions called for unknown user {user_id}"
+    await session.refresh(user, ["user_roles"])
 
 
 @pytest_asyncio.fixture

@@ -12,11 +12,13 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
+from app.core.audit import AuditEvent
 from app.core.exceptions import BusinessRuleError, NotFoundError, PermissionDeniedError
 from app.core.security import hash_password
 from app.models.user import User, UserStatus
 
 if TYPE_CHECKING:
+    from app.core.audit import AuditSink
     from app.database.unit_of_work import UnitOfWork
     from app.repositories.permission_repository import PermissionRepository
     from app.repositories.role_repository import RoleRepository
@@ -33,6 +35,7 @@ class UserService:
     :param role_repo: Repository for role data access.
     :param permission_repo: Repository for permission data access.
     :param auth_service: Auth service for token revocation.
+    :param audit: Where mutating operations are recorded (CLAUDE.md rule 9).
     """
 
     def __init__(
@@ -42,12 +45,14 @@ class UserService:
         permission_repo: PermissionRepository,
         auth_service: AuthService,
         uow: UnitOfWork,
+        audit: AuditSink,
     ) -> None:
         self._user_repo = user_repo
         self._role_repo = role_repo
         self._permission_repo = permission_repo
         self._auth_service = auth_service
         self._uow = uow
+        self._audit = audit
 
     # ── Read ─────────────────────────────────────────────────────────────────
 
@@ -165,6 +170,7 @@ class UserService:
         phone: str | None = None,
         role_ids: list[uuid.UUID] | None = None,
         actor_permissions: list[str] | None = None,
+        actor_id: uuid.UUID | None = None,
     ) -> User:
         """Invite a new user to the system.
 
@@ -178,6 +184,7 @@ class UserService:
         :param phone: Optional phone number.
         :param role_ids: Optional list of initial role UUIDs.
         :param actor_permissions: Permissions of the actor performing the invite.
+        :param actor_id: UUID of the acting user, for the audit trail.
         :returns: The created user instance.
         :raises BusinessRuleError: If the email already exists in the hospital.
         :raises PermissionDeniedError: If the actor doesn't have ``user.create``.
@@ -212,6 +219,15 @@ class UserService:
                 if not await self._user_repo.has_role(user.id, role_id):
                     await self._user_repo.add_role(user.id, role_id)
 
+        await self._audit.record(
+            AuditEvent(
+                action="user.invited",
+                hospital_id=hospital_id,
+                target_type="user",
+                target_id=user.id,
+                actor_id=actor_id,
+            )
+        )
         await self._uow.commit()
         logger.info("user_invited", user_id=str(user.id), hospital_id=str(hospital_id))
         return user
@@ -223,6 +239,7 @@ class UserService:
         user_id: uuid.UUID,
         actor_hospital_id: uuid.UUID | None = None,
         actor_permissions: list[str] | None = None,
+        actor_id: uuid.UUID | None = None,
         **updates: Any,
     ) -> User:
         """Update a user's profile fields.
@@ -230,6 +247,7 @@ class UserService:
         :param user_id: The user's UUID.
         :param actor_hospital_id: The hospital ID of the requesting user.
         :param actor_permissions: Permissions of the actor.
+        :param actor_id: UUID of the acting user, for the audit trail.
         :param updates: Fields to update (first_name, last_name, phone).
         :returns: The updated user instance.
         :raises NotFoundError: If the user doesn't exist.
@@ -246,6 +264,18 @@ class UserService:
 
         if safe_updates:
             user = await self._user_repo.update(user, **safe_updates)
+            await self._audit.record(
+                AuditEvent(
+                    action="user.updated",
+                    hospital_id=user.hospital_id,
+                    target_type="user",
+                    target_id=user.id,
+                    actor_id=actor_id,
+                    # Field *names* only — never values, per the audit PII rule
+                    # (docs/07-SECURITY.md, rule 10).
+                    changes={field: {"before": None, "after": None} for field in safe_updates},
+                )
+            )
             await self._uow.commit()
             logger.info("user_updated", user_id=str(user.id), fields=list(safe_updates.keys()))
 
@@ -265,6 +295,16 @@ class UserService:
 
         if safe_updates:
             user = await self._user_repo.update(user, **safe_updates)
+            await self._audit.record(
+                AuditEvent(
+                    action="user.updated",
+                    hospital_id=user.hospital_id,
+                    target_type="user",
+                    target_id=user.id,
+                    actor_id=user_id,
+                    changes={field: {"before": None, "after": None} for field in safe_updates},
+                )
+            )
             await self._uow.commit()
             logger.info("own_profile_updated", user_id=str(user.id))
 
@@ -293,14 +333,26 @@ class UserService:
         # Revoke all sessions
         await self._auth_service.logout_all(user_id)
 
+        await self._audit.record(
+            AuditEvent(
+                action="user.deactivated",
+                hospital_id=user.hospital_id,
+                target_type="user",
+                target_id=user.id,
+                actor_id=actor_user_id,
+            )
+        )
         await self._uow.commit()
         logger.info("user_deactivated", user_id=str(user_id), actor_id=str(actor_user_id))
         return user
 
-    async def reactivate_user(self, user_id: uuid.UUID) -> User:
+    async def reactivate_user(
+        self, user_id: uuid.UUID, *, actor_id: uuid.UUID | None = None
+    ) -> User:
         """Reactivate a suspended user.
 
         :param user_id: The user's UUID.
+        :param actor_id: UUID of the acting user, for the audit trail.
         :returns: The updated user instance.
         :raises NotFoundError: If the user doesn't exist.
         """
@@ -312,6 +364,15 @@ class UserService:
             user, status=UserStatus.ACTIVE, failed_login_attempts=0, locked_until=None
         )
 
+        await self._audit.record(
+            AuditEvent(
+                action="user.reactivated",
+                hospital_id=user.hospital_id,
+                target_type="user",
+                target_id=user.id,
+                actor_id=actor_id,
+            )
+        )
         await self._uow.commit()
         logger.info("user_reactivated", user_id=str(user_id))
         return user
@@ -323,12 +384,14 @@ class UserService:
         user_id: uuid.UUID,
         role_id: uuid.UUID,
         actor_permissions: list[str] | None = None,
+        actor_id: uuid.UUID | None = None,
     ) -> User:
         """Assign a role to a user.
 
         :param user_id: The user's UUID.
         :param role_id: The role's UUID.
         :param actor_permissions: Permissions of the actor.
+        :param actor_id: UUID of the acting user, for the audit trail.
         :returns: The updated user instance.
         :raises PermissionDeniedError: If the actor doesn't have ``role.assign``.
         :raises NotFoundError: If the user or role doesn't exist.
@@ -355,6 +418,16 @@ class UserService:
         # Revoke refresh tokens to force re-login with new claims
         await self._auth_service.logout_all(user_id)
 
+        await self._audit.record(
+            AuditEvent(
+                action="role.assigned",
+                hospital_id=user.hospital_id,
+                target_type="user",
+                target_id=user.id,
+                actor_id=actor_id,
+                changes={"role_id": {"before": None, "after": str(role_id)}},
+            )
+        )
         await self._uow.commit()
         logger.info("role_assigned", user_id=str(user_id), role_id=str(role_id))
         return user
@@ -364,12 +437,14 @@ class UserService:
         user_id: uuid.UUID,
         role_id: uuid.UUID,
         actor_permissions: list[str] | None = None,
+        actor_id: uuid.UUID | None = None,
     ) -> User:
         """Remove a role from a user.
 
         :param user_id: The user's UUID.
         :param role_id: The role's UUID.
         :param actor_permissions: Permissions of the actor.
+        :param actor_id: UUID of the acting user, for the audit trail.
         :returns: The updated user instance.
         :raises PermissionDeniedError: If the actor doesn't have ``role.assign``.
         :raises NotFoundError: If the user doesn't exist.
@@ -384,6 +459,16 @@ class UserService:
         removed = await self._user_repo.remove_role(user_id, role_id)
         if removed:
             await self._auth_service.logout_all(user_id)
+            await self._audit.record(
+                AuditEvent(
+                    action="role.removed",
+                    hospital_id=user.hospital_id,
+                    target_type="user",
+                    target_id=user.id,
+                    actor_id=actor_id,
+                    changes={"role_id": {"before": str(role_id), "after": None}},
+                )
+            )
             await self._uow.commit()
             logger.info("role_removed", user_id=str(user_id), role_id=str(role_id))
 

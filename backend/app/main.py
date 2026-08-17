@@ -18,7 +18,17 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api.v1 import auth_router, health_router, patient_router, user_router
+from app.api.v1 import (
+    appointment_router,
+    auth_router,
+    department_router,
+    doctor_router,
+    health_router,
+    patient_router,
+    permission_router,
+    role_router,
+    user_router,
+)
 from app.core.config import settings
 from app.core.constants import API_DOCS_URL, API_OPENAPI_URL, API_REDOC_URL, API_V1_PREFIX
 from app.core.error_codes import ErrorCode
@@ -155,6 +165,36 @@ def _register_routers(app: FastAPI) -> None:
     # Patient management routes
     app.include_router(
         patient_router,
+        prefix=API_V1_PREFIX,
+    )
+
+    # Department routes (Hospital Settings module, feature 17.2)
+    app.include_router(
+        department_router,
+        prefix=API_V1_PREFIX,
+    )
+
+    # Doctor management routes
+    app.include_router(
+        doctor_router,
+        prefix=API_V1_PREFIX,
+    )
+
+    # Appointment management routes
+    app.include_router(
+        appointment_router,
+        prefix=API_V1_PREFIX,
+    )
+
+    # Roles & Permissions routes (read-only catalog in MVP)
+    app.include_router(
+        role_router,
+        prefix=API_V1_PREFIX,
+    )
+
+    # Permissions catalog routes (read-only)
+    app.include_router(
+        permission_router,
         prefix=API_V1_PREFIX,
     )
 

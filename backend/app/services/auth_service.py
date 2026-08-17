@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 
+from app.core.audit import AuditEvent
 from app.core.config import settings
 from app.core.exceptions import (
     AccountLockedError,
@@ -39,6 +40,7 @@ from app.models.user import User, UserStatus
 if TYPE_CHECKING:
     from typing import Any
 
+    from app.core.audit import AuditSink
     from app.database.unit_of_work import UnitOfWork
     from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
     from app.repositories.refresh_token_repository import RefreshTokenRepository
@@ -53,6 +55,7 @@ class AuthService:
     :param user_repo: Repository for user data access.
     :param refresh_token_repo: Repository for refresh token data access.
     :param password_reset_repo: Repository for password reset token data access.
+    :param audit: Where mutating operations are recorded (CLAUDE.md rule 9).
     """
 
     def __init__(
@@ -61,11 +64,13 @@ class AuthService:
         refresh_token_repo: RefreshTokenRepository,
         password_reset_repo: PasswordResetTokenRepository,
         uow: UnitOfWork,
+        audit: AuditSink,
     ) -> None:
         self._user_repo = user_repo
         self._refresh_token_repo = refresh_token_repo
         self._password_reset_repo = password_reset_repo
         self._uow = uow
+        self._audit = audit
 
     # ── Login ────────────────────────────────────────────────────────────────
 
@@ -100,6 +105,16 @@ class AuthService:
 
         # Step 3: Verify password
         if not verify_password(password, user.password_hash):
+            await self._audit.record(
+                AuditEvent(
+                    action="auth.login.failed",
+                    hospital_id=user.hospital_id,
+                    target_type="user",
+                    target_id=user.id,
+                    actor_id=user.id,
+                    context={"reason": "invalid_password"},
+                )
+            )
             await self._handle_failed_login(user)
             raise AuthenticationError("Invalid credentials.")
 
@@ -128,7 +143,17 @@ class AuthService:
             }
 
         # Step 8: Issue tokens
-        return await self._issue_tokens(user, device_info, ip_address)
+        result = await self._issue_tokens(user, device_info, ip_address)
+        await self._audit.record(
+            AuditEvent(
+                action="auth.login.success",
+                hospital_id=user.hospital_id,
+                target_type="user",
+                target_id=user.id,
+                actor_id=user.id,
+            )
+        )
+        return result
 
     async def verify_mfa(
         self,
@@ -164,6 +189,16 @@ class AuthService:
             raise AuthenticationError("MFA is not configured for this user.")
 
         if not verify_totp_code(user.mfa_secret, code):
+            await self._audit.record(
+                AuditEvent(
+                    action="auth.login.failed",
+                    hospital_id=user.hospital_id,
+                    target_type="user",
+                    target_id=user.id,
+                    actor_id=user.id,
+                    context={"reason": "invalid_mfa_code"},
+                )
+            )
             logger.info("mfa_verification_failed", user_id=str(user.id))
             raise AuthenticationError("Invalid MFA code.")
 
@@ -171,7 +206,17 @@ class AuthService:
         await self._user_repo.record_login(user)
 
         # Issue tokens
-        return await self._issue_tokens(user, device_info, ip_address)
+        result = await self._issue_tokens(user, device_info, ip_address)
+        await self._audit.record(
+            AuditEvent(
+                action="auth.login.success",
+                hospital_id=user.hospital_id,
+                target_type="user",
+                target_id=user.id,
+                actor_id=user.id,
+            )
+        )
+        return result
 
     # ── Token Management ─────────────────────────────────────────────────────
 
@@ -204,6 +249,20 @@ class AuthService:
                 token_id=str(stored_token.id),
                 user_id=str(stored_token.user_id),
             )
+            # Reuse detection needs the hospital for the audit trail. The user
+            # row is fetched here because the event carries tenant context that
+            # the token row alone does not.
+            owner = await self._user_repo.get_by_id(stored_token.user_id)
+            if owner is not None:
+                await self._audit.record(
+                    AuditEvent(
+                        action="auth.token.reuse_detected",
+                        hospital_id=owner.hospital_id,
+                        target_type="user",
+                        target_id=owner.id,
+                        actor_id=None,
+                    )
+                )
             await self._refresh_token_repo.revoke_all_for_user(stored_token.user_id)
             raise AuthenticationError("Refresh token has been revoked. All sessions invalidated.")
 
@@ -262,6 +321,15 @@ class AuthService:
 
         if stored_token is not None and not stored_token.is_revoked:
             await self._refresh_token_repo.revoke(stored_token)
+            await self._audit.record(
+                AuditEvent(
+                    action="auth.logout",
+                    hospital_id=stored_token.user.hospital_id,
+                    target_type="user",
+                    target_id=stored_token.user_id,
+                    actor_id=stored_token.user_id,
+                )
+            )
             logger.info(
                 "token_revoked", token_id=str(stored_token.id), user_id=str(stored_token.user_id)
             )
@@ -306,6 +374,15 @@ class AuthService:
             expires_at=expires_at,
         )
 
+        await self._audit.record(
+            AuditEvent(
+                action="auth.password.reset_requested",
+                hospital_id=user.hospital_id,
+                target_type="user",
+                target_id=user.id,
+                actor_id=user.id,
+            )
+        )
         await self._uow.commit()
         logger.info("password_reset_token_created", user_id=str(user.id))
 
@@ -354,6 +431,15 @@ class AuthService:
         # Revoke all refresh tokens (force re-login)
         await self._refresh_token_repo.revoke_all_for_user(user.id)
 
+        await self._audit.record(
+            AuditEvent(
+                action="auth.password.reset",
+                hospital_id=user.hospital_id,
+                target_type="user",
+                target_id=user.id,
+                actor_id=user.id,
+            )
+        )
         await self._uow.commit()
         logger.info("password_reset_completed", user_id=str(user.id))
 
@@ -393,13 +479,25 @@ class AuthService:
         # (We don't have a "current session" concept, so we revoke all for now.)
         await self._refresh_token_repo.revoke_all_for_user(user.id)
 
+        await self._audit.record(
+            AuditEvent(
+                action="auth.password.changed",
+                hospital_id=user.hospital_id,
+                target_type="user",
+                target_id=user.id,
+                actor_id=user.id,
+            )
+        )
         await self._uow.commit()
         logger.info("password_changed", user_id=str(user.id))
 
-    async def admin_reset_password(self, user_id: uuid.UUID) -> None:
+    async def admin_reset_password(
+        self, user_id: uuid.UUID, *, actor_id: uuid.UUID | None = None
+    ) -> None:
         """Admin-initiated password reset (sets password_change_required).
 
         :param user_id: The target user's UUID.
+        :param actor_id: UUID of the admin performing the reset, for the audit trail.
         :raises AuthenticationError: If the user is not found.
         """
         user = await self._user_repo.get_by_id(user_id)
@@ -416,8 +514,21 @@ class AuthService:
         # Revoke all sessions
         await self._refresh_token_repo.revoke_all_for_user(user.id)
 
+        await self._audit.record(
+            AuditEvent(
+                action="auth.password.admin_reset",
+                hospital_id=user.hospital_id,
+                target_type="user",
+                target_id=user.id,
+                actor_id=actor_id,
+            )
+        )
         await self._uow.commit()
-        logger.info("admin_password_reset", user_id=str(user_id))
+        logger.info(
+            "admin_password_reset",
+            user_id=str(user_id),
+            actor_id=str(actor_id) if actor_id else None,
+        )
 
     # ── MFA ─────────────────────────────────────────────────────────────────
 
@@ -443,6 +554,15 @@ class AuthService:
         # before we enable MFA.
         await self._user_repo.update(user, mfa_secret=secret)
 
+        await self._audit.record(
+            AuditEvent(
+                action="auth.mfa.enrollment_initiated",
+                hospital_id=user.hospital_id,
+                target_type="user",
+                target_id=user.id,
+                actor_id=user.id,
+            )
+        )
         logger.info("mfa_enrollment_initiated", user_id=str(user.id))
 
         return {
@@ -471,6 +591,15 @@ class AuthService:
             mfa_enabled=True,
         )
 
+        await self._audit.record(
+            AuditEvent(
+                action="auth.mfa.enrolled",
+                hospital_id=user.hospital_id,
+                target_type="user",
+                target_id=user.id,
+                actor_id=user.id,
+            )
+        )
         await self._uow.commit()
         logger.info("mfa_enabled", user_id=str(user.id))
 
@@ -498,6 +627,15 @@ class AuthService:
             mfa_enabled=False,
         )
 
+        await self._audit.record(
+            AuditEvent(
+                action="auth.mfa.disabled",
+                hospital_id=user.hospital_id,
+                target_type="user",
+                target_id=user.id,
+                actor_id=user.id,
+            )
+        )
         await self._uow.commit()
         logger.info("mfa_disabled", user_id=str(user.id))
 
@@ -522,10 +660,30 @@ class AuthService:
         :raises AuthenticationError: If the account has no usable credential.
         """
         if user.status == UserStatus.SUSPENDED:
+            await self._audit.record(
+                AuditEvent(
+                    action="auth.login.failed",
+                    hospital_id=user.hospital_id,
+                    target_type="user",
+                    target_id=user.id,
+                    actor_id=user.id,
+                    context={"reason": "suspended"},
+                )
+            )
             logger.info("login_attempt_suspended_account", user_id=str(user.id))
             raise AccountSuspendedError
 
         if user.locked_until and datetime.now(UTC) < user.locked_until:
+            await self._audit.record(
+                AuditEvent(
+                    action="auth.login.failed",
+                    hospital_id=user.hospital_id,
+                    target_type="user",
+                    target_id=user.id,
+                    actor_id=user.id,
+                    context={"reason": "locked"},
+                )
+            )
             logger.info(
                 "login_attempt_locked_account",
                 user_id=str(user.id),

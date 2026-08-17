@@ -26,6 +26,8 @@ This is the "settings backbone" the rest of the platform reads from.
 - Feature flags per hospital (enable/disable optional modules)
 - Superadmin-only hospital provisioning
 - Hospital admin can edit their own hospital's settings
+- Departments (organisational units: Cardiology, Radiology, Emergency) — CRUD,
+  and the assignment target for doctors (feature 5.2)
 
 ### In Scope (v2.1+)
 - Multi-branch support (one hospital, multiple physical locations)
@@ -65,6 +67,10 @@ Superadmin is a platform-level role (not tied to a hospital). Only Superadmin ca
 8. Only Superadmin can toggle feature flags that gate paid features (e.g., AI beyond free tier).
 9. `working_hours` are informational for staff scheduling and appointment slotting; enforcement lives in Appointment Management.
 10. Branding assets (logo) are stored in object storage; only their URLs live in the DB.
+11. Department `code` and `name` are **unique per hospital**, compared case-insensitively. `code` is normalised to uppercase on write.
+12. A department is **never hard-deleted**. Deactivation is a soft delete, so historical doctor and appointment references stay resolvable.
+13. A department **cannot be deactivated while active doctors are assigned to it**. The caller reassigns or deactivates those doctors first.
+14. Departments are strictly tenant-scoped. A department belongs to exactly one hospital and is never shared across tenants.
 
 ---
 
@@ -153,12 +159,16 @@ Indexes: `slug` (unique), `is_active` (partial index for active hospitals).
 |--------|------|-------------|
 | id | UUID | PK |
 | hospital_id | UUID | FK hospitals.id, NOT NULL |
-| day_of_week | SMALLINT | NOT NULL, 0=Sunday..6=Saturday |
+| day_of_week | SMALLINT | NOT NULL, 0=Monday..6=Sunday |
 | open_time | TIME | NULL (NULL = closed that day) |
 | close_time | TIME | NULL |
 | is_24h | BOOLEAN | NOT NULL, default false |
 
 Unique constraint: `(hospital_id, day_of_week)`.
+
+Monday=0 aligns this with `doctor_availability.day_of_week`
+(`05-DATABASE_DESIGN.md` §2.9), Python's `date.weekday()`, and ISO 8601 — so
+scheduling code never needs a translation table between the two.
 
 ### Table: `hospital_feature_flags`
 
@@ -187,6 +197,30 @@ Well-known flag keys (documented in `/backend/app/core/feature_flags.py`):
 
 Every mutation to `hospitals` row creates one row here with before/after JSON. Immutable (see Audit Logs module).
 
+### Table: `departments`
+
+Canonical definition lives in `05-DATABASE_DESIGN.md` §2.23; repeated here
+because departments are configured from the hospital settings surface.
+
+| Column | Type | Constraints |
+|--------|------|-------------|
+| id | UUID | PK |
+| hospital_id | UUID | FK hospitals.id, NOT NULL |
+| code | VARCHAR(20) | NOT NULL, uppercase, unique per hospital |
+| name | VARCHAR(150) | NOT NULL, unique per hospital (case-insensitive) |
+| description | TEXT | NULL |
+| phone_extension | VARCHAR(10) | NULL |
+| email | VARCHAR(200) | NULL |
+| location | VARCHAR(150) | NULL |
+| + audit + soft-delete columns | | |
+
+Unique constraints: `(hospital_id, code)`, `(hospital_id, lower(name))`.
+Check constraint: `ck_departments_code_format`.
+
+`head_doctor_id UUID FK doctors.id NULL` is added by a follow-up migration in
+the Doctor Management module — `doctors` does not exist when this table is
+created, and the reference runs both ways.
+
 ---
 
 ## 9. API Design
@@ -213,6 +247,15 @@ Every mutation to `hospitals` row creates one row here with before/after JSON. I
 - `POST /api/v1/admin/hospitals/{id}/reactivate` → reactivate.
 - `PUT /api/v1/admin/hospitals/{id}/feature-flags/{flag_key}` → toggle a flag.
 
+### Departments
+
+- `POST /api/v1/departments` → create. 409 on duplicate `code` or `name`.
+- `GET /api/v1/departments` → list / search (`q`, `include_inactive`, paginated).
+- `GET /api/v1/departments/{id}` → read one.
+- `PATCH /api/v1/departments/{id}` → partial update.
+- `DELETE /api/v1/departments/{id}` → soft-deactivate. 409 while doctors are assigned.
+- `POST /api/v1/departments/{id}/activate` → reactivate.
+
 All endpoints follow the standard response envelope (see `06-API_STANDARDS.md`).
 
 ---
@@ -228,6 +271,10 @@ All endpoints follow the standard response envelope (see `06-API_STANDARDS.md`).
 | `platform.hospital.provision` | Create new hospitals | Superadmin only |
 | `platform.hospital.deactivate` | Deactivate hospitals | Superadmin only |
 | `platform.feature_flags.toggle` | Toggle any hospital's flags | Superadmin only |
+| `department.read` | List and read departments | All authenticated |
+| `department.create` | Create departments | Hospital Admin |
+| `department.update` | Edit and reactivate departments | Hospital Admin |
+| `department.delete` | Deactivate departments | Hospital Admin |
 
 ---
 
@@ -244,6 +291,11 @@ All endpoints follow the standard response envelope (see `06-API_STANDARDS.md`).
 - `gst_rate`: 0.00–100.00.
 - Working hours: `close_time > open_time` unless `is_24h = true`.
 - Logo file: PNG/JPG/SVG only, ≤ 2 MB, dimensions ≤ 1024×1024 (validated server-side after upload).
+- `department.code`: `^[A-Z0-9][A-Z0-9_-]{1,19}$`, uppercase-normalised on write, unique per hospital (case-insensitive).
+- `department.name`: 2–150 chars, non-blank, unique per hospital (case-insensitive).
+- `department.email`: RFC 5322 subset. Optional.
+- `department.phone_extension`: 1–10 chars, digits and `-` only. Optional.
+- `department.location`: ≤ 150 chars. Optional.
 
 ---
 
@@ -301,6 +353,7 @@ No AI writes to this table without human approval. Configuration is too critical
 - **Notifications**: reads `hospital_name`, `logo_url` for email/SMS templates.
 - **Reports & Dashboard**: reads branding for PDF exports.
 - **AI Assistant**: reads feature flags (`ai.assistant.enabled`, `ai.mcp.enabled`) and hospital budget.
+- **Doctor Management**: doctors are assigned to a department (`doctors.department_id`). A department cannot be deactivated while it has active doctors; Doctor Management supplies that assignment count.
 
 ---
 
@@ -314,22 +367,27 @@ No AI writes to this table without human approval. Configuration is too critical
 - Currency validation.
 - Working hours validation (24h vs specific times).
 - Feature flag evaluation with defaults.
+- Department `code` normalisation and format validation.
+- Department deactivation guard: blocks with assigned doctors, clears without.
 
 ### Repository tests
 - Hospital CRUD.
 - `get_current_hospital(user_id)` returns correct row.
 - Feature flag upsert.
+- Department CRUD, case-insensitive uniqueness, `hospital_id` filtering on every method.
 
 ### API tests
 - Superadmin can provision; Hospital Admin cannot.
 - Hospital Admin can PATCH allowed fields; cannot PATCH slug/timezone/currency.
 - Deactivation invalidates refresh tokens.
 - 404 when hospital not found; 403 when accessing another hospital.
+- Department CRUD happy paths; 409 on duplicate `code`/`name`; 409 on deactivating a department with assigned doctors; cross-tenant read returns 404.
 
 ### Integration tests
 - **Multi-tenant isolation**: create Hospital A and B, create patients in each, verify Hospital A's admin cannot query Hospital B's patients even by direct ID.
 - Provisioning creates initial admin, default roles, default templates in one transaction.
 - Rollback: force failure mid-provisioning, verify no orphan rows.
+- Department lifecycle: create → read → update → search → deactivate → reactivate.
 
 ### E2E tests
 - Full Superadmin provisioning flow → new hospital admin receives email → sets password → logs in → sees their hospital.
@@ -347,6 +405,8 @@ No AI writes to this table without human approval. Configuration is too critical
 6. Logo upload, branding preview, and letterhead render correctly in generated PDF invoice.
 7. Changing MRN pattern affects only subsequent patient creations; existing MRNs unchanged.
 8. All configuration changes appear in `hospital_settings_history` and in the audit log.
+9. Departments can be created, listed, searched, updated, deactivated and reactivated within a hospital, and are invisible to every other hospital.
+10. A department with active doctors assigned cannot be deactivated; the attempt returns 409 naming the blocking assignments.
 
 ---
 
