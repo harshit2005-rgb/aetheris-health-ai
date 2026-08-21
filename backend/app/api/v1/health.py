@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.dependencies import get_db_session
 from app.core.config import settings
+from app.core.redis import ping_redis
 
 router = APIRouter(tags=["health"])
 
@@ -101,8 +102,13 @@ async def readiness(
         checks["database"] = f"unhealthy: {exc!s}"
         all_healthy = False
 
-    # ── Redis check (placeholder — will be implemented in Sprint 3) ───
-    checks["redis"] = "not_configured"
+    # ── Redis check ───────────────────────────────────────────────────
+    # Redis backs the rate-limit counters (docs/06-API_STANDARDS.md §15), which
+    # degrade to per-process counting when it is unavailable. Its state is
+    # reported honestly, but it deliberately does NOT fail readiness: pulling
+    # every pod out of rotation over an optional dependency would convert a
+    # degraded limiter into a full outage.
+    checks["redis"] = "healthy" if await ping_redis() else "unhealthy"
 
     if not all_healthy:
         raise HTTPException(
@@ -152,12 +158,16 @@ async def health(
         checks["database"] = f"unhealthy: {exc!s}"
         all_healthy = False
 
-    # ── Redis check (placeholder) ─────────────────────────────────────
-    checks["redis"] = "not_configured"
+    # ── Redis check ───────────────────────────────────────────────────
+    # Optional infrastructure: rate limiting falls back to per-process counting
+    # without it. It downgrades the reported status but does not make the
+    # service unhealthy — see the readiness endpoint above for the reasoning.
+    redis_healthy = await ping_redis()
+    checks["redis"] = "healthy" if redis_healthy else "unhealthy"
 
     # ── Summary ───────────────────────────────────────────────────────
     response: dict[str, Any] = {
-        "status": "healthy" if all_healthy else "degraded",
+        "status": "healthy" if all_healthy and redis_healthy else "degraded",
         "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "app": settings.APP_NAME,
         "version": "0.1.0",
