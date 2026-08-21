@@ -6,6 +6,7 @@ Every rule is enforced here, never in the route layer.
 
 from __future__ import annotations
 
+import hashlib
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -18,6 +19,7 @@ from app.core.config import settings
 from app.core.exceptions import (
     AuthenticationError,
     BusinessRuleError,
+    NotFoundError,
 )
 from app.core.security import (
     create_access_token,
@@ -94,8 +96,12 @@ class AuthService:
         user = await self._find_user_by_email(email)
 
         if user is None:
-            # Generic error — don't reveal whether the email exists
-            logger.info("login_attempt_nonexistent_email", email=email)
+            # Generic error — don't reveal whether the email exists, and never
+            # log the raw address (PII, CLAUDE.md security rule 10 — B3).
+            logger.info(
+                "login_attempt_nonexistent_email",
+                email_hash=self._email_discriminator(email),
+            )
             raise AuthenticationError("Invalid credentials.")
 
         # Step 2: Check account status
@@ -357,7 +363,12 @@ class AuthService:
         # Don't reveal whether the email exists — always return success.
         user = await self._find_user_by_email(email)
         if user is None:
-            logger.info("password_reset_requested_nonexistent_email", email=email)
+            # Never log the raw address (PII — B3); a stable hash prefix is
+            # enough to correlate support cases without storing the email.
+            logger.info(
+                "password_reset_requested_nonexistent_email",
+                email_hash=self._email_discriminator(email),
+            )
             return
 
         # Generate token
@@ -411,14 +422,18 @@ class AuthService:
         if user is None:
             raise AuthenticationError("User not found.")
 
-        # Update password
+        # Update password. An invite token (B6) also flips the account from
+        # INVITED to ACTIVE — this is the activation seam the invite flow
+        # needs; email delivery itself belongs to the Notifications module.
         now = datetime.now(UTC)
         new_hash = hash_password(new_password)
-        await self._user_repo.update(
-            user,
-            password_hash=new_hash,
-            password_changed_at=now,
-        )
+        updates: dict[str, Any] = {
+            "password_hash": new_hash,
+            "password_changed_at": now,
+        }
+        if user.status == UserStatus.INVITED:
+            updates["status"] = UserStatus.ACTIVE
+        await self._user_repo.update(user, **updates)
 
         # Mark token as used
         await self._password_reset_repo.mark_as_used(token)
@@ -490,17 +505,28 @@ class AuthService:
         logger.info("password_changed", user_id=str(user.id))
 
     async def admin_reset_password(
-        self, user_id: uuid.UUID, *, actor_id: uuid.UUID | None = None
+        self,
+        user_id: uuid.UUID,
+        *,
+        actor_id: uuid.UUID | None = None,
+        actor_hospital_id: uuid.UUID | None = None,
     ) -> None:
         """Admin-initiated password reset (sets password_change_required).
 
         :param user_id: The target user's UUID.
         :param actor_id: UUID of the admin performing the reset, for the audit trail.
-        :raises AuthenticationError: If the user is not found.
+        :param actor_hospital_id: The acting admin's hospital. A target user
+            from another hospital is treated as not found (B1 — tenant
+            isolation on every admin write path).
+        :raises NotFoundError: If the user is not found or belongs to another
+            hospital. 404 — not 401 — so a cross-tenant UUID is
+            indistinguishable from one that does not exist.
         """
         user = await self._user_repo.get_by_id(user_id)
-        if user is None:
-            raise AuthenticationError("User not found.")
+        if user is None or (
+            actor_hospital_id is not None and user.hospital_id != actor_hospital_id
+        ):
+            raise NotFoundError("User not found.")
 
         # Set a random password to invalidate the current one, and mark as change required
         await self._user_repo.update(
@@ -638,6 +664,19 @@ class AuthService:
         logger.info("mfa_disabled", user_id=str(user.id))
 
     # ── Internal Helpers ────────────────────────────────────────────────────
+
+    @staticmethod
+    def _email_discriminator(email: str) -> str:
+        """Return a non-reversible, PII-safe log discriminator for an email.
+
+        The lowercased address is hashed with SHA-256 and only the first 16
+        hex chars are kept — enough to correlate a support case, not enough
+        to recover the address (CLAUDE.md security rule 10 — B3).
+
+        :param email: The raw email address.
+        :returns: A 16-char hex digest.
+        """
+        return hashlib.sha256(email.strip().lower().encode("utf-8")).hexdigest()[:16]
 
     async def _find_user_by_email(self, email: str) -> User | None:
         """Find a user by email across all hospitals.

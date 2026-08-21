@@ -138,6 +138,9 @@ class Settings(BaseSettings):
     MAX_FAILED_LOGIN_ATTEMPTS: int = Field(default=5, ge=1, le=20, description="Max failed attempts before lockout")
     ACCOUNT_LOCKOUT_MINUTES: int = Field(default=30, ge=1, le=1440, description="Account lockout duration in minutes")
     PASSWORD_RESET_TOKEN_TTL_MINUTES: int = Field(default=30, ge=5, le=1440, description="Password reset token lifetime in minutes")
+    INVITE_TOKEN_TTL_HOURS: int = Field(
+        default=72, ge=1, le=720, description="Invitation token lifetime in hours (B6 invite seam)"
+    )
 
     # ── Rate Limiting ──────────────────────────────────────────────────────
     RATE_LIMIT_ANON_PER_MIN: int = Field(

@@ -15,6 +15,7 @@ import pytest
 from app.core.exceptions import (
     AuthenticationError,
     BusinessRuleError,
+    NotFoundError,
 )
 from app.core.security import hash_password
 from app.models.user import User, UserStatus
@@ -290,6 +291,94 @@ class TestPasswordReset:
                 new_password="weak",
             )
 
+    async def test_reset_password_activates_an_invited_user(
+        self: Any,
+        auth_service: Any,
+        mock_user_repo: Any,
+        mock_password_reset_repo: Any,
+    ) -> None:
+        """B6: consuming an invite token flips INVITED -> ACTIVE."""
+        from app.models.password_reset_token import PasswordResetToken
+
+        user = _make_user({"status": UserStatus.INVITED})
+        mock_user_repo.get_by_id.return_value = user
+
+        token = MagicMock(spec=PasswordResetToken)
+        token.id = uuid.uuid4()
+        token.user_id = user.id
+        mock_password_reset_repo.get_valid_token.return_value = token
+
+        async def _update_in_place(instance: Any, **kwargs: Any) -> Any:
+            for key, value in kwargs.items():
+                setattr(instance, key, value)
+            return instance
+
+        mock_user_repo.update.side_effect = _update_in_place
+
+        await auth_service.reset_password(
+            raw_token="invite-token", new_password="Str0ng!Passw0rd123"
+        )
+
+        assert user.status == UserStatus.ACTIVE
+        assert user.password_changed_at is not None
+        mock_password_reset_repo.mark_as_used.assert_called_once_with(token)
+
+    async def test_reset_password_keeps_active_status_active(
+        self: Any, auth_service: Any, mock_user_repo: Any, mock_password_reset_repo: Any
+    ) -> None:
+        """B6: a plain reset on an ACTIVE user leaves the status unchanged."""
+        from app.models.password_reset_token import PasswordResetToken
+
+        user = _make_user({"status": UserStatus.ACTIVE})
+        mock_user_repo.get_by_id.return_value = user
+
+        token = MagicMock(spec=PasswordResetToken)
+        token.id = uuid.uuid4()
+        token.user_id = user.id
+        mock_password_reset_repo.get_valid_token.return_value = token
+
+        async def _update_in_place(instance: Any, **kwargs: Any) -> Any:
+            for key, value in kwargs.items():
+                setattr(instance, key, value)
+            return instance
+
+        mock_user_repo.update.side_effect = _update_in_place
+
+        await auth_service.reset_password(
+            raw_token="reset-token", new_password="Str0ng!Passw0rd123"
+        )
+
+        assert user.status == UserStatus.ACTIVE
+
+    async def test_admin_reset_cross_tenant_is_not_found(
+        self: Any, auth_service: Any, mock_user_repo: Any
+    ) -> None:
+        """B1: an admin cannot reset another hospital's user (404, like every
+        other cross-tenant admin write — never 401, which would leak that the
+        user exists elsewhere)."""
+        user = _make_user()
+        mock_user_repo.get_by_id.return_value = user
+
+        with pytest.raises(NotFoundError, match="User not found."):
+            await auth_service.admin_reset_password(
+                user_id=user.id,
+                actor_hospital_id=uuid.uuid4(),  # different hospital
+            )
+
+    async def test_admin_reset_same_hospital_succeeds(
+        self: Any, auth_service: Any, mock_user_repo: Any, mock_refresh_token_repo: Any
+    ) -> None:
+        """B1: same-hospital admin reset still works."""
+        user = _make_user()
+        mock_user_repo.get_by_id.return_value = user
+
+        await auth_service.admin_reset_password(
+            user_id=user.id,
+            actor_hospital_id=user.hospital_id,
+        )
+
+        mock_refresh_token_repo.revoke_all_for_user.assert_called_once_with(user.id)
+
 
 # ── MFA Tests ──────────────────────────────────────────────────────────────
 
@@ -310,3 +399,29 @@ class TestMFA:
         assert "secret" in result
         assert "provisioning_uri" in result
         mock_user_repo.update.assert_called_once()
+
+
+# ── PII / Logging Tests ────────────────────────────────────────────────────
+
+
+class TestLogDiscriminator:
+    """B3: raw email addresses never reach the logs."""
+
+    async def test_discriminator_is_stable_and_non_reversible(self: Any, auth_service: Any) -> None:
+        """Same email hashes identically; different emails differ."""
+        assert auth_service._email_discriminator(
+            "User@Example.com"
+        ) == auth_service._email_discriminator("user@example.com")
+        assert auth_service._email_discriminator("a@b.co") != auth_service._email_discriminator(
+            "c@d.co"
+        )
+
+    async def test_discriminator_contains_no_email_parts(self: Any, auth_service: Any) -> None:
+        """The hash prefix cannot leak any part of the address."""
+        email = "patient.one@hospital.example"
+        digest = auth_service._email_discriminator(email)
+
+        assert len(digest) == 16
+        assert all(c in "0123456789abcdef" for c in digest)
+        assert "patient" not in digest
+        assert "hospital" not in digest
