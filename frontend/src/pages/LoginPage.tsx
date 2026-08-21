@@ -61,13 +61,13 @@ export default function LoginPage() {
           'demo-access-token',
         )
       } else {
-        // Real login: server sets the HTTP-only refresh cookie and returns the
-        // access token + user (with permission codes) in the standard envelope.
+        // Real login: server returns access_token + refresh_token + user
+        // in the standard envelope. Both tokens are stored in memory.
         const { data } = await api.post('/auth/login', {
           email: values.email,
           password: values.password,
         })
-        setAuth(data.data.user, data.data.access_token)
+        setAuth(data.data.user, data.data.access_token, data.data.refresh_token)
       }
       toast.success('Welcome back')
       navigate(from, { replace: true })
@@ -162,9 +162,12 @@ export default function LoginPage() {
               />
               Remember me
             </label>
-            <a href="#" className="font-body text-body-sm text-secondary hover:underline">
+            <Link
+              to="/forgot-password"
+              className="font-body text-body-sm text-secondary hover:underline"
+            >
               Forgot password?
-            </a>
+            </Link>
           </div>
 
           <button
