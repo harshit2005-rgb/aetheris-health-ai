@@ -13,7 +13,6 @@ row back can.
 from __future__ import annotations
 
 import uuid
-from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import pytest
@@ -182,12 +181,13 @@ class TestFailedLoginLockout:
         assert attempts >= settings.MAX_FAILED_LOGIN_ATTEMPTS
         assert locked_until is not None
 
-    async def test_a_locked_account_returns_403_with_the_unlock_time(
+    async def test_a_locked_account_login_is_a_generic_401(
         self, api: AsyncClient, account: dict[str, Any]
     ) -> None:
-        # docs/modules/01-authentication.md §5.2: a lockout is reported as 403
-        # ACCOUNT_LOCKED with the unlock time, not as generic invalid
-        # credentials — the user needs to know when they can retry.
+        # Anti-enumeration (docs/07-SECURITY.md rule 10): a locked account must
+        # look exactly like invalid credentials — a 403 ACCOUNT_LOCKED with an
+        # unlock time would confirm the email is a real account. The lockout
+        # itself still happens; only the response is generic.
         from app.core.config import settings
 
         for _ in range(settings.MAX_FAILED_LOGIN_ATTEMPTS):
@@ -200,16 +200,18 @@ class TestFailedLoginLockout:
             "/api/v1/auth/login", json={"email": account["email"], "password": PASSWORD}
         )
 
-        assert response.status_code == 403
+        assert response.status_code == 401
         body = response.json()
         assert body["success"] is False
-        assert body["error_code"] == "ACCOUNT_LOCKED"
-        assert body["message"] == "Account is locked."
-        assert "unlock_at" in body["errors"]
+        assert body["error_code"] == "AUTHENTICATION_REQUIRED"
+        assert body["message"] == "Invalid credentials."
+        assert body["errors"] is None
 
-    async def test_the_unlock_time_is_an_iso_8601_utc_instant_in_the_future(
+    async def test_a_locked_account_response_leaks_no_account_state(
         self, api: AsyncClient, account: dict[str, Any]
     ) -> None:
+        # The unlock instant must never reach the caller — that is exactly the
+        # signal an attacker would use to confirm a valid email address.
         from app.core.config import settings
 
         for _ in range(settings.MAX_FAILED_LOGIN_ATTEMPTS):
@@ -222,20 +224,19 @@ class TestFailedLoginLockout:
             "/api/v1/auth/login", json={"email": account["email"], "password": PASSWORD}
         )
 
-        unlock_at = response.json()["errors"]["unlock_at"]
-        # docs/06-API_STANDARDS.md §17: ISO 8601 with an explicit zone. A naive
-        # timestamp would leave the client guessing which clock it refers to.
-        assert unlock_at.endswith("Z"), unlock_at
-        parsed = datetime.fromisoformat(unlock_at.replace("Z", "+00:00"))
-        assert parsed.tzinfo is not None
-        now = datetime.now(UTC)
-        assert now < parsed <= now + timedelta(minutes=settings.ACCOUNT_LOCKOUT_MINUTES + 1)
+        body = response.json()
+        assert "unlock_at" not in body
+        # The generic envelope always yields errors=None; guard the None case
+        # before the membership check so this cannot raise a TypeError.
+        errors = body.get("errors")
+        assert errors is None or "unlock_at" not in errors
+        assert body["error_code"] == "AUTHENTICATION_REQUIRED"
 
-    async def test_a_suspended_account_returns_403_without_an_unlock_time(
+    async def test_a_suspended_account_login_is_a_generic_401(
         self, api: AsyncClient, db_session: AsyncSession, account: dict[str, Any]
     ) -> None:
-        # Suspension is lifted by an administrator, not by the clock, so there
-        # is no unlock time to report (§5.2 specifies none).
+        # Anti-enumeration: ACCOUNT_SUSPENDED would confirm the email belongs to
+        # a real (if disabled) account. It must read as invalid credentials.
         await db_session.execute(
             update(User).where(User.id == account["id"]).values(status=UserStatus.SUSPENDED)
         )
@@ -245,10 +246,11 @@ class TestFailedLoginLockout:
             "/api/v1/auth/login", json={"email": account["email"], "password": PASSWORD}
         )
 
-        assert response.status_code == 403
+        assert response.status_code == 401
         body = response.json()
-        assert body["error_code"] == "ACCOUNT_SUSPENDED"
-        assert body["message"] == "Account is suspended."
+        assert body["success"] is False
+        assert body["error_code"] == "AUTHENTICATION_REQUIRED"
+        assert body["message"] == "Invalid credentials."
         assert body["errors"] is None
 
 
