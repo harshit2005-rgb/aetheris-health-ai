@@ -136,6 +136,9 @@ def get_user_service(
     auth_service: AuthService = Depends(get_auth_service),
     uow: UnitOfWork = Depends(get_unit_of_work),
     audit: AuditSink = Depends(get_audit_sink),
+    password_reset_repo: PasswordResetTokenRepository = Depends(
+        get_password_reset_token_repository
+    ),
 ) -> UserService:
     """Provide a :class:`UserService` composed with its repository dependencies."""
     return UserService(
@@ -145,6 +148,7 @@ def get_user_service(
         auth_service=auth_service,
         uow=uow,
         audit=audit,
+        password_reset_repo=password_reset_repo,
     )
 
 
