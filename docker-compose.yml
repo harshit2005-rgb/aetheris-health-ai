@@ -1,8 +1,8 @@
 # ──────────────────────────────────────────────────────────────────────────────
 # Aetheris Health AI — Local Development Stack
 #
-# Provides PostgreSQL, Redis, and the backend API. The frontend runs
-# natively via `npm run dev` for reliable Vite HMR on macOS.
+# Provides PostgreSQL, Redis, the backend API, and the frontend dev server.
+# All four services are orchestrated via Docker Compose.
 #
 # Usage:
 #   make up          # start services
@@ -63,6 +63,24 @@ services:
     volumes:
       - ./backend:/app
     command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    restart: unless-stopped
+
+  # ── Frontend (Vite dev server) ─────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      VITE_API_TARGET: http://backend:8000
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+      - ./frontend/index.html:/app/index.html
     restart: unless-stopped
 
 volumes:

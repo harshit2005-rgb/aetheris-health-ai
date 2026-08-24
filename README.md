@@ -17,8 +17,9 @@ aetheris-health-ai/
 │   └── Dockerfile      # Production multi-stage build
 ├── frontend/           # React 18 + Vite + Tailwind + Shadcn UI
 │   ├── src/            # Application source
+│   ├── Dockerfile      # Development image (Vite dev server)
 │   └── package.json
-├── docker-compose.yml  # Local development stack (Postgres, Redis, backend)
+├── docker-compose.yml  # Local development stack (Postgres, Redis, backend, frontend)
 ├── Makefile            # Developer commands
 ├── docs/               # Project documentation
 │   ├── modules/        # Module specs
@@ -32,7 +33,7 @@ aetheris-health-ai/
 
 | Tool | Version | Purpose |
 |------|---------|---------|
-| Docker | 24+ | Container runtime for Postgres, Redis, backend |
+| Docker | 24+ | Container runtime for all 4 services |
 | Docker Compose | v2 | Multi-container orchestration |
 | Python | 3.13 | Backend runtime (pinned in `.python-version`) |
 | uv | latest | Python package/dependency management |
@@ -48,7 +49,7 @@ aetheris-health-ai/
 # 1. Clone the repository
 git clone <repo-url> && cd aetheris-health-ai
 
-# 2. Start infrastructure + backend
+# 2. Start all services (Postgres, Redis, backend, frontend)
 make up
 
 # 3. Wait for healthchecks (~15s), then apply migrations
@@ -57,8 +58,8 @@ make migrate
 # 4. Seed demo data (hospital, admin user, sample data)
 make seed
 
-# 5. Start the frontend (in a separate terminal)
-cd frontend && npm ci && npm run dev
+# 5. Install frontend dependencies (needed for local tests/lint)
+cd frontend && npm ci
 ```
 
 **That's it.** Open the URLs below to see the application.
@@ -102,7 +103,7 @@ Run `make help` for the full list:
 
 | Command | Description |
 |---------|-------------|
-| `make up` | Start Postgres, Redis, and backend |
+| `make up` | Start Postgres, Redis, backend, and frontend |
 | `make down` | Stop all services |
 | `make logs` | Tail service logs |
 | `make migrate` | Apply database migrations |
@@ -121,16 +122,18 @@ Run `make help` for the full list:
 
 ## Frontend Development
 
-The frontend runs **natively** (not in Docker) for reliable Vite HMR:
+The frontend runs inside Docker as part of `make up`. The Vite dev server
+is accessible at `http://localhost:5173` with hot module replacement (HMR).
+
+The Vite proxy automatically forwards `/api` requests to the backend
+container (`http://backend:8000` inside Docker). When running the frontend
+natively outside Docker, it falls back to `http://localhost:8000`.
+
+**To rebuild the frontend image** (e.g. after `package.json` changes):
 
 ```bash
-cd frontend
-npm ci          # install dependencies
-npm run dev     # start dev server at http://localhost:5173
+docker compose up -d --build frontend
 ```
-
-The Vite dev server proxies `/api` requests to `http://localhost:8000`
-(the backend running in Docker).
 
 ---
 
@@ -228,8 +231,9 @@ Check logs: `make logs`. Common issues: pending migrations (`make migrate`),
 missing environment variables.
 
 **Frontend can't reach backend:**
-Ensure the backend is running (`make up`) and accessible at
-`http://localhost:8000`. The Vite proxy forwards `/api` to that address.
+Ensure all services are running (`make up`) and healthy (`docker compose ps`).
+The Vite proxy forwards `/api` requests to the backend container. If
+rebuilding the frontend, use `docker compose up -d --build frontend`.
 
 **Redis connection errors:**
 Redis is optional infrastructure. Rate limiting degrades gracefully without

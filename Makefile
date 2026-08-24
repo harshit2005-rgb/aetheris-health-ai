@@ -35,8 +35,8 @@ seed: ## Seed the database with demo data (hospital, admin, sample users)
 backend-test: ## Run the backend test suite
 	cd backend && uv run pytest app/tests/ -v
 
-backend-lint: ## Run ruff check and mypy on the backend
-	cd backend && uv run ruff check app/ && uv run mypy app/
+backend-lint: ## Run ruff check, ruff format check, and mypy on the backend
+	cd backend && uv run ruff check app/ && uv run ruff format --check app/ && uv run mypy app/
 
 # ── Frontend ─────────────────────────────────────────────────────────────────
 
