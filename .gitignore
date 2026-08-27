@@ -1,0 +1,65 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+.venv/
+venv/
+env/
+
+# Environment Variables
+.env
+.env.*
+!.env.example
+!backend/.env.example
+
+# Never track the real backend environment file
+backend/.env
+
+# Build & Packaging
+build/
+dist/
+*.egg-info/
+pip-wheel-metadata/
+
+# Python Cache
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# IDEs
+.vscode/
+.idea/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log
+
+# Database
+*.db
+*.sqlite3
+
+# Node (Frontend)
+node_modules/
+.next/
+dist/
+
+# Misc
+coverage/
+
+# Claude Code local tooling (installed skills, agents, lockfile, launch config)
+/.agents/
+/.claude/skills/
+/.claude/launch.json
+/skills-lock.json
+
+# Design-reference downloads (local scratch, not needed at runtime)
+frontend/.stitch-reference/
+
+# Freebuff Desktop — local runtime database, not part of the project
+.freebuff/
