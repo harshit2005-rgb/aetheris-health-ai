@@ -129,7 +129,34 @@ async def list_users(
     description="Create a new user with an invited status.",
     status_code=201,
     responses={
-        201: {"description": "User invited."},
+        201: {
+            "description": "User invited.",
+            "content": {
+                "application/json": {
+                    "example": {
+                        "success": True,
+                        "message": "User invited.",
+                        "data": {
+                            "id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "email": "nurse@hospital.test",
+                            "first_name": "Priya",
+                            "last_name": "Nair",
+                            "phone": None,
+                            "status": "invited",
+                            "hospital_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+                            "roles": [],
+                            "mfa_enabled": False,
+                            "last_login_at": None,
+                            "password_changed_at": None,
+                            "created_at": "2026-08-11T10:00:00Z",
+                            "updated_at": "2026-08-11T10:00:00Z",
+                            "invite_token": "<single-use credential - returned exactly once, deliver to the invitee, never log or echo>",
+                        },
+                        "metadata": {"request_id": None},
+                    }
+                }
+            },
+        },
         403: {"description": "Permission denied."},
         409: {"description": "Email already exists."},
     },
@@ -139,11 +166,20 @@ async def invite_user(
     current_user: User = Depends(require_permission("user.create")),
     user_service: UserService = Depends(get_user_service),
 ) -> dict[str, Any]:
-    """Invite a new user."""
+    """Invite a new user.
+
+    .. note::
+
+        ``data.invite_token`` in the response is a **single-use credential**
+        minted for the invited user. It is returned exactly once so the
+        Notifications module can deliver it to the invitee's email — it must
+        never be logged, stored, or echoed anywhere else
+        (``docs/07-SECURITY.md``).
+    """
     # Collect actor's permissions
     actor_permissions = _get_user_permission_codes(current_user)
 
-    user = await user_service.invite_user(
+    user, invite_token = await user_service.invite_user(
         hospital_id=current_user.hospital_id,
         email=payload.email,
         first_name=payload.first_name,
@@ -163,9 +199,14 @@ async def invite_user(
         for r in (user.user_roles or [])
     ]
 
+    data = _user_to_dict(user, roles)
+    # B6 seam: the single-use invite token is handed back here so the
+    # Notifications module can deliver it. Email delivery is out of scope.
+    data["invite_token"] = invite_token
+
     return success_envelope(
         "User invited.",
-        data=_user_to_dict(user, roles),
+        data=data,
     )
 
 
@@ -267,6 +308,8 @@ async def deactivate_user(
     user = await user_service.deactivate_user(
         user_id=uuid.UUID(user_id),
         actor_user_id=current_user.id,
+        actor_hospital_id=current_user.hospital_id,
+        actor_permissions=_get_user_permission_codes(current_user),
     )
     roles = [
         {
@@ -302,6 +345,8 @@ async def reactivate_user(
     user = await user_service.reactivate_user(
         user_id=uuid.UUID(user_id),
         actor_id=current_user.id,
+        actor_hospital_id=current_user.hospital_id,
+        actor_permissions=_get_user_permission_codes(current_user),
     )
     roles = [
         {
@@ -337,6 +382,7 @@ async def admin_reset_password(
     await auth_service.admin_reset_password(
         user_id=uuid.UUID(user_id),
         actor_id=current_user.id,
+        actor_hospital_id=current_user.hospital_id,
     )
     return success_envelope(
         "Password reset initiated. The user will be required to set a new password on next login."
@@ -355,7 +401,10 @@ async def get_user_roles(
     user_service: UserService = Depends(get_user_service),
 ) -> dict[str, Any]:
     """List roles assigned to a user."""
-    roles = await user_service.list_user_roles(user_id=uuid.UUID(user_id))
+    roles = await user_service.list_user_roles(
+        user_id=uuid.UUID(user_id),
+        actor_hospital_id=current_user.hospital_id,
+    )
     return success_envelope(
         "User roles retrieved.",
         data=roles,
@@ -385,6 +434,7 @@ async def assign_role(
         role_id=payload.role_id,
         actor_permissions=actor_permissions,
         actor_id=current_user.id,
+        actor_hospital_id=current_user.hospital_id,
     )
     return success_envelope("Role assigned.")
 
@@ -412,6 +462,7 @@ async def remove_role(
         role_id=uuid.UUID(role_id),
         actor_permissions=actor_permissions,
         actor_id=current_user.id,
+        actor_hospital_id=current_user.hospital_id,
     )
     return success_envelope("Role removed.")
 

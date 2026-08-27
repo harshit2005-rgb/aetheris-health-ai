@@ -80,6 +80,7 @@ def user_service(
         auth_service=auth_service,
         uow=uow,
         audit=audit_sink,
+        password_reset_repo=PasswordResetTokenRepository(db_session),
     )
 
 
@@ -143,7 +144,7 @@ class TestFullLifecycle:
         )
         email = f"invitee-{uuid.uuid4().hex[:12]}@hospital.example"
 
-        invited = await user_service.invite_user(
+        invited, invite_token = await user_service.invite_user(
             hospital_id=hospital_id,
             email=email,
             first_name="New",
@@ -152,16 +153,17 @@ class TestFullLifecycle:
             actor_id=actor_id,
         )
         assert invited.status == UserStatus.INVITED
+        assert invite_token
         assert audit_sink.last().action == "user.invited"
         assert audit_sink.last().actor_id == actor_id
 
-        # ── Step 2: activate (the B6 seam — see module docstring) ───────────
-        await UserRepository(db_session).update(
-            invited,
-            status=UserStatus.ACTIVE,
-            password_hash=hash_password(PASSWORD),
-        )
-        await db_session.flush()
+        # ── Step 2: activate via the real invite-token seam (B6) ───────────
+        # The invite token is a single-use password-reset token; consuming it
+        # transitions the account INVITED → ACTIVE.
+        await auth_service.reset_password(raw_token=invite_token, new_password=PASSWORD)
+        activated = await UserRepository(db_session).get_by_id(invited.id)
+        assert activated is not None
+        assert activated.status == UserStatus.ACTIVE
 
         # ── Step 3: login ────────────────────────────────────────────────────
         login_result = await auth_service.login(email=email, password=PASSWORD)
@@ -235,6 +237,7 @@ class TestFullLifecycle:
             role_id=role_id,
             actor_permissions=["role.assign"],
             actor_id=actor_id,
+            actor_hospital_id=hospital_id,
         )
         assert audit_sink.last().action == "role.assigned"
         assert audit_sink.last().changes["role_id"]["after"] == str(role_id)
@@ -280,7 +283,11 @@ class TestLoginRejectsSuspendedAccounts:
         auth_service: AuthService,
         audit_sink: RecordingAuditSink,
     ) -> None:
-        from app.core.exceptions import AccountSuspendedError
+        # Anti-enumeration: the login must fail with the same generic error as
+        # invalid credentials — never a distinct ACCOUNT_SUSPENDED that would
+        # confirm the email belongs to a real account. The real reason stays in
+        # the audit trail (CLAUDE.md rule 9).
+        from app.core.exceptions import AuthenticationError
 
         user = User(
             id=uuid.uuid4(),
@@ -294,7 +301,7 @@ class TestLoginRejectsSuspendedAccounts:
         db_session.add(user)
         await db_session.flush()
 
-        with pytest.raises(AccountSuspendedError):
+        with pytest.raises(AuthenticationError, match="Invalid credentials."):
             await auth_service.login(email=user.email, password=PASSWORD)
 
         assert audit_sink.last().action == "auth.login.failed"
@@ -360,6 +367,7 @@ class TestTokenRevocationOnRoleChange:
             role_id=role_id,
             actor_permissions=["role.assign"],
             actor_id=actor_id,
+            actor_hospital_id=hospital_id,
         )
 
         # The pre-change session is dead.

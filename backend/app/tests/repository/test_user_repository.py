@@ -158,11 +158,25 @@ class TestSearch:
 
         assert len(rows) == 2
 
-        # NOTE: count_by_hospital does not accept ``search`` yet — the
-        # search/count parity fix is Section B defect B4 and is intentionally
-        # out of scope for the feature build.
-        total = await repository.count_by_hospital(hospital_id)
-        assert total == 3
+    async def test_count_honors_the_same_search_predicate(
+        self, repository: UserRepository, hospital_id: uuid.UUID
+    ) -> None:
+        """B4 regression: ``count_by_hospital`` applies the identical search.
+
+        The filtered total must agree with the filtered rows, or pagination
+        renders empty pages (Week 1 handoff B4).
+        """
+        for last in ("Sharma", "Sharma", "Rao", "Das", "Iyer"):
+            await _create_user(repository, hospital_id=hospital_id, last_name=last)
+
+        rows = await repository.list_by_hospital(hospital_id, search="sharma")
+        total = await repository.count_by_hospital(hospital_id, search="sharma")
+
+        assert len(rows) == 2
+        assert total == 2
+
+        # Without the search argument the count stays the tenant-wide total.
+        assert await repository.count_by_hospital(hospital_id) == 5
 
 
 class TestUserRoleManagement:
