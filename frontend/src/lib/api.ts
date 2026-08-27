@@ -3,13 +3,14 @@ import { tokenStore } from '@/services/tokenStore'
 import { useAuthStore } from '@/store/auth-store'
 
 /**
- * Central Axios instance. `withCredentials` lets the browser send the HTTP-only
- * refresh cookie to /auth/refresh (the access token itself is attached from
- * memory below).
+ * Central Axios instance.
  *
- * The default includes the `/v1` API version segment: every backend route is
- * mounted under `/api/v1` (`docs/06-API_STANDARDS.md`), so a bare `/api` base
- * makes every call 404. In dev the Vite proxy forwards `/api` to the backend.
+ * The access token is attached from the in-memory `tokenStore` on every request.
+ * The refresh token is sent in the request body (the backend contract uses
+ * `{ refresh_token }` in the body, not an HTTP-only cookie).
+ *
+ * Every backend route is mounted under `/api/v1` (`docs/06-API_STANDARDS.md`).
+ * In dev the Vite proxy forwards `/api` to the backend.
  */
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '/api/v1',
@@ -19,7 +20,7 @@ export const api = axios.create({
 
 // Attach the in-memory access token to every request.
 api.interceptors.request.use((config) => {
-  const token = tokenStore.get()
+  const token = tokenStore.getAccessToken()
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -32,13 +33,21 @@ type RetriableConfig = InternalAxiosRequestConfig & { _retry?: boolean }
 let refreshing: Promise<string | null> | null = null
 
 async function refreshAccessToken(): Promise<string | null> {
-  // TODO(backend): POST /auth/refresh reads the HTTP-only refresh cookie and
-  // returns a new access token in the standard envelope.
+  const currentRefresh = tokenStore.getRefreshToken()
+  if (!currentRefresh) {
+    tokenStore.clear()
+    return null
+  }
+
   try {
-    const { data } = await api.post('/auth/refresh')
-    const token: string | null = data?.data?.access_token ?? null
-    tokenStore.set(token)
-    return token
+    // Backend contract: POST /auth/refresh with { refresh_token } in body.
+    const { data } = await api.post('/auth/refresh', {
+      refresh_token: currentRefresh,
+    })
+    const newAccess: string | null = data?.data?.access_token ?? null
+    const newRefresh: string | null = data?.data?.refresh_token ?? null
+    tokenStore.setTokens(newAccess, newRefresh)
+    return newAccess
   } catch {
     tokenStore.clear()
     return null

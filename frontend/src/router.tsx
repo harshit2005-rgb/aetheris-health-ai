@@ -10,6 +10,8 @@ import { privacyDoc, termsDoc, hipaaDoc } from '@/content/legal'
 const DashboardLayout = lazy(() => import('@/layouts/DashboardLayout'))
 const LandingPage = lazy(() => import('@/pages/LandingPage'))
 const LoginPage = lazy(() => import('@/pages/LoginPage'))
+const ForgotPasswordPage = lazy(() => import('@/pages/auth/ForgotPasswordPage'))
+const ResetPasswordPage = lazy(() => import('@/pages/auth/ResetPasswordPage'))
 const ContactPage = lazy(() => import('@/pages/ContactPage'))
 const LegalPage = lazy(() => import('@/pages/LegalPage'))
 const PricingPage = lazy(() => import('@/pages/PricingPage'))
@@ -38,7 +40,11 @@ export const router = createBrowserRouter([
       { path: '/privacy', element: <LegalPage doc={privacyDoc} /> },
       { path: '/terms', element: <LegalPage doc={termsDoc} /> },
       { path: '/hipaa', element: <LegalPage doc={hipaaDoc} /> },
+
+      // Auth pages (public)
       { path: '/login', element: <LoginPage /> },
+      { path: '/forgot-password', element: <ForgotPasswordPage /> },
+      { path: '/reset-password', element: <ResetPasswordPage /> },
 
       // Authenticated app — shared enterprise shell
       {

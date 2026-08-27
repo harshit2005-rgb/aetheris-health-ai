@@ -6,6 +6,8 @@ import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/
 import { useAuthStore } from '@/store/auth-store'
 import { usePermissions } from '@/hooks/usePermissions'
 import { ROLE_LABELS } from '@/lib/rbac'
+import { api } from '@/lib/api'
+import { tokenStore } from '@/services/tokenStore'
 import { cn } from '@/lib/utils'
 
 function initials(name: string) {
@@ -38,7 +40,18 @@ function SidebarBody({ collapsed, onToggleCollapse, onNavigate, onOpenCopilot }:
   const name = user?.name ?? 'User'
   const roleLabel = role ? ROLE_LABELS[role] : ''
 
-  function handleLogout() {
+  async function handleLogout() {
+    // Attempt to revoke the refresh token on the backend. If the network is
+    // unavailable, we still clear the local session (task 4 — graceful
+    // offline logout).
+    const currentRefresh = tokenStore.getRefreshToken()
+    if (currentRefresh) {
+      try {
+        await api.post('/auth/logout', { refresh_token: currentRefresh })
+      } catch {
+        // Network error — proceed with local cleanup anyway.
+      }
+    }
     logout()
     toast.success('Signed out')
     navigate('/login', { replace: true })
