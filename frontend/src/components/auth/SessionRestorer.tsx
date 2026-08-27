@@ -2,6 +2,7 @@ import { useEffect, type ReactNode } from 'react'
 import { Loader2 } from 'lucide-react'
 import { useAuthStore } from '@/store/auth-store'
 import { api } from '@/lib/api'
+import { tokenStore } from '@/services/tokenStore'
 
 /**
  * Wraps the app and attempts to restore a valid session on initial load.
@@ -35,28 +36,44 @@ export function SessionRestorer({ children }: { children: ReactNode }) {
       }
 
       // No refresh token in memory → session cannot be restored.
-      const { getRefreshToken } = await import('@/services/tokenStore')
-      if (!getRefreshToken()) {
+      if (!tokenStore.getRefreshToken()) {
         if (!cancelled) setRestoring(false)
         return
       }
 
       try {
+        const refreshToken = tokenStore.getRefreshToken()
         const { data } = await api.post('/auth/refresh', {
-          refresh_token: getRefreshToken(),
+          refresh_token: refreshToken,
         })
         if (!cancelled && data?.data) {
-          setAuth(
-            data.data.user ?? useAuthStore.getState().user ?? {
-              id: '',
-              name: '',
-              email: '',
-              role: 'hospital_admin' as const,
-              permissions: [],
-            },
-            data.data.access_token,
-            data.data.refresh_token,
-          )
+          // POST /auth/refresh returns tokens but no user — fetch the real profile.
+          const newAccessToken = data.data.access_token as string
+          const newRefreshToken = data.data.refresh_token as string | null
+
+          // Temporarily store tokens so the interceptor can attach the access
+          // token on the /users/me request.
+          tokenStore.setTokens(newAccessToken, newRefreshToken)
+
+          try {
+            const { data: meData } = await api.get('/users/me')
+            if (!cancelled && meData?.data) {
+              setAuth(meData.data, newAccessToken, newRefreshToken)
+            } else {
+              // Fallback: we have tokens but no user profile. Clear and let
+              // the route guard redirect to login.
+              if (!cancelled) {
+                tokenStore.clear()
+                setRestoring(false)
+              }
+            }
+          } catch {
+            // /users/me failed — clear tokens so the user lands on login.
+            if (!cancelled) {
+              tokenStore.clear()
+              setRestoring(false)
+            }
+          }
         }
       } catch {
         // Refresh failed — session is invalid. User will be redirected to

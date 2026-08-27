@@ -32,10 +32,12 @@ interface AuthState {
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   isAuthenticated: false,
-  isRestoring: true, // starts true until first restore attempt completes
-  setAuth: (user, accessToken, refreshToken = null) => {
+  // If there's no refresh token in memory there's nothing to restore, so
+  // skip the spinner entirely (avoids a full-screen flash on public pages).
+  isRestoring: tokenStore.getRefreshToken() !== null,
+  setAuth: (user, accessToken, refreshToken?: string | null) => {
     tokenStore.setAccessToken(accessToken)
-    if (refreshToken !== undefined && refreshToken !== null) {
+    if (refreshToken !== undefined) {
       tokenStore.setRefreshToken(refreshToken)
     }
     set({ user, isAuthenticated: true })
