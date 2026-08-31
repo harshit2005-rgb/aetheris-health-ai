@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAppointments, type AppointmentStatus } from '@/api/appointments'
+import { todayISODate } from '@/lib/format'
 import { appointmentColumns } from './columns'
 
 const PAGE_SIZE = 25
@@ -22,14 +23,8 @@ const STATUS_OPTIONS: { value: AppointmentStatus; label: string }[] = [
   { value: 'no_show', label: 'No show' },
 ]
 
-function todayLocal(): string {
-  const d = new Date()
-  const local = new Date(d.getTime() - d.getTimezoneOffset() * 60000)
-  return local.toISOString().slice(0, 10)
-}
-
 export default function AppointmentsPage() {
-  const [date, setDate] = useState<string>(todayLocal)
+  const [date, setDate] = useState<string>(todayISODate)
   const [status, setStatus] = useState<string>(ALL)
   const [page, setPage] = useState(1)
 
@@ -42,7 +37,7 @@ export default function AppointmentsPage() {
 
   const appointments = data?.items ?? []
   const meta = data?.pagination
-  const isToday = date === todayLocal()
+  const isToday = date === todayISODate()
 
   return (
     <div className="w-full">
@@ -55,7 +50,7 @@ export default function AppointmentsPage() {
               type="date"
               value={date}
               onChange={(e) => {
-                setDate(e.target.value || todayLocal())
+                setDate(e.target.value || todayISODate())
                 setPage(1)
               }}
               aria-label="Appointment date"
@@ -66,7 +61,7 @@ export default function AppointmentsPage() {
                 variant="outline"
                 className="rounded-full"
                 onClick={() => {
-                  setDate(todayLocal())
+                  setDate(todayISODate())
                   setPage(1)
                 }}
               >

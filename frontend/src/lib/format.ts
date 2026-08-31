@@ -23,3 +23,9 @@ export function formatTime(iso: string): string {
   const d = new Date(iso)
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleTimeString(undefined, { timeStyle: 'short' })
 }
+
+/** Today's date in the viewer's local timezone as YYYY-MM-DD (for date inputs and day filters). */
+export function todayISODate(): string {
+  const d = new Date()
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
+}
