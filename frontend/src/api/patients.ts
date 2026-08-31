@@ -1,103 +1,99 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { http } from '@/api/http'
 import type { Paginated } from '@/api/types'
-// import { http } from '@/api/http' // TODO(backend): swap the mock seams below for real calls
 
-export type PatientStatus = 'Outpatient' | 'Admitted' | 'Discharged' | 'Critical'
+/**
+ * Patient module API — typed hooks over the real backend contract
+ * (`backend/app/api/v1/patients.py`, `backend/app/schemas/patient.py`).
+ * Components use these hooks only; they never call the axios client directly.
+ */
 
-export interface Patient {
+export type Gender = 'male' | 'female' | 'other' | 'unspecified'
+export type PatientStatus = 'active' | 'inactive'
+export type BloodGroup = 'A+' | 'A-' | 'B+' | 'B-' | 'AB+' | 'AB-' | 'O+' | 'O-'
+
+/** Compact shape returned by the list/search endpoint (`PatientSummaryResponse`). */
+export interface PatientSummary {
   id: string
   mrn: string
-  name: string
+  first_name: string
+  last_name: string
+  full_name: string
+  date_of_birth: string
   age: number
-  gender: 'M' | 'F'
-  phone: string
-  doctor: string
-  department: string
+  gender: Gender
+  phone: string | null
   status: PatientStatus
 }
 
+/** Full record returned by get/create/update (`PatientResponse`). */
+export interface Patient extends PatientSummary {
+  hospital_id: string
+  blood_group: string | null
+  email: string | null
+  address: Record<string, unknown> | null
+  emergency_contact: Record<string, unknown> | null
+  marital_status: string | null
+  occupation: string | null
+  allergies: Array<Record<string, unknown>>
+  chronic_conditions: Array<Record<string, unknown>>
+  current_medications: Array<Record<string, unknown>>
+  notes: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Query parameters accepted by `GET /patients` (snake_case, as the backend expects). */
 export interface PatientListParams {
-  search?: string
+  q?: string
+  gender?: Gender
   page?: number
-  pageSize?: number
+  page_size?: number
+  include_inactive?: boolean
 }
 
+/** Body for `POST /patients` (`CreatePatientRequest`). MRN is generated server-side. */
 export interface CreatePatientInput {
-  name: string
-  age: number
-  gender: 'M' | 'F'
-  phone: string
-  department: string
+  first_name: string
+  last_name: string
+  date_of_birth: string
+  gender: Gender
+  blood_group?: BloodGroup
+  phone?: string
+  email?: string
 }
 
-/** Query-key factory — `["patients", ...]` (CLAUDE.md React Query patterns). */
+/** Query-key factory — `["patients", ...]` (frontend/CLAUDE.md React Query patterns). */
 export const patientKeys = {
   all: ['patients'] as const,
   list: (params: PatientListParams) => [...patientKeys.all, 'list', params] as const,
   detail: (id: string) => [...patientKeys.all, 'detail', id] as const,
 }
 
-// ---------------------------------------------------------------------------
-// TODO(backend): the two functions below are mock seams. When the API is live,
-// replace their bodies with the commented `http` calls and delete MOCK_PATIENTS.
-// ---------------------------------------------------------------------------
-
-const MOCK_PATIENTS: Patient[] = [
-  { id: '1', mrn: 'PT-8291-A', name: 'Ravi Menon', age: 54, gender: 'M', phone: '+91 98847 21908', doctor: 'Dr. A. Chen', department: 'Cardiology', status: 'Admitted' },
-  { id: '2', mrn: 'PT-4022-C', name: 'Aisha Khan', age: 32, gender: 'F', phone: '+91 90031 55420', doctor: 'Dr. S. Rao', department: 'Pulmonology', status: 'Outpatient' },
-  { id: '3', mrn: 'PT-9188-B', name: 'Thomas George', age: 61, gender: 'M', phone: '+91 99456 12277', doctor: 'Dr. L. Iyer', department: 'Endocrinology', status: 'Critical' },
-  { id: '4', mrn: 'PT-1104-D', name: 'Meera Nair', age: 45, gender: 'F', phone: '+91 98120 66431', doctor: 'Dr. P. Verma', department: 'Surgery', status: 'Discharged' },
-  { id: '5', mrn: 'PT-6357-F', name: 'David Fernandes', age: 58, gender: 'M', phone: '+91 90876 33019', doctor: 'Dr. A. Chen', department: 'Cardiology', status: 'Outpatient' },
-  { id: '6', mrn: 'PT-2048-E', name: 'Sana Sheikh', age: 27, gender: 'F', phone: '+91 97411 20885', doctor: 'Dr. N. Bose', department: 'Neurology', status: 'Outpatient' },
-  { id: '7', mrn: 'PT-7791-G', name: 'Karan Malhotra', age: 39, gender: 'M', phone: '+91 98330 77164', doctor: 'Dr. S. Rao', department: 'Pulmonology', status: 'Admitted' },
-]
-
-async function fetchPatients(params: PatientListParams): Promise<Paginated<Patient>> {
-  // return http.getPaginated<Patient>('/patients', { params })
-  await new Promise((r) => setTimeout(r, 300))
-  const q = params.search?.trim().toLowerCase()
-  const items = q
-    ? MOCK_PATIENTS.filter((p) =>
-        [p.name, p.mrn, p.phone, p.department].some((f) => f.toLowerCase().includes(q)),
-      )
-    : MOCK_PATIENTS
-  return {
-    items,
-    pagination: { page: 1, pageSize: items.length || 1, total: items.length, totalPages: 1 },
-  }
-}
-
-async function createPatient(input: CreatePatientInput): Promise<Patient> {
-  // return http.post<Patient>('/patients', input)
-  await new Promise((r) => setTimeout(r, 300))
-  const n = MOCK_PATIENTS.length + 1
-  const created: Patient = {
-    id: String(n),
-    mrn: `PT-${1000 + n}-X`,
-    doctor: 'Unassigned',
-    status: 'Outpatient',
-    ...input,
-  }
-  MOCK_PATIENTS.unshift(created)
-  return created
-}
-
-// ---------------------------------------------------------------------------
-// Hooks — the only way components touch patient data (CLAUDE.md).
-// ---------------------------------------------------------------------------
-
+/** List / search patients. Backends supports `q`, `gender`, `include_inactive`, and page/size. */
 export function usePatients(params: PatientListParams = {}) {
-  return useQuery({
+  return useQuery<Paginated<PatientSummary>>({
     queryKey: patientKeys.list(params),
-    queryFn: () => fetchPatients(params),
+    queryFn: () => http.getPaginated<PatientSummary>('/patients', { params }),
     staleTime: 30_000,
+    placeholderData: keepPreviousData,
   })
 }
 
+/** Fetch one patient's full record (Patient Profile view). */
+export function usePatient(id: string | undefined) {
+  return useQuery<Patient>({
+    queryKey: patientKeys.detail(id ?? ''),
+    queryFn: () => http.get<Patient>(`/patients/${id}`),
+    enabled: !!id,
+  })
+}
+
+/** Register a patient, then refresh every patient list. */
 export function useCreatePatient() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: createPatient,
+    mutationFn: (input: CreatePatientInput) => http.post<Patient>('/patients', input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: patientKeys.all })
     },

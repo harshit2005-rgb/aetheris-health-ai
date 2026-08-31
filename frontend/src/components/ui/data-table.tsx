@@ -26,6 +26,15 @@ interface DataTableProps<TData, TValue> {
   /** Slot on the right of the toolbar, e.g. a "Register" button. */
   toolbarRight?: ReactNode
   pageSize?: number
+  /** Client-side column sorting. Turn off when the backend controls order. */
+  enableSorting?: boolean
+  /**
+   * Server drives pagination: render every row given and hide the built-in
+   * pager. Pass `footer` with your own page controls.
+   */
+  manualPagination?: boolean
+  /** Footer slot, used with `manualPagination` for server page controls. */
+  footer?: ReactNode
   className?: string
 }
 
@@ -43,6 +52,9 @@ export function DataTable<TData, TValue>({
   emptyState,
   toolbarRight,
   pageSize = 10,
+  enableSorting = true,
+  manualPagination = false,
+  footer,
   className,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([])
@@ -52,13 +64,16 @@ export function DataTable<TData, TValue>({
   const table = useReactTable({
     data,
     columns,
+    enableSorting,
+    manualPagination,
     state: { sorting, globalFilter },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    // Omit the client pager when the server paginates: keep every row visible.
+    ...(manualPagination ? {} : { getPaginationRowModel: getPaginationRowModel() }),
     initialState: { pagination: { pageSize } },
   })
 
@@ -158,7 +173,10 @@ export function DataTable<TData, TValue>({
         {showEmpty && <div className="px-4">{emptyState}</div>}
       </div>
 
-      {!showEmpty && table.getPageCount() > 1 && (
+      {/* Server-driven pagination: parent supplies the controls. */}
+      {manualPagination && !showEmpty && footer}
+
+      {!manualPagination && !showEmpty && table.getPageCount() > 1 && (
         <div className="flex items-center justify-between gap-4">
           <p className="font-body text-body-sm text-on-surface-variant">
             Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
