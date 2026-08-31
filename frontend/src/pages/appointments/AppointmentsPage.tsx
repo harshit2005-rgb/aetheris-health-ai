@@ -28,7 +28,7 @@ export default function AppointmentsPage() {
   const [status, setStatus] = useState<string>(ALL)
   const [page, setPage] = useState(1)
 
-  const { data, isPending, isError, isFetching, refetch } = useAppointments({
+  const { data, isPending, isError, refetch } = useAppointments({
     appointment_date: date,
     appointment_status: status === ALL ? undefined : (status as AppointmentStatus),
     page,
@@ -112,8 +112,6 @@ export default function AppointmentsPage() {
           columns={appointmentColumns}
           data={appointments}
           isLoading={isPending}
-          enableSorting={false}
-          manualPagination
           emptyState={
             <EmptyState
               icon={CalendarClock}
@@ -125,34 +123,8 @@ export default function AppointmentsPage() {
               }
             />
           }
-          footer={
-            meta && meta.total > 0 ? (
-              <div className="flex items-center justify-between gap-4">
-                <p className="font-body text-body-sm text-on-surface-variant">
-                  Page {meta.page} of {meta.totalPages} · {meta.total} appointment
-                  {meta.total === 1 ? '' : 's'}
-                  {isFetching && <span className="text-outline"> · updating…</span>}
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={meta.page <= 1 || isFetching}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={meta.page >= meta.totalPages || isFetching}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            ) : null
+          serverPagination={
+            meta ? { page: meta.page, totalPages: meta.totalPages, onPageChange: setPage } : undefined
           }
         />
       )}

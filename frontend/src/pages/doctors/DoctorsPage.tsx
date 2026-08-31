@@ -29,7 +29,7 @@ export default function DoctorsPage() {
 
   const { data: departments } = useDepartments()
 
-  const { data, isPending, isError, isFetching, refetch } = useDoctors({
+  const { data, isPending, isError, refetch } = useDoctors({
     q: q || undefined,
     department: department === ALL ? undefined : department,
     page,
@@ -94,8 +94,6 @@ export default function DoctorsPage() {
           columns={doctorColumns}
           data={doctors}
           isLoading={isPending}
-          enableSorting={false}
-          manualPagination
           emptyState={
             <EmptyState
               icon={filtered ? Search : Stethoscope}
@@ -107,34 +105,8 @@ export default function DoctorsPage() {
               }
             />
           }
-          footer={
-            meta && meta.total > 0 ? (
-              <div className="flex items-center justify-between gap-4">
-                <p className="font-body text-body-sm text-on-surface-variant">
-                  Page {meta.page} of {meta.totalPages} · {meta.total} doctor
-                  {meta.total === 1 ? '' : 's'}
-                  {isFetching && <span className="text-outline"> · updating…</span>}
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={meta.page <= 1 || isFetching}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  >
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={meta.page >= meta.totalPages || isFetching}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            ) : null
+          serverPagination={
+            meta ? { page: meta.page, totalPages: meta.totalPages, onPageChange: setPage } : undefined
           }
         />
       )}

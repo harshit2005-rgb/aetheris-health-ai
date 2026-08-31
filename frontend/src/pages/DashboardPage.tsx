@@ -119,8 +119,7 @@ export default function DashboardPage() {
             columns={appointmentColumns}
             data={todaysAppointments}
             isLoading={appts.isPending}
-            enableSorting={false}
-            manualPagination
+            pageSize={25}
             emptyState={
               <EmptyState
                 icon={CalendarClock}

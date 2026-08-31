@@ -30,7 +30,7 @@ function names(items: Array<Record<string, unknown>>): string {
 
 export default function PatientDetailPage() {
   const { patientId } = useParams<{ patientId: string }>()
-  const { data: patient, isError, refetch } = usePatient(patientId)
+  const { data: patient, isError, refetch } = usePatient(patientId ?? '')
 
   const backLink = (
     <Link
