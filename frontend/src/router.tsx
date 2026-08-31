@@ -18,6 +18,7 @@ const DashboardPage = lazy(() => import('@/pages/DashboardPage'))
 const PatientsPage = lazy(() => import('@/pages/patients/PatientsPage'))
 const PatientDetailPage = lazy(() => import('@/pages/patients/PatientDetailPage'))
 const DoctorsPage = lazy(() => import('@/pages/doctors/DoctorsPage'))
+const DoctorDetailPage = lazy(() => import('@/pages/doctors/DoctorDetailPage'))
 const AppointmentsPage = lazy(() => import('@/pages/appointments/AppointmentsPage'))
 const BillingPage = lazy(() => import('@/pages/billing/BillingPage'))
 const ReportsPage = lazy(() => import('@/pages/reports/ReportsPage'))
@@ -71,6 +72,14 @@ export const router = createBrowserRouter([
             element: (
               <RequirePermission permission="doctor.read">
                 <DoctorsPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/doctors/:doctorId',
+            element: (
+              <RequirePermission permission="doctor.read">
+                <DoctorDetailPage />
               </RequirePermission>
             ),
           },

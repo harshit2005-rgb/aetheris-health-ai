@@ -4,6 +4,8 @@ import { Badge } from '@/components/ui/badge'
 import { Alert } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
+import { Detail, InfoCard } from '@/components/ui/detail-card'
+import { formatDate } from '@/lib/format'
 import { usePatient, type Patient } from '@/api/patients'
 
 const GENDER_LABEL: Record<Patient['gender'], string> = {
@@ -11,11 +13,6 @@ const GENDER_LABEL: Record<Patient['gender'], string> = {
   female: 'Female',
   other: 'Other',
   unspecified: 'Unspecified',
-}
-
-function formatDate(iso: string) {
-  const d = new Date(iso)
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { dateStyle: 'medium' })
 }
 
 function formatAddress(address: Record<string, unknown> | null): string | null {
@@ -26,27 +23,6 @@ function formatAddress(address: Record<string, unknown> | null): string | null {
   return parts.length ? parts.join(', ') : null
 }
 
-/** A labelled value in an info card. */
-function Detail({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="space-y-0.5">
-      <p className="font-label text-label-caps text-on-surface-variant">{label}</p>
-      <p className="font-body text-body-md text-on-surface">
-        {value ?? <span className="text-outline-variant">—</span>}
-      </p>
-    </div>
-  )
-}
-
-function InfoCard({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="neo-extruded bg-surface rounded-2xl p-6">
-      <h2 className="font-display text-title-lg text-primary mb-4 font-bold">{title}</h2>
-      <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3">{children}</div>
-    </section>
-  )
-}
-
 function names(items: Array<Record<string, unknown>>): string {
   const list = items.map((i) => (typeof i.name === 'string' ? i.name : null)).filter(Boolean)
   return list.length ? list.join(', ') : ''
@@ -54,7 +30,7 @@ function names(items: Array<Record<string, unknown>>): string {
 
 export default function PatientDetailPage() {
   const { patientId } = useParams<{ patientId: string }>()
-  const { data: patient, isLoading, isError, refetch } = usePatient(patientId)
+  const { data: patient, isError, refetch } = usePatient(patientId)
 
   const backLink = (
     <Link
@@ -81,7 +57,7 @@ export default function PatientDetailPage() {
     )
   }
 
-  if (isLoading || !patient) {
+  if (!patient) {
     return (
       <div className="w-full space-y-6">
         {backLink}
@@ -101,7 +77,6 @@ export default function PatientDetailPage() {
     <div className="w-full space-y-6">
       {backLink}
 
-      {/* Identity header */}
       <header className="glassmorphism shadow-glass-panel flex flex-wrap items-center justify-between gap-4 rounded-2xl p-6">
         <div className="flex items-center gap-4">
           <span className="neo-extruded bg-primary-container flex size-14 items-center justify-center rounded-2xl text-lg font-bold text-white">
