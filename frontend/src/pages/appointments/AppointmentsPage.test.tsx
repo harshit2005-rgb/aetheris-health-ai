@@ -8,8 +8,12 @@ import AppointmentsPage from './AppointmentsPage'
 const useAppointmentsMock = vi.fn()
 vi.mock('@/api/appointments', () => ({
   useAppointments: (p: unknown) => useAppointmentsMock(p),
+  useBookAppointment: () => ({ mutateAsync: vi.fn(), isPending: false }),
   appointmentKeys: { all: ['appointments'] },
 }))
+// The queue header renders the (closed) BookAppointmentDialog, whose hooks run.
+vi.mock('@/api/doctors', () => ({ useDoctors: () => ({ data: { items: [] } }) }))
+vi.mock('@/api/patients', () => ({ usePatients: () => ({ data: { items: [] } }) }))
 
 function result(overrides: Record<string, unknown>) {
   return {

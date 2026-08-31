@@ -1,6 +1,7 @@
 import { useState } from 'react'
-import { CalendarClock, RotateCw } from 'lucide-react'
+import { CalendarClock, CalendarPlus, RotateCw } from 'lucide-react'
 import PageHeader from '@/components/layout/PageHeader'
+import { BookAppointmentDialog } from './BookAppointmentDialog'
 import { DataTable } from '@/components/ui/data-table'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'
@@ -91,6 +92,13 @@ export default function AppointmentsPage() {
                 ))}
               </SelectContent>
             </Select>
+            <BookAppointmentDialog
+              trigger={
+                <Button className="rounded-full">
+                  <CalendarPlus className="size-4" /> Book
+                </Button>
+              }
+            />
           </>
         }
       />

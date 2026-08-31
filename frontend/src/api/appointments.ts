@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { http } from '@/api/http'
 import type { Paginated } from '@/api/types'
 
@@ -28,6 +28,30 @@ export interface AppointmentSummary {
   scheduled_end: string
   status: AppointmentStatus
   type: AppointmentType
+}
+
+/** Full record from get/book (`AppointmentResponse`). */
+export interface Appointment extends AppointmentSummary {
+  hospital_id: string
+  reason: string | null
+  notes: string | null
+  cancelled_reason: string | null
+  checked_in_at: string | null
+  started_at: string | null
+  completed_at: string | null
+  created_at: string
+  updated_at: string
+}
+
+/** Body for `POST /appointments` (`BookAppointmentRequest`). Timestamps are tz-aware ISO. */
+export interface BookAppointmentInput {
+  patient_id: string
+  doctor_id: string
+  scheduled_start: string
+  scheduled_end: string
+  type: AppointmentType
+  reason?: string
+  notes?: string
 }
 
 export interface AppointmentListParams {
@@ -60,5 +84,16 @@ export function useAppointments(params: AppointmentListParams = {}) {
     queryFn: () => http.getPaginated<AppointmentSummary>('/appointments', { params: withTz }),
     staleTime: 15_000,
     placeholderData: keepPreviousData,
+  })
+}
+
+/** Book an appointment, then refresh the queue. Throws ApiError (409 on doctor overlap). */
+export function useBookAppointment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: BookAppointmentInput) => http.post<Appointment>('/appointments', input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: appointmentKeys.all })
+    },
   })
 }
