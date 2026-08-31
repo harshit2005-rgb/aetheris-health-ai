@@ -17,3 +17,9 @@ export function formatDate(iso: string): string {
   const d = new Date(iso)
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { dateStyle: 'medium' })
 }
+
+/** Short local time (e.g. "9:30 AM") from an ISO datetime; echoes the input if unparseable. */
+export function formatTime(iso: string): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime()) ? iso : d.toLocaleTimeString(undefined, { timeStyle: 'short' })
+}
