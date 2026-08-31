@@ -20,6 +20,7 @@ from typing import Any
 from fastapi import APIRouter
 
 from app.core.config import settings
+from app.core.redis import ping_redis
 
 router = APIRouter(tags=["health"])
 
@@ -74,7 +75,7 @@ async def readyz() -> dict[str, Any]:
         "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
         "checks": {
             "database": "deferred",  # full check at /api/v1/health/ready
-            "redis": "not_configured",
+            "redis": "healthy" if await ping_redis() else "unhealthy",
         },
     }
 

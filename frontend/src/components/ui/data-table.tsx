@@ -13,12 +13,32 @@ import { ChevronDown, ChevronsUpDown, ChevronUp, Search } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { cn } from '@/lib/utils'
 
+/**
+ * Page state for a table whose rows the server already filtered and paged.
+ * Supplying it hands both concerns to the caller: the table renders the
+ * controls and reports intent, but does no filtering or slicing of its own.
+ */
+interface ServerPagination {
+  page: number
+  totalPages: number
+  onPageChange: (page: number) => void
+}
+
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
   /** Enable the global search box in the toolbar. */
   searchable?: boolean
   searchPlaceholder?: string
+  /**
+   * Controlled search term. Pass this (with `onSearchChange`) when the server
+   * does the searching — the rows arrive already filtered, so filtering them
+   * again client-side would hide matches that are on another page.
+   */
+  searchValue?: string
+  onSearchChange?: (value: string) => void
+  /** Server-side page state. Omit for client-side pagination over all rows. */
+  serverPagination?: ServerPagination
   /** Shown while data loads — renders skeleton rows instead of a spinner. */
   isLoading?: boolean
   /** Rendered when there are no rows (and not loading). */
@@ -26,15 +46,6 @@ interface DataTableProps<TData, TValue> {
   /** Slot on the right of the toolbar, e.g. a "Register" button. */
   toolbarRight?: ReactNode
   pageSize?: number
-  /** Client-side column sorting. Turn off when the backend controls order. */
-  enableSorting?: boolean
-  /**
-   * Server drives pagination: render every row given and hide the built-in
-   * pager. Pass `footer` with your own page controls.
-   */
-  manualPagination?: boolean
-  /** Footer slot, used with `manualPagination` for server page controls. */
-  footer?: ReactNode
   className?: string
 }
 
@@ -48,34 +59,49 @@ export function DataTable<TData, TValue>({
   data,
   searchable = false,
   searchPlaceholder = 'Search…',
+  searchValue,
+  onSearchChange,
+  serverPagination,
   isLoading = false,
   emptyState,
   toolbarRight,
   pageSize = 10,
-  enableSorting = true,
-  manualPagination = false,
-  footer,
   className,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [globalFilter, setGlobalFilter] = useState('')
 
+  const searchIsControlled = onSearchChange !== undefined
+  const searchTerm = searchIsControlled ? (searchValue ?? '') : globalFilter
+
   // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Table manages its own memoization; the compiler lint is a known false positive here.
   const table = useReactTable({
     data,
     columns,
-    enableSorting,
-    manualPagination,
-    state: { sorting, globalFilter },
+    // A controlled search means the rows are already filtered upstream, so the
+    // table's own filter stays empty rather than filtering the page again.
+    state: { sorting, globalFilter: searchIsControlled ? '' : globalFilter },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    // Omit the client pager when the server paginates: keep every row visible.
-    ...(manualPagination ? {} : { getPaginationRowModel: getPaginationRowModel() }),
+    getPaginationRowModel: getPaginationRowModel(),
     initialState: { pagination: { pageSize } },
+    // Same reasoning for pages: the server sent exactly one page, so slicing it
+    // again would show a fraction of it.
+    ...(serverPagination ? { manualPagination: true, pageCount: serverPagination.totalPages } : {}),
   })
+
+  const currentPage = serverPagination ? serverPagination.page : table.getState().pagination.pageIndex + 1
+  const totalPages = serverPagination ? serverPagination.totalPages : table.getPageCount()
+  const canPrevious = serverPagination ? currentPage > 1 : table.getCanPreviousPage()
+  const canNext = serverPagination ? currentPage < totalPages : table.getCanNextPage()
+
+  const goToPrevious = () =>
+    serverPagination ? serverPagination.onPageChange(currentPage - 1) : table.previousPage()
+  const goToNext = () =>
+    serverPagination ? serverPagination.onPageChange(currentPage + 1) : table.nextPage()
 
   const rows = table.getRowModel().rows
   const showEmpty = !isLoading && rows.length === 0
@@ -88,8 +114,10 @@ export function DataTable<TData, TValue>({
             <div className="relative w-full max-w-xs">
               <Search className="text-outline pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
               <input
-                value={globalFilter}
-                onChange={(e) => setGlobalFilter(e.target.value)}
+                value={searchTerm}
+                onChange={(e) =>
+                  searchIsControlled ? onSearchChange(e.target.value) : setGlobalFilter(e.target.value)
+                }
                 placeholder={searchPlaceholder}
                 aria-label={searchPlaceholder}
                 className="neo-pressed bg-surface font-body text-body-sm text-on-surface placeholder:text-outline-variant w-full rounded-xl py-2.5 pr-4 pl-9 outline-none focus-visible:ring-2 focus-visible:ring-secondary"
@@ -173,27 +201,24 @@ export function DataTable<TData, TValue>({
         {showEmpty && <div className="px-4">{emptyState}</div>}
       </div>
 
-      {/* Server-driven pagination: parent supplies the controls. */}
-      {manualPagination && !showEmpty && footer}
-
-      {!manualPagination && !showEmpty && table.getPageCount() > 1 && (
+      {!showEmpty && totalPages > 1 && (
         <div className="flex items-center justify-between gap-4">
           <p className="font-body text-body-sm text-on-surface-variant">
-            Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
+            Page {currentPage} of {totalPages}
           </p>
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => table.previousPage()}
-              disabled={!table.getCanPreviousPage()}
+              onClick={goToPrevious}
+              disabled={!canPrevious}
               className="neo-extruded bg-surface font-label text-label-caps text-on-surface-variant rounded-xl px-4 py-2 transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Previous
             </button>
             <button
               type="button"
-              onClick={() => table.nextPage()}
-              disabled={!table.getCanNextPage()}
+              onClick={goToNext}
+              disabled={!canNext}
               className="neo-extruded bg-surface font-label text-label-caps text-on-surface-variant rounded-xl px-4 py-2 transition-transform active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
             >
               Next

@@ -17,6 +17,7 @@ from app.repositories.base import BaseRepository
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.sql import ColumnElement
 
 
 class UserRepository(BaseRepository[User]):
@@ -27,6 +28,27 @@ class UserRepository(BaseRepository[User]):
 
     def __init__(self, session: AsyncSession) -> None:
         super().__init__(User, session)
+
+    @staticmethod
+    def _search_predicate(search: str | None) -> ColumnElement[bool] | None:
+        """Build the shared name/email search predicate, or ``None``.
+
+        One helper drives both :meth:`list_by_hospital` and
+        :meth:`count_by_hospital` so the two queries can never drift
+        (Week 1 handoff B4).
+
+        :param search: Optional search term.
+        :returns: A case-insensitive ``ilike`` predicate over first/last
+            name and email, or ``None`` when no search is requested.
+        """
+        if not search:
+            return None
+        pattern = f"%{search}%"
+        return (
+            User.first_name.ilike(pattern)
+            | User.last_name.ilike(pattern)
+            | User.email.ilike(pattern)
+        )
 
     async def create(  # type: ignore[override]
         self,
@@ -98,13 +120,9 @@ class UserRepository(BaseRepository[User]):
         stmt = self._query().where(User.hospital_id == hospital_id)
         if status is not None:
             stmt = stmt.where(User.status == status)
-        if search:
-            pattern = f"%{search}%"
-            stmt = stmt.where(
-                User.first_name.ilike(pattern)
-                | User.last_name.ilike(pattern)
-                | User.email.ilike(pattern)
-            )
+        predicate = self._search_predicate(search)
+        if predicate is not None:
+            stmt = stmt.where(predicate)
         stmt = self._apply_pagination(stmt, skip=skip, limit=limit)
         result = await self._session.execute(stmt)
         return list(result.unique().scalars().all())
@@ -113,16 +131,25 @@ class UserRepository(BaseRepository[User]):
         self,
         hospital_id: uuid.UUID,
         status: UserStatus | None = None,
+        search: str | None = None,
     ) -> int:
-        """Count users in a hospital, optionally filtered by status.
+        """Count users in a hospital, optionally filtered by status and search.
+
+        Applies the identical search predicate as :meth:`list_by_hospital` so
+        ``total`` can never disagree with the rows on a filtered page (Week 1
+        handoff B4).
 
         :param hospital_id: The hospital's UUID.
         :param status: Optional status filter.
+        :param search: Optional search term (same match as the list).
         :returns: The user count.
         """
         stmt = select(User).where(User.hospital_id == hospital_id)
         if status is not None:
             stmt = stmt.where(User.status == status)
+        predicate = self._search_predicate(search)
+        if predicate is not None:
+            stmt = stmt.where(predicate)
         return await self.count(stmt)
 
     async def record_login(self, user: User) -> User:
@@ -170,17 +197,16 @@ class UserRepository(BaseRepository[User]):
         :param role_id: The role's UUID.
         :returns: ``True`` if the user has the role.
         """
-        stmt = (
-            select(UserRole)
-            .where(
-                UserRole.user_id == user_id,
-                UserRole.role_id == role_id,
-            )
+        stmt = select(UserRole).where(
+            UserRole.user_id == user_id,
+            UserRole.role_id == role_id,
         )
         result = await self._session.execute(stmt)
         return result.unique().scalar_one_or_none() is not None
 
-    async def add_role(self, user_id: uuid.UUID, role_id: uuid.UUID, assigned_by: uuid.UUID | None = None) -> UserRole:
+    async def add_role(
+        self, user_id: uuid.UUID, role_id: uuid.UUID, assigned_by: uuid.UUID | None = None
+    ) -> UserRole:
         """Assign a role to a user.
 
         :param user_id: The user's UUID.
@@ -204,12 +230,9 @@ class UserRepository(BaseRepository[User]):
         :param role_id: The role's UUID.
         :returns: ``True`` if a role was removed, ``False`` if it wasn't assigned.
         """
-        stmt = (
-            select(UserRole)
-            .where(
-                UserRole.user_id == user_id,
-                UserRole.role_id == role_id,
-            )
+        stmt = select(UserRole).where(
+            UserRole.user_id == user_id,
+            UserRole.role_id == role_id,
         )
         result = await self._session.execute(stmt)
         user_role = result.unique().scalar_one_or_none()

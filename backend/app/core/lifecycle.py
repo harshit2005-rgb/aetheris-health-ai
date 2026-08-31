@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 import structlog
 
 from app.core.config import settings
+from app.core.redis import close_redis_client
 from app.database import create_session_factory, dispose_engine, initialize_database
 
 if TYPE_CHECKING:
@@ -83,6 +84,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:  # noqa: ARG001
 
     # ── Shutdown ─────────────────────────────────────────────────────────
     logger.info("application_shutdown_started")
+
+    # Redis is created lazily on first use (rate limiting, health probes), so
+    # this is a no-op when nothing ever touched it.
+    await close_redis_client()
 
     await dispose_engine()
 

@@ -104,8 +104,8 @@ def override_settings() -> Generator[None]:
 
 
 @pytest.fixture(autouse=True)
-def reset_rate_limiters() -> None:
-    """Clear the rate-limiter buckets before each test.
+def reset_rate_limiters(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate each test from the shared rate-limiter state.
 
     ``app.middleware.rate_limit`` builds its limiters as module-level
     singletons at import time, so their counters are shared by every app
@@ -113,15 +113,16 @@ def reset_rate_limiters() -> None:
     suite starts returning 429 partway through, and which tests fail depends on
     execution order.
 
-    Resetting here keeps tests isolated. The underlying design is worth
-    revisiting separately: ``docs/06-API_STANDARDS.md`` §15 specifies rate
-    limits tracked in Redis, and an in-process counter also cannot work once
-    the app runs more than one instance (``docs/03-ARCHITECTURE.md`` §13).
+    The Redis backend is also forced open here. Counters are tracked in Redis in
+    production (``docs/06-API_STANDARDS.md`` §15), but the suite must not depend
+    on a running Redis: without this the first request of every test would pay
+    the full connect timeout before falling back to the in-process counter.
+    Redis-backed behaviour has its own tests with an explicit double.
     """
     from app.middleware import rate_limit
 
-    for limiter in (rate_limit._anon_limiter, rate_limit._user_limiter):
-        limiter._buckets.clear()
+    rate_limit.reset_limiter_state()
+    monkeypatch.setattr(rate_limit, "_redis_is_circuit_open", lambda: True)
 
 
 # ── Test doubles ─────────────────────────────────────────────────────────────

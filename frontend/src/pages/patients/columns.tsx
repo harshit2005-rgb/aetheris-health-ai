@@ -1,19 +1,24 @@
 import type { ColumnDef } from '@tanstack/react-table'
-import { Link } from 'react-router-dom'
-import { ChevronRight } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
-import type { Gender, PatientStatus, PatientSummary } from '@/api/patients'
+import { GENDER_LABELS, type PatientStatus, type PatientSummary } from '@/api/patients'
 
-const STATUS_VARIANT: Record<PatientStatus, 'success' | 'neutral'> = {
-  active: 'success',
+/**
+ * Columns for the patient registry.
+ *
+ * Doctor, department and a clinical status (Admitted / Critical / …) used to be
+ * shown here. None of them exist on a patient record: the treating doctor lives
+ * on appointments, and there is no admissions module, so those columns were
+ * displaying values the mock invented. `status` below is the record's
+ * active/inactive lifecycle (`docs/18-API_CONTRACTS.md` §2.2).
+ */
+const STATUS_VARIANT: Record<PatientStatus, 'accent' | 'neutral'> = {
+  active: 'accent',
   inactive: 'neutral',
 }
 
-const GENDER_LABEL: Record<Gender, string> = {
-  male: 'Male',
-  female: 'Female',
-  other: 'Other',
-  unspecified: 'Unspecified',
+const STATUS_LABEL: Record<PatientStatus, string> = {
+  active: 'Active',
+  inactive: 'Inactive',
 }
 
 export const patientColumns: ColumnDef<PatientSummary>[] = [
@@ -29,36 +34,31 @@ export const patientColumns: ColumnDef<PatientSummary>[] = [
   },
   {
     id: 'ageGender',
-    header: 'Age / Sex',
-    accessorFn: (p) => `${p.age} · ${GENDER_LABEL[p.gender]}`,
+    header: 'Age / Gender',
+    accessorFn: (p) => `${p.age} · ${GENDER_LABELS[p.gender]}`,
     enableSorting: false,
+  },
+  {
+    accessorKey: 'date_of_birth',
+    header: 'Date of birth',
+    cell: ({ row }) => (
+      <span className="tabular-nums">
+        {new Date(row.original.date_of_birth).toLocaleDateString()}
+      </span>
+    ),
   },
   {
     accessorKey: 'phone',
     header: 'Phone',
-    cell: ({ row }) => row.original.phone ?? <span className="text-outline-variant">—</span>,
+    cell: ({ row }) => row.original.phone ?? <span className="text-outline">—</span>,
   },
   {
     accessorKey: 'status',
     header: 'Status',
     cell: ({ row }) => (
-      <Badge variant={STATUS_VARIANT[row.original.status]} className="capitalize">
-        {row.original.status}
+      <Badge variant={STATUS_VARIANT[row.original.status]}>
+        {STATUS_LABEL[row.original.status]}
       </Badge>
-    ),
-  },
-  {
-    id: 'actions',
-    header: '',
-    enableSorting: false,
-    cell: ({ row }) => (
-      <Link
-        to={`/patients/${row.original.id}`}
-        aria-label={`View ${row.original.full_name}`}
-        className="text-outline hover:text-secondary inline-flex items-center gap-1 transition-colors"
-      >
-        View <ChevronRight className="size-4" />
-      </Link>
     ),
   },
 ]
