@@ -45,7 +45,7 @@ jobs:
     env:
       DATABASE_URL: postgresql+asyncpg://aetheris:aetheris@localhost:5432/aetheris
       REDIS_URL: redis://localhost:6379/0
-      APP_ENV: test
+      APP_ENV: development
 
     steps:
       - name: Checkout repository
