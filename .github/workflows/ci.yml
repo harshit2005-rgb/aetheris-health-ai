@@ -45,7 +45,7 @@ jobs:
     env:
       DATABASE_URL: postgresql+asyncpg://aetheris:aetheris@localhost:5432/aetheris
       REDIS_URL: redis://localhost:6379/0
-      APP_ENV: test
+      APP_ENV: development
 
     steps:
       - name: Checkout repository
@@ -86,10 +86,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js 20
+      - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
