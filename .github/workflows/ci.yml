@@ -45,7 +45,11 @@ jobs:
     env:
       DATABASE_URL: postgresql+asyncpg://aetheris:aetheris@localhost:5432/aetheris
       REDIS_URL: redis://localhost:6379/0
-      APP_ENV: test
+      # Must be a member of AppEnv (development / staging / production) —
+      # Settings rejects anything else at import, so every test file failed
+      # to collect under the previous value `test`. This matches how the suite
+      # runs locally and in docker compose.
+      APP_ENV: development
 
     steps:
       - name: Checkout repository
@@ -71,6 +75,15 @@ jobs:
       - name: Mypy type check
         run: uv run mypy app/
 
+      # The suite runs against `<DATABASE_URL>_test`, never the configured
+      # database, but the service container only creates `aetheris`. Without
+      # this step the engine fixture cannot connect and *skips* every
+      # database-backed test — CI would pass while testing none of them.
+      - name: Create test database
+        env:
+          PGPASSWORD: aetheris
+        run: psql -h localhost -U aetheris -d aetheris -c "CREATE DATABASE aetheris_test"
+
       - name: Run tests
         run: uv run pytest app/tests/ -v
 
@@ -86,10 +99,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Node.js 20
+      # jsdom's undici dependency requires Node >= 22.19; on Node 20 the vitest
+      # workers crash on startup ("webidl.util.markAsUncloneable is not a
+      # function") before a single test runs.
+      - name: Set up Node.js 22
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
