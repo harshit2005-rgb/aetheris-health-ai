@@ -98,9 +98,28 @@ A 404 is deliberately returned for a record in another tenant. Do not treat it a
 `Authorization: Bearer <access_token>` on **every** endpoint in this document. There are
 no public patient/doctor/appointment endpoints.
 
-Access token lives 15 minutes, in memory only. The refresh token is an HTTP-only cookie —
-never read it from JS, never put either in `localStorage`. The 401-refresh-retry loop is
-already implemented in `frontend/src/lib/api.ts`.
+**Both tokens travel in JSON bodies — there is no cookie.** The backend never sets one.
+
+- `POST /api/v1/auth/login` returns `{ access_token, refresh_token, expires_in, user }`.
+- `POST /api/v1/auth/refresh` takes `{ "refresh_token": "…" }` and returns
+  `{ access_token, refresh_token, expires_in }` — no `user`.
+- The access token lives 15 minutes (`expires_in: 900`); the refresh token 7 days.
+
+Keep both **in memory only** (`frontend/src/services/tokenStore.ts`), never in
+`localStorage` or `sessionStorage`. A page reload therefore drops the session and lands
+on `/login` — that is expected, not a bug.
+
+**Refresh tokens rotate, and reuse is treated as theft.** Every successful refresh
+returns a *new* refresh token and revokes the old one. Presenting an already-used refresh
+token revokes **all of that user's sessions** and returns `401` ("All sessions
+invalidated"). The practical consequence: never run two refreshes at once with the same
+token. `frontend/src/lib/api.ts` already guards this — concurrent `401`s share a single
+in-flight refresh, the original request is retried once with the new token, and if the
+refresh itself fails the session is cleared and route guards send the user to `/login`.
+Keep that shape if you touch it, and give any second client the same single-flight guard.
+
+> **Diverges from `CLAUDE.md`,** which specifies the refresh token as an HTTP-only cookie.
+> That is the intended design; what ships is the body-based flow above. See §8.
 
 ### 1.5 Tenancy
 
@@ -632,7 +651,15 @@ Things the frontend will ask for that do not exist yet. Do not build against the
 - `metadata.request_id` is never populated on a success response (§1.2) — use the
   `X-Request-ID` header. Needs a team decision: populate it, or amend §5.1 of the
   standards doc.
+- The refresh token is returned in the response body, not set as the HTTP-only cookie
+  `CLAUDE.md` specifies (§1.4). Moving to a cookie is a backend contract change *and* a
+  frontend change (drop the body field, send `credentials`), so it needs coordinating —
+  do not half-migrate one side.
 
 ---
 
-_Last updated: 2026-08-21. Contracts verified against the implementation at commit `fc7c1b4`._
+_Last updated: 2026-09-22. Re-verified against the implementation at commit `e3927e2`:
+every endpoint, permission, query parameter, enum and response shape in §2–5 was checked
+against the running app, the §1.9 table against the seeded roles, and §7 against a
+freshly seeded database. §1.4 was corrected — it previously described a refresh-token
+cookie that the backend has never set._
