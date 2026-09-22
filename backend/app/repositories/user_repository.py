@@ -190,6 +190,21 @@ class UserRepository(BaseRepository[User]):
 
     # ── UserRole Management ────────────────────────────────────────────────
 
+    async def refresh(self, user: User) -> User:
+        """Re-load a user row (and its selectin-loaded relationships) from the DB.
+
+        ``user_roles`` is ``lazy="selectin"``: it loads when the instance is
+        first fetched, so rows inserted later in the same session (role
+        assignment during an invite) do not appear on the stale in-memory
+        collection. Refreshing re-runs the eager loads so the instance the
+        API serializes tells the truth.
+
+        :param user: The user instance to re-load.
+        :returns: The same instance, refreshed.
+        """
+        await self._session.refresh(user)
+        return user
+
     async def has_role(self, user_id: uuid.UUID, role_id: uuid.UUID) -> bool:
         """Check if a user already has a specific role assigned.
 
@@ -241,3 +256,33 @@ class UserRepository(BaseRepository[User]):
         await self._session.delete(user_role)
         await self._session.flush()
         return True
+
+    async def count_other_active_holders(
+        self,
+        hospital_id: uuid.UUID,
+        role_id: uuid.UUID,
+        exclude_user_id: uuid.UUID,
+    ) -> int:
+        """Count the hospital's *other* active users holding a given role.
+
+        Backs the administrative-lockout guard (``02-user-management.md`` §14):
+        before a role is stripped, the service asks whether anyone else would
+        still hold it. ``invited`` and ``suspended`` users are not counted —
+        neither can log in, so neither can unlock the hospital.
+
+        :param hospital_id: The hospital to scope the count to.
+        :param role_id: The role being given up.
+        :param exclude_user_id: The user losing the role.
+        :returns: Number of other active users in the hospital with that role.
+        """
+        stmt = (
+            select(User)
+            .join(UserRole, UserRole.user_id == User.id)
+            .where(
+                User.hospital_id == hospital_id,
+                User.status == UserStatus.ACTIVE,
+                User.id != exclude_user_id,
+                UserRole.role_id == role_id,
+            )
+        )
+        return await self.count(stmt)
