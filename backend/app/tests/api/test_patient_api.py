@@ -300,6 +300,33 @@ class TestListAndSearchPatients:
 
         assert response.status_code == 422
 
+    async def test_inverted_age_range_returns_422(
+        self, api: AsyncClient, full_access: dict[str, str]
+    ) -> None:
+        # Regression: the cross-field rule lives on SearchPatientRequest, which
+        # the route builds itself rather than letting FastAPI parse, so the
+        # rejection escaped as an unhandled 500. The schema-level test passed
+        # the whole time — only an HTTP-level test could see this.
+        response = await api.get(
+            "/api/v1/patients", params={"age_gte": 50, "age_lte": 10}, headers=full_access
+        )
+
+        assert response.status_code == 422
+        body = response.json()
+        assert body["success"] is False
+        assert body["error_code"] == "VALIDATION_ERROR"
+        assert any("age_gte" in error["message"] for error in body["errors"])
+
+    async def test_equal_age_bounds_are_accepted(
+        self, api: AsyncClient, full_access: dict[str, str]
+    ) -> None:
+        # The boundary: an exact-age search is a valid range, not an inverted one.
+        response = await api.get(
+            "/api/v1/patients", params={"age_gte": 30, "age_lte": 30}, headers=full_access
+        )
+
+        assert response.status_code == 200
+
     async def test_list_never_returns_another_hospitals_patients(
         self,
         api: AsyncClient,

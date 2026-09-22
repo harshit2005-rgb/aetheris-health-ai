@@ -23,6 +23,8 @@ import uuid
 from datetime import date
 
 from fastapi import APIRouter, Depends, Path, Query, status
+from fastapi.exceptions import RequestValidationError
+from pydantic import ValidationError
 
 from app.api.dependencies.auth import require_permission
 from app.api.dependencies.services import get_patient_service
@@ -143,14 +145,24 @@ async def list_patients(
     hospital_id = _tenant_of(current_user)
     pagination = PaginationParams(page=page, page_size=page_size)
 
-    filters = SearchPatientRequest(
-        q=q,
-        gender=gender,
-        date_of_birth=date_of_birth,
-        age_gte=age_gte,
-        age_lte=age_lte,
-        include_inactive=include_inactive,
-    )
+    # The filters are assembled here rather than parsed by FastAPI, so a
+    # rejection from SearchPatientRequest's cross-field rule (age_gte greater
+    # than age_lte) is a plain ValidationError that no handler maps — it
+    # escaped as a 500. Re-raise it as request validation so it gets the same
+    # 422 envelope as every other bad query parameter.
+    try:
+        filters = SearchPatientRequest(
+            q=q,
+            gender=gender,
+            date_of_birth=date_of_birth,
+            age_gte=age_gte,
+            age_lte=age_lte,
+            include_inactive=include_inactive,
+        )
+    except ValidationError as exc:
+        raise RequestValidationError(
+            [{**error, "loc": ("query", *error["loc"])} for error in exc.errors()]
+        ) from exc
 
     # An unfiltered request is a list, not a search. Keeping them apart means
     # the audit trail does not record every page view as a patient search.
