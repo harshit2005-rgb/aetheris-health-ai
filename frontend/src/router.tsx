@@ -10,6 +10,8 @@ import { privacyDoc, termsDoc, hipaaDoc } from '@/content/legal'
 const DashboardLayout = lazy(() => import('@/layouts/DashboardLayout'))
 const LandingPage = lazy(() => import('@/pages/LandingPage'))
 const LoginPage = lazy(() => import('@/pages/LoginPage'))
+const ForgotPasswordPage = lazy(() => import('@/pages/auth/ForgotPasswordPage'))
+const ResetPasswordPage = lazy(() => import('@/pages/auth/ResetPasswordPage'))
 const ContactPage = lazy(() => import('@/pages/ContactPage'))
 const LegalPage = lazy(() => import('@/pages/LegalPage'))
 const PricingPage = lazy(() => import('@/pages/PricingPage'))
@@ -22,7 +24,9 @@ const DoctorDetailPage = lazy(() => import('@/pages/doctors/DoctorDetailPage'))
 const AppointmentsPage = lazy(() => import('@/pages/appointments/AppointmentsPage'))
 const BillingPage = lazy(() => import('@/pages/billing/BillingPage'))
 const ReportsPage = lazy(() => import('@/pages/reports/ReportsPage'))
+const UsersPage = lazy(() => import('@/pages/users/UsersPage'))
 const SettingsPage = lazy(() => import('@/pages/settings/SettingsPage'))
+const ProfilePage = lazy(() => import('@/pages/settings/ProfilePage'))
 
 export const router = createBrowserRouter([
   {
@@ -40,7 +44,11 @@ export const router = createBrowserRouter([
       { path: '/privacy', element: <LegalPage doc={privacyDoc} /> },
       { path: '/terms', element: <LegalPage doc={termsDoc} /> },
       { path: '/hipaa', element: <LegalPage doc={hipaaDoc} /> },
+
+      // Auth pages (public)
       { path: '/login', element: <LoginPage /> },
+      { path: '/forgot-password', element: <ForgotPasswordPage /> },
+      { path: '/reset-password', element: <ResetPasswordPage /> },
 
       // Authenticated app — shared enterprise shell
       {
@@ -108,12 +116,28 @@ export const router = createBrowserRouter([
             ),
           },
           {
+            path: '/users',
+            element: (
+              <RequirePermission permission="user.read">
+                <UsersPage />
+              </RequirePermission>
+            ),
+          },
+          {
             path: '/settings',
             element: (
-              <RequirePermission permission="settings.manage">
+              <RequirePermission permission="settings.read">
                 <SettingsPage />
               </RequirePermission>
             ),
+          },
+          {
+            // Own profile (module spec 02 §12). Deliberately NOT behind
+            // RequirePermission: it acts only on the caller's own account, so
+            // every authenticated user reaches it — including one with no
+            // roles at all.
+            path: '/settings/profile',
+            element: <ProfilePage />,
           },
         ],
       },

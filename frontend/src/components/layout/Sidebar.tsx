@@ -6,6 +6,8 @@ import { Sheet, SheetContent, SheetTitle, SheetDescription } from '@/components/
 import { useAuthStore } from '@/store/auth-store'
 import { usePermissions } from '@/hooks/usePermissions'
 import { ROLE_LABELS } from '@/lib/rbac'
+import { api } from '@/lib/api'
+import { tokenStore } from '@/services/tokenStore'
 import { cn } from '@/lib/utils'
 
 function initials(name: string) {
@@ -38,7 +40,18 @@ function SidebarBody({ collapsed, onToggleCollapse, onNavigate, onOpenCopilot }:
   const name = user?.name ?? 'User'
   const roleLabel = role ? ROLE_LABELS[role] : ''
 
-  function handleLogout() {
+  async function handleLogout() {
+    // Attempt to revoke the refresh token on the backend. If the network is
+    // unavailable, we still clear the local session (task 4 — graceful
+    // offline logout).
+    const currentRefresh = tokenStore.getRefreshToken()
+    if (currentRefresh) {
+      try {
+        await api.post('/auth/logout', { refresh_token: currentRefresh })
+      } catch {
+        // Network error — proceed with local cleanup anyway.
+      }
+    }
     logout()
     toast.success('Signed out')
     navigate('/login', { replace: true })
@@ -99,17 +112,27 @@ function SidebarBody({ collapsed, onToggleCollapse, onNavigate, onOpenCopilot }:
         {!collapsed && <span className="font-label text-label-caps">AI Copilot</span>}
       </button>
 
-      {/* User */}
+      {/* User — the identity block is the way into the own-profile page, which
+          is available to every authenticated user regardless of permissions. */}
       <div className="border-outline-variant/30 mt-2 flex items-center gap-3 border-t pt-3">
-        <span className="neo-extruded bg-primary-container flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white">
+        <Link
+          to="/settings/profile"
+          onClick={onNavigate}
+          title="My profile"
+          className="neo-extruded bg-primary-container flex size-10 shrink-0 items-center justify-center rounded-full text-sm font-bold text-white transition-transform active:scale-95"
+        >
           {initials(name)}
-        </span>
+        </Link>
         {!collapsed && (
           <>
-            <div className="min-w-0 flex-1">
+            <Link
+              to="/settings/profile"
+              onClick={onNavigate}
+              className="min-w-0 flex-1 text-left"
+            >
               <p className="font-body text-body-sm text-primary truncate font-bold">{name}</p>
               <p className="font-body text-outline truncate text-xs">{roleLabel}</p>
-            </div>
+            </Link>
             <button
               onClick={handleLogout}
               aria-label="Sign out"
