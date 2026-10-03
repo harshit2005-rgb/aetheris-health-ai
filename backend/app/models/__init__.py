@@ -43,6 +43,13 @@ from app.models.doctor import (
     SlotStatus,
 )
 from app.models.hospital import Hospital
+from app.models.notification import (
+    DeliveryStatus,
+    Notification,
+    NotificationChannel,
+    NotificationDelivery,
+    NotificationPreference,
+)
 from app.models.password_reset_token import PasswordResetToken
 from app.models.patient import BloodGroup, Gender, MrnSequence, Patient, PatientStatus
 from app.models.permission import Permission
@@ -90,6 +97,12 @@ __all__ = [
     "PaymentMethod",
     "Refund",
     "Service",
+    # Notification
+    "DeliveryStatus",
+    "Notification",
+    "NotificationChannel",
+    "NotificationDelivery",
+    "NotificationPreference",
     # Department
     "Department",
     "DepartmentStatus",
