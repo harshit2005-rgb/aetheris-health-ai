@@ -36,9 +36,16 @@ enforced here rather than in the routes:
 The routes decide *which* rule applies, from the caller's permissions; the
 service applies it.
 
-This sprint builds the core money path. Discounts with approval (§5.2) and
-refunds (§5.5) are not implemented; the ``discount_*`` columns exist and stay
-at zero, and ``refunded`` is a status nothing here produces.
+**Discounts are checked against a threshold the hospital sets** (§5.2,
+business rule 5). A discount above it marks the draft as awaiting approval,
+and the draft cannot be issued until an admin approves it (AC-4). Changing the
+discount or the lines afterwards withdraws an approval already given: what was
+approved was a specific discount on a specific bill.
+
+**Refunds never rewrite what was received** (§5.5). ``amount_paid`` stays as
+it was and ``amount_refunded`` grows beside it, capped by the database at
+``amount_paid`` (business rule 10). A full refund closes the invoice as
+``refunded``; a partial one leaves its status alone.
 """
 
 from __future__ import annotations
@@ -61,7 +68,12 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.core.logging import get_logger
-from app.models.billing import PAYABLE_STATUSES, InvoiceStatus, PaymentMethod
+from app.models.billing import (
+    PAYABLE_STATUSES,
+    REFUNDABLE_STATUSES,
+    InvoiceStatus,
+    PaymentMethod,
+)
 from app.schemas.billing import (
     CreateInvoiceRequest,
     InvoiceLineRequest,
@@ -70,6 +82,9 @@ from app.schemas.billing import (
     PaymentRecordedResponse,
     PaymentResponse,
     RecordPaymentRequest,
+    RecordRefundRequest,
+    RefundRecordedResponse,
+    RefundResponse,
     UpdateInvoiceRequest,
     VoidInvoiceRequest,
 )
@@ -83,7 +98,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from app.core.audit import AuditSink
-    from app.models.billing import Invoice, Payment
+    from app.models.billing import Invoice, Payment, Refund
     from app.repositories.appointment_repository import AppointmentRepository
     from app.repositories.doctor_repository import DoctorRepository
     from app.repositories.hospital_repository import HospitalRepository
@@ -99,15 +114,19 @@ logger = get_logger(__name__)
 
 __all__ = [
     "DEFAULT_CURRENCY",
+    "DEFAULT_DISCOUNT_APPROVAL_THRESHOLD_PERCENT",
     "DEFAULT_TAX_RATE",
     "BillingInvoiceDraftSink",
     "BillingService",
     "CashOnlyPaymentError",
+    "DiscountAwaitingApprovalError",
     "DuplicateAppointmentInvoiceError",
     "IdempotencyKeyReuseError",
     "InvalidInvoiceStateError",
     "InvoiceNotFoundError",
+    "NoDiscountToApproveError",
     "OverpaymentError",
+    "RefundExceedsPaidError",
 ]
 
 #: Used when a hospital row cannot be read. Matches the column default.
@@ -118,7 +137,14 @@ DEFAULT_CURRENCY = "INR"
 #: guessed one. Overridable via ``hospitals.settings["billing"]["default_tax_rate"]``.
 DEFAULT_TAX_RATE = Decimal("0.00")
 
+#: Share of the subtotal a discount may reach before an admin must approve it,
+#: when the hospital has not configured one. Zero: until a hospital opts into
+#: a threshold, *every* discount needs approval. Overridable via
+#: ``hospitals.settings["billing"]["discount_approval_threshold_percent"]``.
+DEFAULT_DISCOUNT_APPROVAL_THRESHOLD_PERCENT = Decimal("0.00")
+
 _MAX_TAX_RATE = Decimal(100)
+_HUNDRED = Decimal(100)
 
 #: ``invoice_items.description`` is ``VARCHAR(200)``.
 _DESCRIPTION_MAX_LENGTH = 200
@@ -185,19 +211,58 @@ class CashOnlyPaymentError(PermissionDeniedError):
         )
 
 
-class IdempotencyKeyReuseError(ConflictError):
-    """Raised when an ``Idempotency-Key`` is reused for a *different* payment.
+class DiscountAwaitingApprovalError(BusinessRuleError):
+    """Raised when a draft is issued while its discount awaits approval (AC-4)."""
 
-    A replay must be the same request. The same key arriving with another
-    invoice, amount or method is a client bug, and answering it with the
-    original payment would tell the client its new payment went through.
+    def __init__(self, discount_amount: Decimal) -> None:
+        super().__init__(
+            message=(
+                f"The discount of {discount_amount} is above the hospital's approval "
+                "threshold and has not been approved. An admin must approve it before "
+                "the invoice can be issued."
+            ),
+            detail={"discount_amount": str(discount_amount)},
+        )
+
+
+class NoDiscountToApproveError(ConflictError):
+    """Raised when there is no discount awaiting approval on the invoice.
+
+    409 because this is what the *second* of two admins approving at once
+    sees (module spec §14): the first commit won, and the request now
+    conflicts with the invoice's state.
     """
 
     def __init__(self) -> None:
+        super().__init__(message="This invoice has no discount awaiting approval.")
+
+
+class RefundExceedsPaidError(BusinessRuleError):
+    """Raised when a refund would exceed what is left to give back (rule 10)."""
+
+    def __init__(self, amount: Decimal, refundable: Decimal) -> None:
         super().__init__(
             message=(
-                "This Idempotency-Key was already used for a different payment. "
-                "Generate a new key for a new payment."
+                f"Refund of {amount} exceeds the {refundable} that can still be refunded "
+                "on this invoice."
+            ),
+            detail={"amount": str(amount), "refundable_amount": str(refundable)},
+        )
+
+
+class IdempotencyKeyReuseError(ConflictError):
+    """Raised when an ``Idempotency-Key`` is reused for a *different* request.
+
+    A replay must be the same request. The same key arriving with another
+    invoice, amount or method is a client bug, and answering it with the
+    original payment or refund would tell the client its new one went through.
+    """
+
+    def __init__(self, what: str = "payment") -> None:
+        super().__init__(
+            message=(
+                f"This Idempotency-Key was already used for a different {what}. "
+                f"Generate a new key for a new {what}."
             )
         )
 
@@ -408,6 +473,11 @@ class BillingService:
         ``items``, when sent, replaces the whole line set and the totals are
         recomputed. Lines are re-priced from the catalog as it stands now.
 
+        ``discount_amount`` sets the invoice-level discount. It must not exceed
+        the subtotal and needs a reason. If it is above the hospital's
+        threshold the draft is marked as awaiting approval. Any change to the
+        discount or to the lines withdraws an approval already given.
+
         :param hospital_id: The hospital the invoice belongs to.
         :param invoice_id: The invoice to edit.
         :param payload: Validated update data.
@@ -416,7 +486,8 @@ class BillingService:
         :raises InvoiceNotFoundError: If absent from this tenant.
         :raises InvalidInvoiceStateError: If the invoice is no longer a draft
             (business rule 3, AC-1).
-        :raises ValidationError: If a service is unknown or inactive.
+        :raises ValidationError: If a service is unknown or inactive, the
+            discount exceeds the subtotal, or a discount has no reason.
         """
         invoice = await self._lock_or_raise(hospital_id, invoice_id)
         if not invoice.is_editable:
@@ -427,20 +498,62 @@ class BillingService:
             )
 
         currency, tax_rate, _ = await self._hospital_billing_context(hospital_id)
+        sent = payload.model_fields_set
         fields: dict[str, Any] = {}
         changed: list[str] = []
 
+        # ── Lines ────────────────────────────────────────────────────────
+        new_lines: list[dict[str, Any]] | None = None
         if payload.items is not None:
-            lines, totals = await self._price_lines(hospital_id, payload.items, tax_rate)
-            await self._invoices.replace_items(invoice, lines)
-            fields.update(
-                subtotal=totals.subtotal, tax_amount=totals.tax_amount, total=totals.total
-            )
+            new_lines, line_totals = await self._price_lines(hospital_id, payload.items, tax_rate)
+            subtotal, tax_amount = line_totals.subtotal, line_totals.tax_amount
             changed.append("items")
-        if "notes" in payload.model_fields_set:
+        else:
+            subtotal, tax_amount = invoice.subtotal, invoice.tax_amount
+
+        # ── Discount ─────────────────────────────────────────────────────
+        discount = invoice.discount_amount
+        if payload.discount_amount is not None:
+            discount = payload.discount_amount
+        reason = payload.discount_reason if "discount_reason" in sent else invoice.discount_reason
+
+        if discount > subtotal:
+            raise _field_error(
+                "discount_amount",
+                f"The discount of {discount} exceeds the subtotal of {subtotal}.",
+            )
+        if discount > ZERO and not reason:
+            raise _field_error("discount_reason", "A discount needs a reason.")
+        if discount == ZERO:
+            reason = None
+
+        discount_changed = discount != invoice.discount_amount
+        if discount_changed:
+            changed.append("discount_amount")
+        if reason != invoice.discount_reason:
+            changed.append("discount_reason")
+
+        if discount_changed or new_lines is not None:
+            # What an admin approved was this discount on these lines. Either
+            # changing means the question is asked again from scratch.
+            threshold = await self._discount_threshold_percent(hospital_id)
+            fields["discount_pending_approval"] = discount > subtotal * threshold / _HUNDRED
+            fields["discount_approved_by"] = None
+
+        fields.update(
+            subtotal=subtotal,
+            tax_amount=tax_amount,
+            discount_amount=discount,
+            discount_reason=reason,
+            total=subtotal + tax_amount - discount,
+        )
+        if "notes" in sent:
             fields["notes"] = payload.notes
             changed.append("notes")
 
+        # Validation is done; only now is anything written.
+        if new_lines is not None:
+            await self._invoices.replace_items(invoice, new_lines)
         invoice = await self._invoices.update_invoice(invoice, updated_by=actor_id, **fields)
 
         await self._audit.record(
@@ -450,7 +563,12 @@ class BillingService:
                 target_type="invoice",
                 target_id=invoice.id,
                 actor_id=actor_id,
-                context={"changed": changed, "total": str(invoice.total)},
+                context={
+                    "changed": changed,
+                    "total": str(invoice.total),
+                    "discount_amount": str(invoice.discount_amount),
+                    "discount_pending_approval": invoice.discount_pending_approval,
+                },
             )
         )
         await self._session.commit()
@@ -461,6 +579,63 @@ class BillingService:
             invoice_id=str(invoice.id),
             changed=changed,
         )
+        return InvoiceResponse.from_model(invoice, currency=currency)
+
+    async def approve_discount(
+        self,
+        hospital_id: uuid.UUID,
+        invoice_id: uuid.UUID,
+        *,
+        actor_id: uuid.UUID,
+    ) -> InvoiceResponse:
+        """Approve a draft's above-threshold discount (module spec §5.2).
+
+        The row lock is what settles two admins approving at once (§14): the
+        second waits, then finds nothing left to approve and gets a 409.
+
+        :param hospital_id: The hospital the invoice belongs to.
+        :param invoice_id: The draft whose discount to approve.
+        :param actor_id: UUID of the approving admin.
+        :returns: The draft, now free to be issued.
+        :raises InvoiceNotFoundError: If absent from this tenant.
+        :raises InvalidInvoiceStateError: If it is no longer a draft.
+        :raises NoDiscountToApproveError: If no discount is awaiting approval.
+        """
+        invoice = await self._lock_or_raise(hospital_id, invoice_id)
+        if invoice.status != InvoiceStatus.DRAFT:
+            raise InvalidInvoiceStateError("approve a discount on", invoice.status)
+        if not invoice.discount_pending_approval:
+            raise NoDiscountToApproveError
+
+        invoice = await self._invoices.update_invoice(
+            invoice,
+            updated_by=actor_id,
+            discount_pending_approval=False,
+            discount_approved_by=actor_id,
+        )
+
+        await self._audit.record(
+            AuditEvent(
+                action="invoice.discount_approved",
+                hospital_id=hospital_id,
+                target_type="invoice",
+                target_id=invoice.id,
+                actor_id=actor_id,
+                context={
+                    "discount_amount": str(invoice.discount_amount),
+                    "subtotal": str(invoice.subtotal),
+                    "reason": invoice.discount_reason,
+                },
+            )
+        )
+        await self._session.commit()
+
+        logger.info(
+            "invoice.discount_approved",
+            hospital_id=str(hospital_id),
+            invoice_id=str(invoice.id),
+        )
+        currency, _, _ = await self._hospital_billing_context(hospital_id)
         return InvoiceResponse.from_model(invoice, currency=currency)
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -484,6 +659,8 @@ class BillingService:
         :raises InvoiceNotFoundError: If absent from this tenant.
         :raises InvalidInvoiceStateError: If it is not a draft.
         :raises BusinessRuleError: If it has no lines.
+        :raises DiscountAwaitingApprovalError: If its discount is above the
+            threshold and no admin has approved it (AC-4).
         :raises ConfigurationError: If the hospital's number template is invalid.
         """
         invoice = await self._lock_or_raise(hospital_id, invoice_id)
@@ -494,6 +671,9 @@ class BillingService:
                 message="An invoice needs at least one line before it can be issued.",
                 detail={"invoice_id": str(invoice_id)},
             )
+
+        if invoice.discount_pending_approval:
+            raise DiscountAwaitingApprovalError(invoice.discount_amount)
 
         # Recompute from the stored lines rather than trusting the stored
         # totals: these are the figures that are about to be frozen.
@@ -555,8 +735,9 @@ class BillingService:
         series — and stops counting as revenue (AC-6).
 
         Only ``issued`` qualifies. The spec also names ``partially_paid`` "with
-        no payments recorded", a state that cannot exist until refunds do: any
-        payment is what makes an invoice partially paid.
+        no payments recorded — otherwise refund first". Refunding everything
+        closes the invoice as ``refunded``, so that path ends there rather
+        than in a void.
 
         :param hospital_id: The hospital the invoice belongs to.
         :param invoice_id: The invoice to void.
@@ -736,6 +917,123 @@ class BillingService:
         )
         return self._payment_result(payment, invoice, currency), True
 
+    # ── Refunds ───────────────────────────────────────────────────────────────
+
+    async def record_refund(
+        self,
+        hospital_id: uuid.UUID,
+        invoice_id: uuid.UUID,
+        payload: RecordRefundRequest,
+        *,
+        idempotency_key: str,
+        actor_id: uuid.UUID,
+    ) -> tuple[RefundRecordedResponse, bool]:
+        """Give money back against an invoice (module spec §5.5).
+
+        Returns ``(result, created)``, with the same replay semantics as
+        :meth:`record_payment`: a retried request with the same key returns
+        the original refund rather than refunding twice.
+
+        A refund that brings ``amount_refunded`` up to ``amount_paid`` closes
+        the invoice as ``refunded``. A smaller one leaves the status as it was.
+
+        :param hospital_id: The hospital the invoice belongs to.
+        :param invoice_id: The invoice being refunded.
+        :param payload: Validated refund data.
+        :param idempotency_key: Client-supplied key.
+        :param actor_id: UUID of the admin issuing the refund.
+        :returns: The refund with the invoice as it now stands, and whether
+            the refund was newly created.
+        :raises InvoiceNotFoundError: If absent from this tenant.
+        :raises IdempotencyKeyReuseError: If the key belongs to a different refund.
+        :raises InvalidInvoiceStateError: If the invoice holds no money to refund.
+        :raises RefundExceedsPaidError: If the amount exceeds what is left to
+            give back (business rule 10).
+        """
+        invoice = await self._lock_or_raise(hospital_id, invoice_id)
+        currency, _, _ = await self._hospital_billing_context(hospital_id)
+
+        # After the lock, for the same reason as in record_payment.
+        replayed = await self._invoices.get_refund_by_idempotency_key(hospital_id, idempotency_key)
+        if replayed is not None:
+            if (
+                replayed.invoice_id != invoice_id
+                or replayed.amount != payload.amount
+                or replayed.method != payload.method
+            ):
+                raise IdempotencyKeyReuseError("refund")
+            await self._session.commit()
+            logger.info(
+                "invoice.refund_idempotent_replay",
+                hospital_id=str(hospital_id),
+                invoice_id=str(invoice_id),
+                refund_id=str(replayed.id),
+            )
+            return self._refund_result(replayed, invoice, currency), False
+
+        if invoice.status not in REFUNDABLE_STATUSES:
+            raise InvalidInvoiceStateError(
+                "refund",
+                invoice.status,
+                hint="Only an invoice that has taken a payment can be refunded.",
+            )
+        if payload.amount > invoice.refundable_amount:
+            raise RefundExceedsPaidError(payload.amount, invoice.refundable_amount)
+
+        before = invoice.status
+        amount_refunded = invoice.amount_refunded + payload.amount
+        status = InvoiceStatus.REFUNDED if amount_refunded == invoice.amount_paid else before
+
+        try:
+            async with self._session.begin_nested():
+                refund = await self._invoices.create_refund(
+                    invoice=invoice,
+                    amount=payload.amount,
+                    method=payload.method,
+                    reason=payload.reason,
+                    reference=payload.reference,
+                    refunded_by=actor_id,
+                    refunded_at=datetime.now(UTC),
+                    idempotency_key=idempotency_key,
+                )
+                invoice = await self._invoices.update_invoice(
+                    invoice, updated_by=actor_id, amount_refunded=amount_refunded, status=status
+                )
+        except IntegrityError as exc:
+            # The same key racing in on a *different* invoice; refunds on this
+            # one are serialized by the lock above.
+            if "uq_refunds_hospital_idempotency_key" in str(getattr(exc, "orig", exc)):
+                raise IdempotencyKeyReuseError("refund") from exc
+            raise
+
+        await self._audit.record(
+            AuditEvent(
+                action="invoice.refunded",
+                hospital_id=hospital_id,
+                target_type="invoice",
+                target_id=invoice.id,
+                actor_id=actor_id,
+                changes={"status": {"before": before.value, "after": status.value}},
+                context={
+                    "refund_id": str(refund.id),
+                    "amount": str(refund.amount),
+                    "method": refund.method.value,
+                    "reason": refund.reason,
+                    "amount_refunded": str(invoice.amount_refunded),
+                },
+            )
+        )
+        await self._session.commit()
+
+        logger.info(
+            "invoice.refunded",
+            hospital_id=str(hospital_id),
+            invoice_id=str(invoice.id),
+            refund_id=str(refund.id),
+            status=status.value,
+        )
+        return self._refund_result(refund, invoice, currency), True
+
     # ── Queries ───────────────────────────────────────────────────────────────
 
     async def get_invoice(
@@ -767,6 +1065,7 @@ class BillingService:
         status: InvoiceStatus | None = None,
         issued_from: date | None = None,
         issued_to: date | None = None,
+        discount_pending: bool | None = None,
         own_visits_of: uuid.UUID | None = None,
     ) -> Page[InvoiceSummaryResponse]:
         """List invoices (module spec §9).
@@ -782,6 +1081,8 @@ class BillingService:
         :param status: Only invoices in this status.
         :param issued_from: Earliest issue date, inclusive.
         :param issued_to: Latest issue date, inclusive.
+        :param discount_pending: ``True`` for the admin's approval queue —
+            drafts whose discount awaits approval.
         :param own_visits_of: Restrict to invoices for appointments where this
             user is the doctor. ``None`` means no restriction.
         :returns: One page of summaries plus the total count.
@@ -793,7 +1094,11 @@ class BillingService:
         page_params = pagination or PaginationParams()
         currency, _, zone = await self._hospital_billing_context(hospital_id)
 
-        filters: dict[str, Any] = {"patient_id": patient_id, "status": status}
+        filters: dict[str, Any] = {
+            "patient_id": patient_id,
+            "status": status,
+            "discount_pending": discount_pending,
+        }
         if own_visits_of is not None:
             doctor_id = await self._own_visits_doctor_id(hospital_id, own_visits_of)
             if doctor_id is None:
@@ -843,6 +1148,26 @@ class BillingService:
         await self._get_or_raise(hospital_id, invoice_id, own_visits_of=own_visits_of)
         rows = await self._invoices.list_payments(hospital_id, invoice_id)
         return [PaymentResponse.from_model(row) for row in rows]
+
+    async def list_refunds(
+        self,
+        hospital_id: uuid.UUID,
+        invoice_id: uuid.UUID,
+        *,
+        own_visits_of: uuid.UUID | None = None,
+    ) -> list[RefundResponse]:
+        """Return an invoice's refunds, oldest first.
+
+        :param hospital_id: The hospital the invoice belongs to.
+        :param invoice_id: The invoice whose refunds to read.
+        :param own_visits_of: Restrict to invoices for appointments where this
+            user is the doctor. ``None`` means no restriction.
+        :raises InvoiceNotFoundError: If absent from this tenant, or outside
+            the caller's own visits.
+        """
+        await self._get_or_raise(hospital_id, invoice_id, own_visits_of=own_visits_of)
+        rows = await self._invoices.list_refunds(hospital_id, invoice_id)
+        return [RefundResponse.from_model(row) for row in rows]
 
     # ── Internals ─────────────────────────────────────────────────────────────
 
@@ -971,6 +1296,42 @@ class BillingService:
                 )
 
         return hospital.currency, tax_rate, zone
+
+    async def _discount_threshold_percent(self, hospital_id: uuid.UUID) -> Decimal:
+        """Return the share of the subtotal a discount may reach unapproved.
+
+        Read from ``hospitals.settings["billing"]["discount_approval_threshold_percent"]``,
+        alongside the tax rate. A missing, malformed or out-of-range value
+        falls back to :data:`DEFAULT_DISCOUNT_APPROVAL_THRESHOLD_PERCENT` —
+        zero — so a typo in a settings blob makes *more* discounts need
+        approval, never fewer.
+
+        :param hospital_id: The tenant to read.
+        :returns: The threshold as a percentage, 0 to 100.
+        """
+        hospital = await self._hospitals.get_by_id(hospital_id)
+        billing_settings = (hospital.settings or {}).get("billing") if hospital else None
+        raw = (
+            billing_settings.get("discount_approval_threshold_percent")
+            if isinstance(billing_settings, dict)
+            else None
+        )
+        if raw is None:
+            return DEFAULT_DISCOUNT_APPROVAL_THRESHOLD_PERCENT
+
+        try:
+            candidate = Decimal(str(raw))
+        except InvalidOperation:
+            candidate = None
+        if candidate is not None and candidate.is_finite() and 0 <= candidate <= _HUNDRED:
+            return candidate
+
+        logger.warning(
+            "billing.discount_threshold_setting_invalid",
+            hospital_id=str(hospital_id),
+            value=str(raw),
+        )
+        return DEFAULT_DISCOUNT_APPROVAL_THRESHOLD_PERCENT
 
     async def _price_lines(
         self,
@@ -1152,6 +1513,14 @@ class BillingService:
             or existing.method != payload.method
         ):
             raise IdempotencyKeyReuseError
+
+    @staticmethod
+    def _refund_result(refund: Refund, invoice: Invoice, currency: str) -> RefundRecordedResponse:
+        """Pair a refund with the invoice as it now stands."""
+        return RefundRecordedResponse(
+            refund=RefundResponse.from_model(refund),
+            invoice=InvoiceSummaryResponse.from_model(invoice, currency=currency),
+        )
 
     @staticmethod
     def _payment_result(
