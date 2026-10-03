@@ -89,6 +89,15 @@ PERMISSION_DEFINITIONS: list[tuple[str, str, str]] = [
     ("invoice.refund", "billing", "Refund payments"),
     ("invoice.pdf.download", "billing", "Download invoice PDFs"),
     ("invoice.ai_explain", "billing", "Request an AI explanation of an invoice"),
+    # Notifications (docs/modules/11-notifications.md §10). The template and
+    # delivery-log codes guard v2.1 endpoints that are not built yet.
+    ("notification.read.own", "notification", "Read own notifications"),
+    ("notification.preference.update.own", "notification", "Change own notification preferences"),
+    ("notification.broadcast", "notification", "Send an announcement to a role or the hospital"),
+    ("notification.template.read", "notification", "View notification templates"),
+    ("notification.template.create", "notification", "Create notification templates"),
+    ("notification.template.update", "notification", "Edit notification templates"),
+    ("notification.delivery.read", "notification", "View the notification delivery log"),
     # Laboratory
     ("lab.read", "lab", "View lab orders and results"),
     ("lab.create", "lab", "Create lab orders"),
@@ -133,6 +142,14 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Super Admin",
         "Platform-wide access. Created per-hospital for local management.",
         [
+            # Every role reads its own notifications (module spec 11 §3).
+            "notification.read.own",
+            "notification.preference.update.own",
+            "notification.broadcast",
+            "notification.template.read",
+            "notification.template.create",
+            "notification.template.update",
+            "notification.delivery.read",
             "user.read",
             "user.create",
             "user.update",
@@ -201,6 +218,14 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Hospital Admin",
         "Full access within a single hospital.",
         [
+            # Every role reads its own notifications (module spec 11 §3).
+            "notification.read.own",
+            "notification.preference.update.own",
+            "notification.broadcast",
+            "notification.template.read",
+            "notification.template.create",
+            "notification.template.update",
+            "notification.delivery.read",
             "user.read",
             "user.create",
             "user.update",
@@ -273,6 +298,9 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Doctor",
         "Clinical access — own patients, appointments, lab results.",
         [
+            # Every role reads its own notifications (module spec 11 §3).
+            "notification.read.own",
+            "notification.preference.update.own",
             "patient.read",
             "patient.create",
             "patient.update",
@@ -299,6 +327,9 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Nurse",
         "Care coordination — assigned patients, vitals, appointments.",
         [
+            # Every role reads its own notifications (module spec 11 §3).
+            "notification.read.own",
+            "notification.preference.update.own",
             "patient.read",
             "patient.update",
             "appointment.read",
@@ -313,6 +344,9 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Receptionist",
         "Front desk — patient registration, appointment booking.",
         [
+            # Every role reads its own notifications (module spec 11 §3).
+            "notification.read.own",
+            "notification.preference.update.own",
             "patient.read",
             "patient.create",
             "appointment.read",
@@ -335,6 +369,9 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Billing Staff",
         "Financial operations — invoices, payments, insurance.",
         [
+            # Every role reads its own notifications (module spec 11 §3).
+            "notification.read.own",
+            "notification.preference.update.own",
             "patient.read",
             # docs/modules/06-billing.md §3. No `invoice.void`: business rule 4
             # makes voiding an admin action.
@@ -353,6 +390,9 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Lab Technician",
         "Lab operations — receive orders, enter results.",
         [
+            # Every role reads its own notifications (module spec 11 §3).
+            "notification.read.own",
+            "notification.preference.update.own",
             "lab.read",
             "lab.create",
             "lab.update",
@@ -363,6 +403,9 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Pharmacist",
         "Pharmacy operations — dispensing, inventory.",
         [
+            # Every role reads its own notifications (module spec 11 §3).
+            "notification.read.own",
+            "notification.preference.update.own",
             "pharmacy.read",
             "pharmacy.dispense",
             "inventory.read",
@@ -373,6 +416,9 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Inventory Manager",
         "Supply chain — stock management, purchase orders.",
         [
+            # Every role reads its own notifications (module spec 11 §3).
+            "notification.read.own",
+            "notification.preference.update.own",
             "inventory.read",
             "inventory.create",
             "inventory.update",
