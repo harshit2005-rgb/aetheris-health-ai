@@ -587,8 +587,8 @@ preferred_window_start?, preferred_window_end?, limit? }` returns
 `backend/app/schemas/billing.py`
 
 The core money path of [modules/06-billing.md](modules/06-billing.md): a services
-catalog, draft invoices, issue, payments, void. **Discounts, refunds, PDF and AI explain
-are not built** — see §6.10.
+catalog, draft invoices, discounts with approval, issue, payments, refunds, void. **PDF
+and AI explain are not built** — see §6.12.
 
 ### 6.1 Endpoints
 
@@ -603,12 +603,15 @@ are not built** — see §6.10.
 | GET | `/api/v1/invoices/{invoice_id}` | `invoice.read` or `invoice.read.own` | 200 |
 | PATCH | `/api/v1/invoices/{invoice_id}` | `invoice.update` | 200 — drafts only |
 | POST | `/api/v1/invoices/{invoice_id}/issue` | `invoice.issue` | 200 |
+| POST | `/api/v1/invoices/{invoice_id}/approve-discount` | `invoice.approve_discount` | 200 |
 | POST | `/api/v1/invoices/{invoice_id}/void` | `invoice.void` | 200 |
 | POST | `/api/v1/invoices/{invoice_id}/payments` | `invoice.payment.record` or `invoice.payment.record.cash` | 201, or 200 on a replay. **Requires `Idempotency-Key`** |
 | GET | `/api/v1/invoices/{invoice_id}/payments` | `invoice.read` or `invoice.read.own` | 200 (plain list) |
+| POST | `/api/v1/invoices/{invoice_id}/refund` | `invoice.refund` | 201, or 200 on a replay. **Requires `Idempotency-Key`** |
+| GET | `/api/v1/invoices/{invoice_id}/refunds` | `invoice.read` or `invoice.read.own` | 200 (plain list) |
 
 Two of these codes are **narrow** versions of a wider one, and the server applies the
-limit — see §6.9. A user holding both the wide and the narrow code is not limited.
+limit — see §6.11. A user holding both the wide and the narrow code is not limited.
 
 ### 6.2 Money
 
@@ -626,7 +629,10 @@ limit — see §6.9. A user holding both the wide and the narrow code is not lim
   seeded line is untaxed.
 - `currency` (ISO 4217, `"INR"` for the demo hospital) is on every invoice shape. It is
   the hospital's and cannot be set per invoice.
-- `discount_amount` is always `"0.00"` today — discounts are not built.
+- `discount_amount` is an **amount**, not a percentage, and applies to the whole invoice.
+  Tax is charged on the undiscounted lines; the discount comes off the total (§6.7).
+- `amount_refunded` sits beside `amount_paid`; neither is ever reduced. `balance_due` is
+  `total − amount_paid` and does not change when a refund is given.
 
 ### 6.3 Services catalog
 
@@ -679,15 +685,16 @@ draft ──issue──> issued ──payment──> partially_paid ──paymen
                    └──void──> void
 ```
 
-`status` is `draft | issued | partially_paid | paid | void | refunded`. Nothing produces
-`refunded` yet. `paid` and `void` are terminal. Drive the action buttons off `status`:
+`status` is `draft | issued | partially_paid | paid | void | refunded`. `void` and
+`refunded` are terminal. Drive the action buttons off `status`:
 
-| Status | Edit | Issue | Record payment | Void |
-|---|:--:|:--:|:--:|:--:|
-| `draft` | ✅ | ✅ | — | — |
-| `issued` | — | — | ✅ | ✅ |
-| `partially_paid` | — | — | ✅ | — |
-| `paid`, `void` | — | — | — | — |
+| Status | Edit | Issue | Record payment | Refund | Void |
+|---|:--:|:--:|:--:|:--:|:--:|
+| `draft` | ✅ | ✅ unless `discount_pending_approval` | — | — | — |
+| `issued` | — | — | ✅ | — | ✅ |
+| `partially_paid` | — | — | ✅ | ✅ | — |
+| `paid` | — | — | — | ✅ | — |
+| `void`, `refunded` | — | — | — | — | — |
 
 A disallowed action is `400 BUSINESS_RULE_VIOLATION`.
 
@@ -758,8 +765,12 @@ otherwise), and **an appointment can have only one live invoice** — a second i
   "subtotal": "750.00",
   "tax_amount": "0.00",
   "discount_amount": "0.00",
+  "discount_reason": null,
+  "discount_pending_approval": false,
+  "discount_approved_by": null,
   "total": "750.00",
   "amount_paid": "300.00",
+  "amount_refunded": "0.00",
   "balance_due": "450.00",
   "notes": null,
   "issued_at": "2026-09-30T05:05:00Z",
@@ -773,9 +784,10 @@ otherwise), and **an appointment can have only one live invoice** — a second i
 `invoice_number` and `issued_at` are `null` on a draft. `items` come back in `position`
 order. `patient_name` is denormalized in.
 
-**`PATCH /invoices/{id}`** — drafts only. Body is `items` and/or `notes`; at least one is
-required. **`items` replaces the whole line set**, it is not merged — send every line you
-want to keep. `patient_id` and `appointment_id` cannot be changed.
+**`PATCH /invoices/{id}`** — drafts only. Body is any of `items`, `notes`,
+`discount_amount`, `discount_reason`; at least one is required. **`items` replaces the
+whole line set**, it is not merged — send every line you want to keep. `patient_id` and
+`appointment_id` cannot be changed. Discounts are covered in §6.7.
 
 **`GET /invoices`**
 
@@ -783,6 +795,7 @@ want to keep. `patient_id` and `appointment_id` cannot be changed.
 |---|---|
 | `patient_id` | UUID |
 | `status` | One of the six status values |
+| `discount_pending` | `true` returns the drafts whose discount awaits approval — the admin's approval queue |
 | `issued_from`, `issued_to` | `YYYY-MM-DD`, both **inclusive**, interpreted in the **hospital's timezone** — no offset parameter needed. Drafts have no issue date and never match. `issued_from` after `issued_to` is a `422` |
 | `page`, `page_size` | As §1.6 |
 
@@ -799,7 +812,9 @@ Order is newest first by `created_at`. `data[]` is `InvoiceSummaryResponse` — 
   "currency": "INR",
   "total": "750.00",
   "amount_paid": "300.00",
+  "amount_refunded": "0.00",
   "balance_due": "450.00",
+  "discount_pending_approval": false,
   "issued_at": "2026-09-30T05:05:00Z",
   "created_at": "2026-10-01T14:17:11Z"
 }
@@ -814,6 +829,7 @@ Order is newest first by `created_at`. `data[]` is `InvoiceSummaryResponse` — 
   sequence does not reset each year; `{year}` is the issue year in the hospital's
   timezone.
 - A draft with no lines cannot be issued (`400`).
+- A draft whose discount is awaiting approval cannot be issued (`400`) — see §6.7.
 - A zero-total invoice goes straight to `paid`.
 - After issue the invoice is immutable. A correction is a void plus a new invoice.
 
@@ -872,17 +888,94 @@ Four things the client must get right:
 `GET /invoices/{id}/payments` returns the payments oldest-first as a plain list — **no
 pagination metadata**, so use `http.get`, not `http.getPaginated`.
 
-### 6.7 Void
+### 6.7 Discounts and approval
+
+Set a discount on a draft with `PATCH /invoices/{id}`:
+
+```json
+{ "discount_amount": "200.00", "discount_reason": "Financial hardship" }
+```
+
+- `discount_amount` must be ≥ 0 and **must not exceed `subtotal`** (`422` naming
+  `discount_amount`). A discount above zero **needs a `discount_reason`** (`422` naming
+  `discount_reason`). Send `"0"` to remove a discount; the reason is cleared with it.
+- The server compares the discount with the **hospital's approval threshold**, a
+  percentage of the subtotal. At or below it, nothing more is needed. Above it, the draft
+  comes back with `"discount_pending_approval": true`.
+- **A pending discount blocks the issue.** `POST /invoices/{id}/issue` returns `400` until
+  an admin approves. Show the draft as "awaiting approval" and disable the Issue button
+  rather than letting it fail.
+- **`POST /invoices/{id}/approve-discount`** (no body, `invoice.approve_discount`) clears
+  the flag and sets `discount_approved_by`. If there is nothing to approve it is `409` —
+  which is also what the second of two admins approving at once receives.
+- **Editing withdraws an approval.** Changing `discount_amount` or sending `items` resets
+  `discount_approved_by` to `null` and re-evaluates the threshold. Editing only `notes`
+  does not.
+- A client cannot approve its own discount: `discount_pending_approval` and
+  `discount_approved_by` are not accepted in any request body (`422`).
+
+The threshold is `settings.billing.discount_approval_threshold_percent` on the hospital,
+set through `PATCH /hospitals/current`. **If a hospital has not set one it is 0, so every
+discount needs approval.** The demo hospital is seeded with 10.
+
+The approval queue for an admin is `GET /invoices?discount_pending=true`.
+
+### 6.8 Refunds
+
+```
+POST /api/v1/invoices/{invoice_id}/refund
+Idempotency-Key: 4b8e2f1c-9a3d-4e7b-8c1f-2d3e4f5a6b7c
+```
+
+```json
+{ "amount": "350.00", "method": "card", "reason": "Blood sample could not be processed.", "reference": "CARD-REFUND-0006" }
+```
+
+`reason` is **required** (1–500 chars, not blank). `method` is how the money goes back,
+from the same list as payments. `reference` is optional. Requires `invoice.refund`, which
+only a Hospital Admin holds.
+
+Response `data` mirrors a payment's:
+
+```json
+{
+  "refund": {
+    "id": "…",
+    "invoice_id": "…",
+    "amount": "350.00",
+    "method": "card",
+    "reason": "Blood sample could not be processed.",
+    "reference": "CARD-REFUND-0006",
+    "refunded_by": "…",
+    "refunded_at": "2026-10-03T14:30:00Z"
+  },
+  "invoice": { "…": "InvoiceSummaryResponse, as §6.4" }
+}
+```
+
+- Only a `partially_paid` or `paid` invoice can be refunded (`400` otherwise).
+- The amount cannot exceed what is left to give back: `amount_paid − amount_refunded`
+  (`400`).
+- **Refunding everything closes the invoice as `refunded`**, which is terminal. A partial
+  refund leaves the status as it was.
+- `Idempotency-Key` works exactly as for payments (§6.6): required, 16–100 chars, a replay
+  is `200` with the original refund, and reusing a key for a different refund is `409`.
+- This is how a part-paid invoice is undone: it cannot be voided, but it can be refunded
+  in full.
+
+`GET /invoices/{id}/refunds` returns the refunds oldest-first as a plain list, with no
+pagination metadata.
+
+### 6.9 Void
 
 `POST /invoices/{id}/void` with `{ "reason": "…" }` — required, 1–500 chars, not blank.
 
 Allowed only while the invoice is `issued` **and has taken no payment**. An invoice with
-any payment cannot be voided (`400`, "must be refunded first") — and refunds are not
-built, so today a part-paid invoice cannot be undone through the API. The voided invoice
-keeps its `invoice_number`; `voided_at` and `void_reason` are set. A draft cannot be
-voided, and there is no way to delete one.
+any payment cannot be voided (`400`, "must be refunded first") — refund it instead (§6.8).
+The voided invoice keeps its `invoice_number`; `voided_at` and `void_reason` are set. A
+draft cannot be voided, and there is no way to delete one.
 
-### 6.8 Invoices drafted from appointments
+### 6.10 Invoices drafted from appointments
 
 `POST /appointments/{id}/complete` now drafts an invoice automatically: one ad-hoc line,
 `Consultation — Dr. {first} {last}`, at the doctor's `consultation_fee`, untaxed, linked
@@ -893,7 +986,7 @@ by `appointment_id`. Find it with `GET /invoices?patient_id=…&status=draft`.
   fail the completion — the response is still `200` and the invoice can be raised by hand.
 - The complete response does **not** include the invoice id.
 
-### 6.9 Roles → permissions
+### 6.11 Roles → permissions
 
 Which seeded role can call what. Hide controls per permission rather than letting the
 call 403.
@@ -906,7 +999,9 @@ call 403.
 | `invoice.read.own` | ✅ | — | — | ✅ | — |
 | `invoice.create` / `invoice.update` | ✅ | ✅ | — | — | — |
 | `invoice.issue` | ✅ | ✅ | — | — | — |
+| `invoice.approve_discount` | ✅ | — | — | — | — |
 | `invoice.void` | ✅ | — | — | — | — |
+| `invoice.refund` | ✅ | — | — | — | — |
 | `invoice.payment.record` | ✅ | ✅ | — | — | — |
 | `invoice.payment.record.cash` | ✅ | — | ✅ | — | — |
 
@@ -922,21 +1017,19 @@ call 403.
 - **`invoice.payment.record.cash` — a receptionist records cash only.** Any other
   `method` is `403 PERMISSION_DENIED`.
 
-Things worth designing around: **only an admin can void**; a **receptionist can take a
+Things worth designing around: **only an admin can void, approve a discount or refund**
+— Billing Staff can *set* a discount but not approve it; a **receptionist can take a
 cash payment but cannot create or issue** an invoice; and a **doctor is read-only**, with
 no access to the services catalog — hide every billing action for them.
 
 Either read code opens the Billing module. These replace the earlier `billing.read` /
-`billing.write` placeholders, which the backend never issued. `invoice.approve_discount`,
-`invoice.refund`, `invoice.pdf.download` and `invoice.ai_explain` are in the catalog but
-guard nothing yet.
+`billing.write` placeholders, which the backend never issued. `invoice.pdf.download` and
+`invoice.ai_explain` are in the catalog but guard nothing yet.
 
-### 6.10 Not built yet
+### 6.12 Not built yet
 
 These paths from the module spec return `404`. Do not build against them:
 
-- `POST /invoices/{id}/approve-discount` — and there is no way to set a discount at all
-- `POST /invoices/{id}/refund`
 - `GET /invoices/{id}/pdf`
 - `POST /invoices/{id}/ai-explain`
 
@@ -988,14 +1081,17 @@ Seeded for the demo hospital (`demo-hospital`, timezone `Asia/Kolkata`):
 - **10 catalog services** across six categories — eight untaxed clinical services, one of
   them retired (`LAB-ESR`) so `is_active` is demonstrable, and two taxable non-clinical
   ones.
-- **5 invoices**, one per state the UI has to render: `paid` (settled by cash and UPI),
-  `void`, `partially_paid` (the re-issue of the voided visit, part-paid by card), `issued`
-  (nothing paid), and a `draft` not tied to any appointment. They are numbered
-  `INV-{year}-000001` to `000004`; the void invoice keeps its number.
-- **3 payments** across three methods.
+- **8 invoices**, covering every state the UI has to render: `paid` (settled by cash and
+  UPI), `void`, `partially_paid` (the re-issue of the voided visit, part-paid by card),
+  `issued` (nothing paid), a plain `draft`, a `draft` **held for discount approval**, a
+  `refunded` invoice, and a `paid` invoice with a **partial refund**. They are numbered
+  `INV-{year}-000001` to `000006`; the void invoice keeps its number.
+- **5 payments** and **2 refunds**.
+- A **10% discount approval threshold** on the demo hospital, so a small discount goes
+  straight through and the seeded 20% one sits in the approval queue.
 
 The in-flight appointments are deliberately left unbilled, so completing one in a demo
-drafts its invoice live (§6.8).
+drafts its invoice live (§6.10).
 
 Appointment times land on the doctors' published slot boundaries, so a seeded booking
 shows up as `booked` in `GET /doctors/{id}/slots`. `doctor@demohospital.com` is Priya
@@ -1018,14 +1114,18 @@ All seeded people are fictional. No real patient data exists in this repository.
 
 Things the frontend will ask for that do not exist yet. Do not build against them:
 
-- **Billing:** no discounts, refunds, invoice PDF or AI explain (§6.10). No way to delete
-  or discard a draft invoice. A part-paid invoice cannot be voided or refunded (§6.7).
+- **Billing:** no invoice PDF or AI explain (§6.12). No way to delete or discard a draft
+  invoice. There is no "reject" for a discount awaiting approval — the draft's owner
+  lowers or removes it instead. `GET /invoices/{id}/refunds` is not in the module spec's
+  endpoint list; it was added so the refund history can be shown.
 - **Billing roles:** "a doctor views invoices for their patients" is implemented as *their
-  own visits* — not every invoice of a patient they have seen (§6.9). And
+  own visits* — not every invoice of a patient they have seen (§6.11). And
   `invoice.payment.record.cash` is a code the module spec's §10 does not list; it was
   added to express the spec's own cash-only rule for receptionists.
-- **Billing tax:** there is no endpoint to set the hospital's tax rate, so every taxable
-  line is taxed at 0% until one exists (§6.2).
+- **Billing settings:** the tax rate and the discount threshold are plain keys under
+  `settings.billing`, set through `PATCH /hospitals/current`. Sending `settings.billing`
+  replaces that whole sub-object, so send both keys together. Nothing validates them on
+  write; a malformed value is ignored on read (0% tax; every discount needs approval).
 - **Two shapes of `422`.** A request-validation error (wrong type, missing field) puts a
   list in `errors`, as §1.2 shows. A rule checked by the service — an unknown
   `patient_id`, an inactive service — puts an *object* there, with the list one level
@@ -1045,9 +1145,13 @@ Things the frontend will ask for that do not exist yet. Do not build against the
 
 ---
 
-_Last updated: 2026-10-01. §6 (Billing) added with the module, and checked against the
+_Last updated: 2026-10-03. §6.7 (discounts and approval) and §6.8 (refunds) added, with
+the fields and endpoints they bring; the old §6.7–6.10 are now §6.9–6.12. §5.3 changed on
+the same day: `date` is the hospital's local day and `tz_offset_hours` is gone._
+
+_2026-10-01: §6 (Billing) added with the module, and checked against the
 running app and a freshly seeded database: every endpoint, permission, status code and
-response shape in §6, the §6.9 table against the seeded roles, and the billing rows of §8.
+response shape in §6, the roles table (now §6.11) against the seeded roles, and the billing rows of §8.
 Sections 6–8 of the previous revision are now §7–9._
 
 _§2–5 were last re-verified on 2026-09-22 at commit `e3927e2`: every endpoint, permission,
