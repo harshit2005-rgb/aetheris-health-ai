@@ -1,7 +1,7 @@
 # 18 — Frontend API Contract Reference
 
 The exact request/response contracts for the endpoints the frontend consumes today:
-**Patients, Departments, Doctors, Appointments, Billing**. Written so a frontend module
+**Patients, Departments, Doctors, Appointments, Billing, Notifications**. Written so a frontend module
 can be built without reading backend code or guessing a shape.
 
 **Source of truth.** Every contract below was read out of the implementation, not the
@@ -119,7 +119,7 @@ refresh itself fails the session is cleared and route guards send the user to `/
 Keep that shape if you touch it, and give any second client the same single-flight guard.
 
 > **Diverges from `CLAUDE.md`,** which specifies the refresh token as an HTTP-only cookie.
-> That is the intended design; what ships is the body-based flow above. See §9.
+> That is the intended design; what ships is the body-based flow above. See §10.
 
 ### 1.5 Tenancy
 
@@ -1035,7 +1035,196 @@ These paths from the module spec return `404`. Do not build against them:
 
 ---
 
-## 7. Frontend ↔ backend mapping (mismatch resolution)
+## 7. Notifications
+
+`backend/app/api/v1/notifications.py` · `backend/app/schemas/notification.py`
+
+The MVP slice of [modules/11-notifications.md](modules/11-notifications.md): an in-app
+notification centre for staff, per-user channel preferences, hospital announcements, and
+email for the kinds that need it. **SMS, push, admin-editable templates and the delivery
+log are not built** — see §7.7.
+
+### 7.1 Endpoints
+
+| Method | Path | Permission | Success |
+|---|---|---|---|
+| GET | `/api/v1/notifications` | `notification.read.own` | 200 (paginated) |
+| GET | `/api/v1/notifications/unread-count` | `notification.read.own` | 200 |
+| POST | `/api/v1/notifications/{notification_id}/read` | `notification.read.own` | 200 |
+| POST | `/api/v1/notifications/read-all` | `notification.read.own` | 200 |
+| GET | `/api/v1/notifications/preferences` | `notification.read.own` | 200 |
+| PUT | `/api/v1/notifications/preferences` | `notification.preference.update.own` | 200 |
+| POST | `/api/v1/notifications/broadcast` | `notification.broadcast` | 200 |
+
+**Every endpoint is about the caller's own notifications.** None takes a user id. Someone
+else's notification — a colleague's or another hospital's — is a `404`, never a `403`.
+
+Every seeded role holds the two `.own` codes. Only **Hospital Admin** and **Super Admin**
+hold `notification.broadcast`.
+
+### 7.2 The notification centre
+
+`GET /api/v1/notifications` — newest first.
+
+| Query | Type | Default | Meaning |
+|---|---|---|---|
+| `unread_only` | bool | `false` | Only notifications not yet read |
+| `page` | int ≥ 1 | `1` | |
+| `page_size` | int 1–100 | `25` | |
+
+```json
+{
+  "success": true,
+  "message": "Notifications retrieved.",
+  "data": [
+    {
+      "id": "0b9c6f0e-3f1b-4a5e-9c55-0a1f6f1d2e77",
+      "kind": "billing.discount_approval_requested",
+      "title": "Discount awaiting your approval",
+      "body": "Priya Sharma applied a discount of INR 200.00 to an invoice for Ananya Rao. It cannot be issued until an admin approves it.",
+      "link": "/billing",
+      "is_read": false,
+      "read_at": null,
+      "created_at": "2026-10-04T09:00:00Z"
+    }
+  ],
+  "metadata": { "pagination": { "page": 1, "page_size": 25, "total_records": 1, "total_pages": 1 } }
+}
+```
+
+- `link` is an **in-app path** (or `null`) — route to it on click; it is never an external
+  URL.
+- `title` and `body` are already rendered text. Display them as text, not HTML.
+- `kind` is a stable code; use it to pick an icon. The list of kinds is in §7.4.
+
+`GET /api/v1/notifications/unread-count` → `"data": { "unread": 3 }`. This is the number
+for the bell. There is no push channel yet — **poll it** (30–60 s is plenty).
+
+`POST /api/v1/notifications/{notification_id}/read` → the notification, now with
+`is_read: true` and `read_at` set. Marking one that is already read is a `200` and changes
+nothing. No request body.
+
+`POST /api/v1/notifications/read-all` → `"data": { "marked": 3 }`. No request body.
+
+### 7.3 Preferences
+
+`GET /api/v1/notifications/preferences` returns **every** kind with what is in effect for
+the caller, so the page can be drawn from this response alone:
+
+```json
+{
+  "kinds": [
+    {
+      "kind": "auth.password_reset_requested",
+      "category": "Account",
+      "label": "Password reset requested",
+      "critical": true,
+      "in_app": true,
+      "email": true,
+      "email_available": true,
+      "locked_channels": ["in_app", "email"]
+    },
+    {
+      "kind": "billing.discount_approval_requested",
+      "category": "Billing",
+      "label": "Discount awaiting approval",
+      "critical": false,
+      "in_app": true,
+      "email": false,
+      "email_available": true,
+      "locked_channels": []
+    }
+  ]
+}
+```
+
+- Group rows by `category`; show `label`.
+- **Disable the toggle** for any channel named in `locked_channels` — a critical kind
+  cannot be switched off. Hide the email toggle when `email_available` is `false`.
+
+`PUT /api/v1/notifications/preferences` — send only what changes:
+
+```json
+{ "preferences": { "billing.discount_approval_requested": { "email": true },
+                   "system.broadcast": { "in_app": false } } }
+```
+
+- Each kind takes `in_app` and/or `email` (booleans). A channel left out is left as it
+  was; a kind left out is left as it was. `sms` is rejected with a `422`.
+- The response has the same shape as the `GET`, showing what is **now in effect**.
+- Switching a critical kind off is accepted and has no effect — the response still shows
+  it on. An unknown kind is a `422` with `field: "preferences.<kind>"`.
+- Switching `in_app` off and `email` on gives the user the email and keeps the
+  notification out of the centre.
+
+### 7.4 What raises a notification
+
+| Kind | When | Who | Default channels | Critical |
+|---|---|---|---|:--:|
+| `auth.user_invited` | `POST /users` invites someone | The invited user | in-app + email | ✅ |
+| `auth.password_reset_requested` | `POST /auth/password/forgot` | That user | in-app + email | ✅ |
+| `billing.discount_approval_requested` | A draft's discount goes above the hospital's threshold (§6.7), or a pending discount's amount changes | Every active user holding `invoice.approve_discount`, except the person who applied it | in-app | — |
+| `system.broadcast` | `POST /notifications/broadcast` | The role, or the whole hospital | in-app | — |
+
+The invitation and reset emails carry the single-use link
+`{FRONTEND_BASE_URL}/reset-password?token=…`, which is the frontend's existing
+`/reset-password` page: it reads `token` and posts it to `POST /api/v1/auth/password/reset`
+with the new password. For an invited user that same call activates the account. The token
+appears only in the email — never in the in-app notification and never in this API.
+
+`POST /users` still returns the invite token in its response as before, so an admin can
+pass the link on by hand where email is not configured.
+
+### 7.5 Broadcast
+
+`POST /api/v1/notifications/broadcast`
+
+```json
+{
+  "title": "Scheduled maintenance tonight",
+  "body": "The system will be unavailable from 23:00 to 23:30.",
+  "link": "/dashboard",
+  "role_id": null
+}
+```
+
+| Field | Rules |
+|---|---|
+| `title` | Required, 1–200 characters, not blank |
+| `body` | Required, 1–2000 characters, not blank |
+| `link` | Optional. Must be an in-app path: starts with a single `/`. An external URL is a `422` |
+| `role_id` | Optional. Omit or `null` for every active user in the hospital |
+
+→ `"data": { "recipients": 12 }`. Each recipient gets their own notification, the sender
+included. Users who are invited-but-not-activated or suspended are not counted. A `role_id`
+from another hospital reaches nobody (`recipients: 0`).
+
+### 7.6 Email
+
+Email is **off unless the backend is configured with `SMTP_HOST`**, and the background
+worker must be running — the API only queues an email; the worker sends it, polling every
+ten seconds. With email off, an in-app notification is still delivered and the queued
+email is recorded as failed with the reason. A send that fails is retried up to five times
+with increasing delays.
+
+None of this is visible through the API yet (the delivery log is in §7.7); what the
+frontend sees is only the in-app half.
+
+### 7.7 Not built yet
+
+These paths from the module spec return `404`. Do not build against them:
+
+- `GET /notifications/templates`, `POST /notifications/templates`,
+  `PUT /notifications/templates/{id}` — the wording of each kind is fixed in code.
+- `GET /notifications/delivery-log`
+
+Also not built: SMS, WhatsApp and push; live delivery over a socket; hospital-wide default
+preferences; and **any notification to a patient** — appointment reminders, invoice
+emails. Recipients are staff users only.
+
+---
+
+## 8. Frontend ↔ backend mapping (mismatch resolution)
 
 The audit flagged the patient contract as mismatched. It was investigated against
 `API_CONTRACTS`/`05-DATABASE_DESIGN.md`, the module spec, the schemas and 944 passing
@@ -1060,7 +1249,7 @@ faked.
 
 ---
 
-## 8. Demo data
+## 9. Demo data
 
 `make -C backend seed` — idempotent, safe to re-run; see
 [10-DEVELOPMENT_GUIDE.md](10-DEVELOPMENT_GUIDE.md).
@@ -1110,7 +1299,7 @@ All seeded people are fictional. No real patient data exists in this repository.
 
 ---
 
-## 9. Known gaps
+## 10. Known gaps
 
 Things the frontend will ask for that do not exist yet. Do not build against them:
 
@@ -1131,6 +1320,12 @@ Things the frontend will ask for that do not exist yet. Do not build against the
   `patient_id`, an inactive service — puts an *object* there, with the list one level
   down at `errors.errors`. This is true of every module, not only billing. Read
   `message` for display; handle both shapes if you map errors to fields.
+- **Notifications:** staff only — nothing is sent to patients yet, so there is no invoice
+  or appointment email (§7.7). No live push: poll `GET /notifications/unread-count`.
+  `GET /notifications/unread-count` is not in the module spec's endpoint list; it was added
+  so the bell does not have to fetch a page to show a number. An email can take up to ten
+  seconds to leave the queue, which is inside the spec's 30-second acceptance criterion but
+  not its 5-second target.
 - No `sort` parameter on any of these endpoints (§1.8).
 - No patient documents, timeline, or AI summary endpoints — they need object storage.
 - No appointment token/queue-number field (§5.5).
@@ -1145,14 +1340,17 @@ Things the frontend will ask for that do not exist yet. Do not build against the
 
 ---
 
-_Last updated: 2026-10-03. §6.7 (discounts and approval) and §6.8 (refunds) added, with
+_Last updated: 2026-10-04. §7 (Notifications) added with the module; the old §7–9 are now
+§8–10._
+
+_2026-10-03: §6.7 (discounts and approval) and §6.8 (refunds) added, with
 the fields and endpoints they bring; the old §6.7–6.10 are now §6.9–6.12. §5.3 changed on
 the same day: `date` is the hospital's local day and `tz_offset_hours` is gone._
 
 _2026-10-01: §6 (Billing) added with the module, and checked against the
 running app and a freshly seeded database: every endpoint, permission, status code and
-response shape in §6, the roles table (now §6.11) against the seeded roles, and the billing rows of §8.
-Sections 6–8 of the previous revision are now §7–9._
+response shape in §6, the roles table (now §6.11) against the seeded roles, and the billing rows of §9 (then §8).
+Sections 6–8 of the revision before that became §7–9._
 
 _§2–5 were last re-verified on 2026-09-22 at commit `e3927e2`: every endpoint, permission,
 query parameter, enum and response shape was checked against the running app, the §1.9

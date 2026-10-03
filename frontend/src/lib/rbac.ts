@@ -96,6 +96,14 @@ export type Permission =
   | 'invoice.refund'
   | 'invoice.pdf.download'
   | 'invoice.ai_explain'
+  // Notifications (docs/modules/11-notifications.md §10)
+  | 'notification.read.own'
+  | 'notification.preference.update.own'
+  | 'notification.broadcast'
+  | 'notification.template.read'
+  | 'notification.template.create'
+  | 'notification.template.update'
+  | 'notification.delivery.read'
   // Laboratory
   | 'lab.read'
   | 'lab.create'
@@ -132,6 +140,9 @@ export type Permission =
  */
 export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
   super_admin: [
+    'notification.read.own', 'notification.preference.update.own',
+    'notification.broadcast', 'notification.template.read', 'notification.template.create',
+    'notification.template.update', 'notification.delivery.read',
     'user.read', 'user.create', 'user.update', 'user.deactivate', 'user.reset_password',
     'role.read', 'role.assign', 'dashboard.view',
     'patient.read', 'patient.create', 'patient.update', 'patient.delete',
@@ -154,6 +165,9 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'audit.read', 'audit.export',
   ],
   hospital_admin: [
+    'notification.read.own', 'notification.preference.update.own',
+    'notification.broadcast', 'notification.template.read', 'notification.template.create',
+    'notification.template.update', 'notification.delivery.read',
     'user.read', 'user.create', 'user.update', 'user.deactivate', 'user.reset_password',
     'role.read', 'role.assign', 'dashboard.view',
     'patient.read', 'patient.create', 'patient.update', 'patient.delete',
@@ -176,6 +190,7 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'audit.read',
   ],
   receptionist: [
+    'notification.read.own', 'notification.preference.update.own',
     'dashboard.view',
     'patient.read', 'patient.create',
     'appointment.read', 'appointment.book', 'appointment.reschedule', 'appointment.cancel',
@@ -185,6 +200,7 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'department.read', 'doctor.read', 'doctor.availability.read',
   ],
   doctor: [
+    'notification.read.own', 'notification.preference.update.own',
     'dashboard.view',
     'patient.read', 'patient.create', 'patient.update',
     'appointment.read', 'appointment.read.own', 'appointment.start', 'appointment.complete',
@@ -197,12 +213,14 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'doctor.leave.create', 'doctor.leave.delete',
   ],
   nurse: [
+    'notification.read.own', 'notification.preference.update.own',
     'dashboard.view',
     'patient.read', 'patient.update',
     'appointment.read', 'appointment.check_in',
     'lab.read', 'department.read', 'doctor.read', 'doctor.availability.read',
   ],
   billing_staff: [
+    'notification.read.own', 'notification.preference.update.own',
     'dashboard.view',
     'patient.read',
     // No `invoice.void`: voiding is an admin action (module spec 06 §4, rule 4).
@@ -211,6 +229,7 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'report.read', 'department.read', 'doctor.read',
   ],
   lab_technician: [
+    'notification.read.own', 'notification.preference.update.own',
     'dashboard.view',
     'lab.read', 'lab.create', 'lab.update', 'department.read',
   ],

@@ -12,6 +12,8 @@ from typing import TYPE_CHECKING
 
 from sqlalchemy import select
 
+from app.models.permission import Permission
+from app.models.role import RolePermission
 from app.models.user import User, UserRole, UserStatus
 from app.repositories.base import BaseRepository
 
@@ -286,3 +288,41 @@ class UserRepository(BaseRepository[User]):
             )
         )
         return await self.count(stmt)
+
+    async def list_active_recipients(
+        self,
+        hospital_id: uuid.UUID,
+        *,
+        permission_code: str | None = None,
+        role_id: uuid.UUID | None = None,
+    ) -> list[User]:
+        """List a hospital's active users, optionally narrowed by role or permission.
+
+        Backs the Notifications module's "who should hear about this" question
+        (``docs/modules/11-notifications.md`` §5, FR-6): everyone, everyone
+        holding a role, or everyone holding a permission through any role.
+        Only ``active`` users are returned — an invited or suspended account
+        cannot act on a notification.
+
+        :param hospital_id: The hospital to scope to.
+        :param permission_code: Only users holding this permission code.
+        :param role_id: Only users holding this role.
+        :returns: Matching users, ordered by id for a stable result.
+        """
+        stmt = self._query().where(
+            User.hospital_id == hospital_id, User.status == UserStatus.ACTIVE
+        )
+        if role_id is not None:
+            stmt = stmt.where(
+                User.id.in_(select(UserRole.user_id).where(UserRole.role_id == role_id))
+            )
+        if permission_code is not None:
+            holders = (
+                select(UserRole.user_id)
+                .join(RolePermission, RolePermission.role_id == UserRole.role_id)
+                .join(Permission, Permission.id == RolePermission.permission_id)
+                .where(Permission.code == permission_code)
+            )
+            stmt = stmt.where(User.id.in_(holders))
+        result = await self._session.execute(stmt.order_by(User.id.asc()))
+        return list(result.unique().scalars().all())
