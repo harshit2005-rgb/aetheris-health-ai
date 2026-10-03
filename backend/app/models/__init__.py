@@ -31,6 +31,7 @@ from app.models.billing import (
     InvoiceStatus,
     Payment,
     PaymentMethod,
+    Refund,
     Service,
 )
 from app.models.department import Department, DepartmentStatus
@@ -87,6 +88,7 @@ __all__ = [
     "InvoiceStatus",
     "Payment",
     "PaymentMethod",
+    "Refund",
     "Service",
     # Department
     "Department",
