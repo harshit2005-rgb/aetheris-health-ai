@@ -38,6 +38,7 @@ from app.repositories import (
     InvoiceNumberSequenceRepository,
     InvoiceRepository,
     MrnSequenceRepository,
+    NotificationRepository,
     PasswordResetTokenRepository,
     PatientRepository,
     PermissionRepository,
@@ -126,3 +127,8 @@ def get_invoice_number_sequence_repository(
 ) -> InvoiceNumberSequenceRepository:
     """Provide an :class:`InvoiceNumberSequenceRepository` bound to the request session."""
     return InvoiceNumberSequenceRepository(session)
+
+
+def get_notification_repository(session: DbSession) -> NotificationRepository:
+    """Provide a :class:`NotificationRepository` bound to the request session."""
+    return NotificationRepository(session)

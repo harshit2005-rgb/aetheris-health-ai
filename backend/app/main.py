@@ -27,6 +27,7 @@ from app.api.v1 import (
     health_router,
     hospital_router,
     invoice_router,
+    notification_router,
     patient_router,
     permission_router,
     role_router,
@@ -222,6 +223,12 @@ def _register_routers(app: FastAPI) -> None:
     )
     app.include_router(
         invoice_router,
+        prefix=API_V1_PREFIX,
+    )
+
+    # Notification routes — notification centre, preferences, broadcast
+    app.include_router(
+        notification_router,
         prefix=API_V1_PREFIX,
     )
 

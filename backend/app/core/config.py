@@ -159,6 +159,28 @@ class Settings(BaseSettings):
         default=72, ge=1, le=720, description="Invitation token lifetime in hours (B6 invite seam)"
     )
 
+    # ── Email (Notifications module) ───────────────────────────────────────
+    # Email is OFF unless SMTP_HOST is set. With no host, a queued email is
+    # marked failed with a clear reason and nothing leaves the process — the
+    # safe default for a development database whose seeded staff addresses are
+    # not on a reserved test domain.
+    SMTP_HOST: str | None = Field(
+        default=None, description="SMTP server host. Unset disables outbound email."
+    )
+    SMTP_PORT: int = Field(default=587, ge=1, le=65535, description="SMTP server port")
+    SMTP_USER: str | None = Field(
+        default=None, description="SMTP username, if the server needs one"
+    )
+    SMTP_PASSWORD: str | None = Field(default=None, description="SMTP password")
+    SMTP_STARTTLS: bool = Field(default=True, description="Upgrade the connection with STARTTLS")
+    EMAIL_FROM: str = Field(
+        default="noreply@aetheris.health", description="From address for outbound email"
+    )
+    FRONTEND_BASE_URL: str = Field(
+        default="http://localhost:5173",
+        description="Public base URL of the web app, used to build links in emails",
+    )
+
     # ── Rate Limiting ──────────────────────────────────────────────────────
     RATE_LIMIT_ANON_PER_MIN: int = Field(
         default=60, ge=1, description="Anonymous requests per minute"

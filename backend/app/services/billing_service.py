@@ -59,6 +59,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy.exc import IntegrityError
 
 from app.core.audit import AuditEvent
+from app.core.config import settings
 from app.core.exceptions import (
     BusinessRuleError,
     ConfigurationError,
@@ -68,6 +69,7 @@ from app.core.exceptions import (
     ValidationError,
 )
 from app.core.logging import get_logger
+from app.core.notifications import NotificationRequest, Notifier, NullNotifier
 from app.models.billing import (
     PAYABLE_STATUSES,
     REFUNDABLE_STATUSES,
@@ -302,6 +304,8 @@ class BillingService:
     :param hospitals: Hospital lookups, for currency, tax rate and timezone.
     :param session: Request-scoped session, held to own the transaction boundary.
     :param audit: Where audit events are recorded.
+    :param notifier: Where approvers are told a discount is waiting. Optional;
+        a service built without one notifies nobody.
     """
 
     def __init__(
@@ -315,6 +319,7 @@ class BillingService:
         hospitals: HospitalRepository,
         session: AsyncSession,
         audit: AuditSink,
+        notifier: Notifier | None = None,
     ) -> None:
         self._invoices = invoices
         self._sequences = sequences
@@ -325,6 +330,7 @@ class BillingService:
         self._hospitals = hospitals
         self._session = session
         self._audit = audit
+        self._notifier: Notifier = notifier or NullNotifier()
 
     # ── Drafting ──────────────────────────────────────────────────────────────
 
@@ -551,10 +557,32 @@ class BillingService:
             fields["notes"] = payload.notes
             changed.append("notes")
 
+        # Tell the approvers when a discount newly needs them: it has just
+        # become pending, or it was pending and the amount has changed.
+        needs_approval = fields.get("discount_pending_approval") is True and (
+            discount_changed or not invoice.discount_pending_approval
+        )
+
         # Validation is done; only now is anything written.
         if new_lines is not None:
             await self._invoices.replace_items(invoice, new_lines)
         invoice = await self._invoices.update_invoice(invoice, updated_by=actor_id, **fields)
+
+        if needs_approval:
+            await self._notifier.notify(
+                NotificationRequest(
+                    kind="billing.discount_approval_requested",
+                    hospital_id=hospital_id,
+                    recipient_permission="invoice.approve_discount",
+                    variables={
+                        "patient_name": invoice.patient.full_name,
+                        "discount_amount": f"{currency} {invoice.discount_amount}",
+                        "action_url": f"{settings.FRONTEND_BASE_URL.rstrip('/')}/billing",
+                    },
+                    link="/billing",
+                    actor_id=actor_id,
+                )
+            )
 
         await self._audit.record(
             AuditEvent(

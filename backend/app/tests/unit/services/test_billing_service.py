@@ -136,6 +136,7 @@ def _make_service(
     appointments: AsyncMock | None = None,
     doctors: AsyncMock | None = None,
     hospitals: AsyncMock | None = None,
+    notifier: AsyncMock | None = None,
 ) -> tuple[BillingService, FakeSession, RecordingAuditSink]:
     """Assemble a service over mocked collaborators, defaulting to a valid world."""
     session = FakeSession()
@@ -168,6 +169,7 @@ def _make_service(
         hospitals,
         session,  # type: ignore[arg-type]
         audit,
+        notifier=notifier,
     )
     return service, session, audit
 
@@ -1503,6 +1505,77 @@ class TestDiscount:
         service, _, _ = _make_service(repo, hospitals=hospitals)
 
         assert await service._discount_threshold_percent(HOSPITAL_ID) == Decimal("0.00")
+
+
+class TestDiscountApprovalNotice:
+    """Approvers are told when a discount is waiting for them."""
+
+    async def _patch(self, repo: AsyncMock, draft: Any, **fields: Any) -> AsyncMock:
+        repo.get_invoice_for_update.return_value = draft
+        notifier = AsyncMock()
+        service, _, _ = _make_service(repo, hospitals=_with_threshold("10"), notifier=notifier)
+        await service.update_invoice(
+            HOSPITAL_ID, draft.id, build_update_invoice_request(**fields), actor_id=ACTOR_ID
+        )
+        return notifier
+
+    async def test_a_discount_that_needs_approval_notifies_the_approvers(
+        self, repo: AsyncMock
+    ) -> None:
+        draft = build_invoice_model(hospital_id=HOSPITAL_ID)
+
+        notifier = await self._patch(
+            repo, draft, discount_amount="200.00", discount_reason="Hardship"
+        )
+
+        notifier.notify.assert_awaited_once()
+        request = notifier.notify.await_args.args[0]
+        assert request.kind == "billing.discount_approval_requested"
+        assert request.hospital_id == HOSPITAL_ID
+        # Addressed to whoever can act on it, not to named people.
+        assert request.recipient_permission == "invoice.approve_discount"
+        assert request.recipient_user_ids == ()
+        assert request.actor_id == ACTOR_ID
+        assert request.link == "/billing"
+        assert request.variables["discount_amount"].endswith(" 200.00")
+        assert request.variables["patient_name"]
+        assert request.secret_variables == {}
+
+    async def test_a_discount_within_the_threshold_notifies_nobody(self, repo: AsyncMock) -> None:
+        draft = build_invoice_model(hospital_id=HOSPITAL_ID)
+
+        notifier = await self._patch(repo, draft, discount_amount="50.00", discount_reason="Staff")
+
+        notifier.notify.assert_not_awaited()
+
+    async def test_an_unrelated_edit_to_a_pending_invoice_does_not_notify_again(
+        self, repo: AsyncMock
+    ) -> None:
+        draft = build_invoice_model(
+            hospital_id=HOSPITAL_ID,
+            discount_amount=Decimal("200.00"),
+            discount_reason="Hardship",
+            discount_pending_approval=True,
+            total=Decimal("300.00"),
+        )
+
+        notifier = await self._patch(repo, draft, notes="Call the patient first")
+
+        notifier.notify.assert_not_awaited()
+
+    async def test_changing_a_pending_discount_asks_again(self, repo: AsyncMock) -> None:
+        draft = build_invoice_model(
+            hospital_id=HOSPITAL_ID,
+            discount_amount=Decimal("200.00"),
+            discount_reason="Hardship",
+            discount_pending_approval=True,
+            total=Decimal("300.00"),
+        )
+
+        notifier = await self._patch(repo, draft, discount_amount="250.00")
+
+        notifier.notify.assert_awaited_once()
+        assert notifier.notify.await_args.args[0].variables["discount_amount"].endswith(" 250.00")
 
 
 class TestApproveDiscount:

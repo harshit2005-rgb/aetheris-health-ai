@@ -47,6 +47,7 @@ from app.api.dependencies.repositories import (  # noqa: F401
     get_invoice_number_sequence_repository,
     get_invoice_repository,
     get_mrn_sequence_repository,
+    get_notification_repository,
     get_password_reset_token_repository,
     get_patient_repository,
     get_permission_repository,
@@ -56,6 +57,7 @@ from app.api.dependencies.repositories import (  # noqa: F401
     get_user_repository,
 )
 from app.core.audit import AuditSink
+from app.core.notifications import Notifier
 from app.database.unit_of_work import UnitOfWork
 from app.repositories import (
     AppointmentRepository,
@@ -66,6 +68,7 @@ from app.repositories import (
     InvoiceNumberSequenceRepository,
     InvoiceRepository,
     MrnSequenceRepository,
+    NotificationRepository,
     PasswordResetTokenRepository,
     PatientRepository,
     PermissionRepository,
@@ -91,6 +94,7 @@ from app.services.doctor_service import (
 )
 from app.services.hospital_service import HospitalService
 from app.services.mrn_service import MRNService
+from app.services.notification_service import NotificationService
 from app.services.patient_service import PatientService
 from app.services.role_service import RoleService
 from app.services.service_catalog_service import ServiceCatalogService
@@ -134,6 +138,34 @@ def get_audit_service(
     return AuditService(session, audit_repo, user_repo)
 
 
+# ── Notifications module ─────────────────────────────────────────────────────
+def get_notification_service(
+    notifications: NotificationRepository = Depends(get_notification_repository),
+    users: UserRepository = Depends(get_user_repository),
+    hospitals: HospitalRepository = Depends(get_hospital_repository),
+    session: AsyncSession = Depends(get_db_session),
+    audit: AuditSink = Depends(get_audit_sink),
+) -> NotificationService:
+    """Provide a :class:`NotificationService` bound to the request session.
+
+    It shares the request-scoped session with every other service, which is
+    what makes a notification transactional with the event that caused it:
+    both are written, or neither is.
+    """
+    return NotificationService(notifications, users, hospitals, session, audit)
+
+
+def get_notifier(
+    service: NotificationService = Depends(get_notification_service),
+) -> Notifier:
+    """Provide the :class:`~app.core.notifications.Notifier` other modules emit to.
+
+    Other modules depend on the protocol, not on the Notifications module, so
+    this provider is the only place the two are joined.
+    """
+    return service
+
+
 # ── Hospital settings module ─────────────────────────────────────────────────
 def get_hospital_service(
     hospitals: HospitalRepository = Depends(get_hospital_repository),
@@ -152,6 +184,7 @@ def get_auth_service(
     ),
     uow: UnitOfWork = Depends(get_unit_of_work),
     audit: AuditSink = Depends(get_audit_sink),
+    notifier: Notifier = Depends(get_notifier),
 ) -> AuthService:
     """Provide an :class:`AuthService` composed with its repository dependencies."""
     return AuthService(
@@ -160,6 +193,7 @@ def get_auth_service(
         password_reset_repo=password_reset_repo,
         uow=uow,
         audit=audit,
+        notifier=notifier,
     )
 
 
@@ -174,6 +208,7 @@ def get_user_service(
     password_reset_repo: PasswordResetTokenRepository = Depends(
         get_password_reset_token_repository
     ),
+    notifier: Notifier = Depends(get_notifier),
 ) -> UserService:
     """Provide a :class:`UserService` composed with its repository dependencies."""
     return UserService(
@@ -184,6 +219,7 @@ def get_user_service(
         uow=uow,
         audit=audit,
         password_reset_repo=password_reset_repo,
+        notifier=notifier,
     )
 
 
@@ -311,6 +347,7 @@ def get_billing_service(
     hospitals: HospitalRepository = Depends(get_hospital_repository),
     session: AsyncSession = Depends(get_db_session),
     audit: AuditSink = Depends(get_audit_sink),
+    notifier: Notifier = Depends(get_notifier),
 ) -> BillingService:
     """Provide a :class:`BillingService` bound to the request session.
 
@@ -320,7 +357,16 @@ def get_billing_service(
     as the issue it numbers — which is what keeps the series gap-free.
     """
     return BillingService(
-        invoices, sequences, catalog, patients, appointments, doctors, hospitals, session, audit
+        invoices,
+        sequences,
+        catalog,
+        patients,
+        appointments,
+        doctors,
+        hospitals,
+        session,
+        audit,
+        notifier=notifier,
     )
 
 
@@ -412,6 +458,9 @@ __all__ = [
     # Department module
     "get_department_service",
     "get_department_usage_source",
+    # Notifications module
+    "get_notification_service",
+    "get_notifier",
     # Billing module
     "get_billing_service",
     "get_service_catalog_service",

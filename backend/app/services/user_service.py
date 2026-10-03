@@ -21,6 +21,7 @@ from app.core.exceptions import (
     NotFoundError,
     PermissionDeniedError,
 )
+from app.core.notifications import NotificationRequest, Notifier, NullNotifier
 from app.core.security import generate_opaque_token, hash_password
 from app.models.user import User, UserStatus
 
@@ -55,6 +56,7 @@ class UserService:
         uow: UnitOfWork,
         audit: AuditSink,
         password_reset_repo: PasswordResetTokenRepository,
+        notifier: Notifier | None = None,
     ) -> None:
         self._user_repo = user_repo
         self._role_repo = role_repo
@@ -63,6 +65,7 @@ class UserService:
         self._uow = uow
         self._audit = audit
         self._password_reset_repo = password_reset_repo
+        self._notifier: Notifier = notifier or NullNotifier()
 
     # ── Read ─────────────────────────────────────────────────────────────────
 
@@ -285,6 +288,23 @@ class UserService:
                 hospital_id=hospital_id,
                 target_type="user",
                 target_id=user.id,
+                actor_id=actor_id,
+            )
+        )
+        # AC-2: "the invited user receives an email". The raw token goes only
+        # into the email; it is still returned to the caller as before, so an
+        # admin can pass it on by hand where email is not configured.
+        await self._notifier.notify(
+            NotificationRequest(
+                kind="auth.user_invited",
+                hospital_id=hospital_id,
+                recipient_user_ids=(user.id,),
+                variables={"expires_in": f"{settings.INVITE_TOKEN_TTL_HOURS} hours"},
+                secret_variables={
+                    "action_url": (
+                        f"{settings.FRONTEND_BASE_URL.rstrip('/')}/reset-password?token={raw_token}"
+                    ),
+                },
                 actor_id=actor_id,
             )
         )

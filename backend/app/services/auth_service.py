@@ -21,6 +21,7 @@ from app.core.exceptions import (
     BusinessRuleError,
     NotFoundError,
 )
+from app.core.notifications import NotificationRequest, Notifier, NullNotifier
 from app.core.security import (
     create_access_token,
     create_mfa_ticket,
@@ -56,6 +57,8 @@ class AuthService:
     :param refresh_token_repo: Repository for refresh token data access.
     :param password_reset_repo: Repository for password reset token data access.
     :param audit: Where mutating operations are recorded (CLAUDE.md rule 9).
+    :param notifier: Where the password-reset email is requested. Optional; a
+        service built without one sends nothing.
     """
 
     def __init__(
@@ -65,12 +68,14 @@ class AuthService:
         password_reset_repo: PasswordResetTokenRepository,
         uow: UnitOfWork,
         audit: AuditSink,
+        notifier: Notifier | None = None,
     ) -> None:
         self._user_repo = user_repo
         self._refresh_token_repo = refresh_token_repo
         self._password_reset_repo = password_reset_repo
         self._uow = uow
         self._audit = audit
+        self._notifier: Notifier = notifier or NullNotifier()
 
     # ── Login ────────────────────────────────────────────────────────────────
 
@@ -405,6 +410,24 @@ class AuthService:
                 target_type="user",
                 target_id=user.id,
                 actor_id=user.id,
+            )
+        )
+        # Until this ran, the token above was created and then never delivered
+        # to anyone. The raw token goes only into the email; the in-app notice
+        # just says that a reset was requested.
+        await self._notifier.notify(
+            NotificationRequest(
+                kind="auth.password_reset_requested",
+                hospital_id=user.hospital_id,
+                recipient_user_ids=(user.id,),
+                variables={
+                    "expires_in": f"{settings.PASSWORD_RESET_TOKEN_TTL_MINUTES} minutes",
+                },
+                secret_variables={
+                    "action_url": (
+                        f"{settings.FRONTEND_BASE_URL.rstrip('/')}/reset-password?token={raw_token}"
+                    ),
+                },
             )
         )
         await self._uow.commit()
