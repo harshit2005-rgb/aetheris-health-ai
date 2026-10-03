@@ -157,6 +157,10 @@ class AuthService:
                 actor_id=user.id,
             )
         )
+        # _issue_tokens already committed, so the audit row needs its own
+        # commit — otherwise the session closes with it still pending and the
+        # durable trail silently misses every successful login.
+        await self._uow.commit()
         return result
 
     async def verify_mfa(
@@ -203,7 +207,11 @@ class AuthService:
                     context={"reason": "invalid_mfa_code"},
                 )
             )
-            logger.info("mfa_verification_failed", user_id=str(user.id))
+            # Persist the failure before raising: the exception rolls the
+            # request back, and a failed MFA attempt is exactly the event a
+            # compliance trail must not lose.
+            await self._uow.commit()
+            logger.info("mfa_verification_failed", user_id=str(user_id))
             raise AuthenticationError("Invalid MFA code.")
 
         # Record login
@@ -220,6 +228,8 @@ class AuthService:
                 actor_id=user.id,
             )
         )
+        # See login(): the audit row trails an already-committed token issue.
+        await self._uow.commit()
         return result
 
     # ── Token Management ─────────────────────────────────────────────────────
@@ -268,6 +278,11 @@ class AuthService:
                     )
                 )
             await self._refresh_token_repo.revoke_all_for_user(stored_token.user_id)
+            # Commit before raising. The error below ends the request, and the
+            # request-scoped session rolls back whatever is uncommitted when it
+            # closes — which used to undo both the revocation and its audit
+            # row, leaving every stolen session alive and no trace of the reuse.
+            await self._uow.commit()
             raise AuthenticationError("Refresh token has been revoked. All sessions invalidated.")
 
         # ── Expiry Check ───────────────────────────────────────────────
@@ -563,6 +578,11 @@ class AuthService:
         :param password: Current password for verification.
         :returns: Dict with ``secret``, ``provisioning_uri``.
         :raises AuthenticationError: If verification fails.
+        :raises BusinessRuleError: If MFA is already enabled — re-enrolment
+            would overwrite the working secret stored on the account before the
+            user confirms the new one, and from then on no TOTP code the user
+            enters would verify (lockout recoverable only from the database).
+            Disabling MFA first is the supported path back to enrolment.
         """
         user = await self._user_repo.get_by_id(user_id)
         if user is None:
@@ -570,6 +590,11 @@ class AuthService:
 
         if not verify_password(password, user.password_hash):
             raise AuthenticationError("Invalid password.")
+
+        if user.mfa_enabled:
+            raise BusinessRuleError(
+                "MFA is already enabled for this account. Disable it first if you want to re-enroll."
+            )
 
         secret = generate_totp_secret()
         provisioning_uri = get_totp_provisioning_uri(secret, user.email)
@@ -587,6 +612,9 @@ class AuthService:
                 actor_id=user.id,
             )
         )
+        # Persist the temporary secret and the audit row — without this the
+        # request-scope session rolls both back when it closes.
+        await self._uow.commit()
         logger.info("mfa_enrollment_initiated", user_id=str(user.id))
 
         return {
@@ -712,6 +740,9 @@ class AuthService:
                     context={"reason": "suspended"},
                 )
             )
+            # Persist before raising — the exception rolls the request back
+            # and this failure must survive in the durable trail.
+            await self._uow.commit()
             logger.info("login_attempt_suspended_account", user_id=str(user.id))
             raise AuthenticationError("Invalid credentials.")
 
@@ -726,6 +757,7 @@ class AuthService:
                     context={"reason": "locked"},
                 )
             )
+            await self._uow.commit()
             logger.info(
                 "login_attempt_locked_account",
                 user_id=str(user.id),
@@ -734,6 +766,19 @@ class AuthService:
             raise AuthenticationError("Invalid credentials.")
 
         if user.status == UserStatus.INVITED and user.password_hash is None:
+            # Same treatment as the branches above: an attempt against an
+            # invited account is a failed login the trail should record.
+            await self._audit.record(
+                AuditEvent(
+                    action="auth.login.failed",
+                    hospital_id=user.hospital_id,
+                    target_type="user",
+                    target_id=user.id,
+                    actor_id=user.id,
+                    context={"reason": "invited_no_password"},
+                )
+            )
+            await self._uow.commit()
             logger.info("login_attempt_invited_account", user_id=str(user.id))
             raise AuthenticationError("Invalid credentials.")
 

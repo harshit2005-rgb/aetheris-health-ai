@@ -287,6 +287,37 @@ class TestRefreshToken:
 
         mock_refresh_token_repo.revoke_all_for_user.assert_called_once_with(user_id)
 
+    async def test_refresh_reuse_revocation_is_committed_before_the_error(
+        self: Any,
+        auth_service: Any,
+        mock_refresh_token_repo: Any,
+        mock_uow: Any,
+    ) -> None:
+        """The revocation must be durable, not undone when the request ends.
+
+        The reuse branch ends in an exception, and the request-scoped session
+        rolls back anything uncommitted when it closes. Without a commit before
+        the raise, every session of the compromised account stayed alive and
+        the audit row vanished (PR #29 re-review).
+        """
+        from app.models.refresh_token import RefreshToken
+
+        calls: list[str] = []
+        mock_refresh_token_repo.revoke_all_for_user.side_effect = lambda *_: calls.append("revoke")
+        mock_uow.commit.side_effect = lambda: calls.append("commit")
+
+        token = MagicMock(spec=RefreshToken)
+        token.id = uuid.uuid4()
+        token.user_id = uuid.uuid4()
+        token.is_revoked = True
+        token.is_expired = False
+        mock_refresh_token_repo.get_by_token_hash.return_value = token
+
+        with pytest.raises(AuthenticationError, match="has been revoked"):
+            await auth_service.refresh_token(raw_token="stolen-token")
+
+        assert calls == ["revoke", "commit"]
+
 
 # ── Password Reset Tests ───────────────────────────────────────────────────
 
@@ -433,6 +464,31 @@ class TestMFA:
         assert "secret" in result
         assert "provisioning_uri" in result
         mock_user_repo.update.assert_called_once()
+
+    async def test_re_enrolment_is_refused_when_mfa_already_enabled(
+        self: Any, auth_service: Any, mock_user_repo: Any
+    ) -> None:
+        """PR #29 review finding 2: re-enrolling must not overwrite a live secret.
+
+        Before the fix the new secret was written and committed immediately, so
+        a user who started — but did not confirm — a second enrolment lost the
+        only secret their authenticator knew and could never log in again
+        (disable_mfa needs a valid code too). The guard must leave the stored
+        secret untouched and refuse with a 4xx-worthy BusinessRuleError.
+        """
+        existing_secret = "JBSWY3DPEHPK3PXP"
+        user = _make_user({"mfa_enabled": True, "mfa_secret": existing_secret})
+        mock_user_repo.get_by_id.return_value = user
+
+        with pytest.raises(BusinessRuleError, match="MFA is already enabled"):
+            await auth_service.enroll_mfa(
+                user_id=user.id,
+                password="TestPass@123",
+            )
+
+        # The working secret survives and nothing was persisted.
+        assert user.mfa_secret == existing_secret
+        mock_user_repo.update.assert_not_called()
 
 
 # ── PII / Logging Tests ────────────────────────────────────────────────────

@@ -150,10 +150,10 @@ class TestSeededData:
             if (local := start.astimezone(CLINIC_TZ)).date() > today
         ]
 
-        # Only the *future* bookings: the seed also books one appointment for
-        # today itself, whatever day that is, so that a demo always has a
-        # plausible "today". Asserting on that one too made this test fail
-        # every Saturday and Sunday.
+        # Only the *future* bookings. The seed also books one appointment on
+        # its own "today" — the real date, or the previous Friday when seeded
+        # on a weekend — which is not a future booking and is not what this
+        # test is about.
         assert future
         for local in future:
             assert local.weekday() < 5
