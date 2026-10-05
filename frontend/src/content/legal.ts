@@ -14,7 +14,7 @@ export const privacyDoc: LegalDoc = {
   title: 'Privacy Policy',
   updated: 'August 2026',
   intro:
-    'This policy explains what information Aetheris Health AI collects, how we use it, and the choices you have. It applies to our marketing site and clinical platform.',
+    'This policy explains what information Aetheris Health AI collects, how we use it, and the choices you have. It applies to our marketing site and the Aetheris platform.',
   sections: [
     {
       heading: 'Information we collect',
@@ -26,20 +26,20 @@ export const privacyDoc: LegalDoc = {
     {
       heading: 'Protected health information',
       body: [
-        'When your organization uses Aetheris to process patient data, we act as a Business Associate under HIPAA and handle that data only as instructed by your organization and the governing agreement.',
+        "Patient data entered into Aetheris belongs to the hospital that entered it and is kept separate from every other hospital's data. It is handled only as needed to provide the service to that hospital.",
       ],
     },
     {
       heading: 'How we use information',
       body: [
         'To provide, maintain, and improve the platform, to secure it against misuse, and to support your team.',
-        'We do not sell personal information, and we do not use patient data to train models outside the bounds of your agreement.',
+        'We do not sell personal information. No AI model is connected to Aetheris, and patient data is not used to train one.',
       ],
     },
     {
       heading: 'Data security',
       body: [
-        'Data is encrypted in transit and at rest, access is role-based, and every access is logged. See the HIPAA Compliance page for details on our safeguards.',
+        'Access is role-based, passwords are stored hashed, and changes to records are written to an audit log. See the Security page for the safeguards the platform implements.',
       ],
     },
     {
@@ -74,19 +74,19 @@ export const termsDoc: LegalDoc = {
     {
       heading: 'The service',
       body: [
-        'Aetheris provides clinical decision-support software. It surfaces analysis and recommendations to assist qualified clinicians.',
+        'Aetheris provides hospital management software for patient registration, appointment scheduling, and billing.',
       ],
     },
     {
       heading: 'Clinical responsibility',
       body: [
-        'Aetheris is a decision-support tool, not a substitute for professional medical judgment. A qualified clinician is responsible for every diagnosis and treatment decision.',
+        'Aetheris is an administrative tool. It does not diagnose, recommend treatment, or make clinical decisions. A qualified clinician is responsible for every diagnosis and treatment decision.',
       ],
     },
     {
       heading: 'Accounts and eligibility',
       body: [
-        'You are responsible for keeping account credentials secure and for activity under your account. Accounts are for authorized clinical staff only.',
+        'You are responsible for keeping account credentials secure and for activity under your account. Accounts are for authorized hospital staff only.',
       ],
     },
     {
@@ -117,49 +117,47 @@ export const termsDoc: LegalDoc = {
   ],
 }
 
-export const hipaaDoc: LegalDoc = {
-  slug: 'hipaa',
-  title: 'HIPAA Compliance',
-  updated: 'August 2026',
+/**
+ * The security page. It lists controls the application implements and says plainly what
+ * has not been done: no audit, certification or compliance claim is made.
+ */
+export const securityDoc: LegalDoc = {
+  slug: 'security',
+  title: 'Security',
+  updated: 'October 2026',
   intro:
-    'Aetheris Health AI is built to support HIPAA compliance for the healthcare organizations we serve. This page summarizes how we handle protected health information (PHI).',
+    'This page describes the safeguards the Aetheris platform implements today, and what it does not yet claim.',
   sections: [
     {
-      heading: 'Our role as a Business Associate',
+      heading: 'Access control',
       body: [
-        'When your organization processes PHI through Aetheris, we act as a Business Associate and enter into a Business Associate Agreement (BAA) that governs how we handle that data.',
+        'Every action in the platform requires a signed-in account, and what an account can see and do is decided by the roles and permissions a hospital administrator assigns to it. The server enforces those permissions on every request.',
       ],
     },
     {
-      heading: 'Administrative safeguards',
+      heading: 'Separation between hospitals',
       body: [
-        'Documented security policies, workforce training, access management, and regular risk assessments govern how our team handles PHI.',
+        "Each hospital's records are scoped to that hospital. An account can only reach the data of the hospital it belongs to.",
       ],
     },
     {
-      heading: 'Physical and technical safeguards',
+      heading: 'Sign-in protection',
       body: [
-        'PHI is encrypted in transit and at rest, access is granted on a least-privilege basis, and infrastructure can be deployed in your private cloud or on-premise.',
-        'Every access to PHI is recorded in immutable audit logs.',
+        'Passwords are stored as Argon2id hashes, never in readable form. Repeated failed sign-ins lock an account for a period, sessions use short-lived access tokens, and an account can add a second factor with an authenticator app.',
       ],
     },
     {
-      heading: 'Breach notification',
+      heading: 'Audit log',
       body: [
-        'In the unlikely event of a breach affecting PHI, we notify affected organizations without undue delay and in line with HIPAA requirements and the BAA.',
+        'Changes made in the platform are written to an audit log that records who did what and when. Entries cannot be edited or deleted through the application, and administrators with the right permission can search and export them.',
       ],
     },
     {
-      heading: 'Patient rights',
+      heading: 'What we do not claim',
       body: [
-        'We support covered entities in fulfilling patient rights to access and amend their records by keeping PHI accurate, available, and exportable.',
-      ],
-    },
-    {
-      heading: 'Audits and certifications',
-      body: [
-        'Our controls are independently audited. Documentation, including our latest SOC 2 report, is available to customers under NDA.',
-        'To request our BAA or compliance documentation, reach out through the Contact page.',
+        'Aetheris has not been independently audited or certified. We do not currently claim HIPAA compliance, hold a SOC 2 report, or offer a Business Associate Agreement.',
+        'Encryption of data in transit and at rest depends on how and where the platform is deployed, and is not something this page can state for you.',
+        CONTACT_LINE,
       ],
     },
   ],
@@ -168,5 +166,5 @@ export const hipaaDoc: LegalDoc = {
 export const legalDocs: Record<string, LegalDoc> = {
   privacy: privacyDoc,
   terms: termsDoc,
-  hipaa: hipaaDoc,
+  security: securityDoc,
 }

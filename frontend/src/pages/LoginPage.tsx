@@ -18,7 +18,6 @@ const USE_MOCK_AUTH = import.meta.env.DEV && import.meta.env.VITE_USE_MOCK_AUTH 
 const loginSchema = z.object({
   email: z.string().min(1, 'Email is required').email('Enter a valid email address'),
   password: z.string().min(8, 'Password must be at least 8 characters'),
-  remember: z.boolean().optional(),
 })
 
 type LoginValues = z.infer<typeof loginSchema>
@@ -41,7 +40,7 @@ export default function LoginPage() {
     formState: { errors, isSubmitting },
   } = useForm<LoginValues>({
     resolver: zodResolver(loginSchema),
-    defaultValues: { email: '', password: '', remember: true },
+    defaultValues: { email: '', password: '' },
   })
 
   async function onSubmit(values: LoginValues) {
@@ -158,15 +157,7 @@ export default function LoginPage() {
           </div>
 
           {/* Options */}
-          <div className="flex items-center justify-between">
-            <label className="font-body text-body-sm text-on-surface-variant flex cursor-pointer items-center gap-2">
-              <input
-                type="checkbox"
-                className="accent-secondary h-4 w-4 rounded"
-                {...register('remember')}
-              />
-              Remember me
-            </label>
+          <div className="flex items-center justify-end">
             <Link
               to="/forgot-password"
               className="font-body text-body-sm text-secondary hover:underline"

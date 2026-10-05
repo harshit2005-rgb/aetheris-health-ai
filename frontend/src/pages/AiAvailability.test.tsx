@@ -144,8 +144,9 @@ describe('the public pages', () => {
     renderPublic(<LandingPage />)
 
     expectNoAiClaims()
-    expect(screen.getByRole('heading', { name: 'AI assistance — planned' })).toBeInTheDocument()
-    expect(screen.getByText(/Not part of the product today/)).toBeInTheDocument()
+    const roadmap = screen.getByRole('heading', { name: 'On the roadmap' }).parentElement as HTMLElement
+    expect(roadmap).toHaveTextContent(/AI assistance are planned/)
+    expect(roadmap).toHaveTextContent(/None of them is part of the product today/)
     expect(screen.getByText('Does Aetheris include AI features today?')).toBeInTheDocument()
     expect(screen.queryByText(/intelligent platform/i)).not.toBeInTheDocument()
   })
@@ -154,9 +155,10 @@ describe('the public pages', () => {
     renderPublic(<PricingPage />)
 
     expectNoAiClaims()
-    expect(screen.getByRole('heading', { name: 'Plans for every hospital' })).toBeInTheDocument()
-    // The only "AI" left is the company's name.
-    const text = (document.body.textContent ?? '').replace(/Aetheris Health AI/g, '')
-    expect(text).not.toMatch(/\bAI\b/)
+    // AI appears once, under what is planned — never under what is included.
+    const planned = screen.getByRole('region', { name: 'On the roadmap' })
+    expect(within(planned).getByText('AI assistance')).toBeInTheDocument()
+    const included = screen.getByRole('region', { name: 'Included today' })
+    expect(included.textContent).not.toMatch(/\bAI\b/)
   })
 })

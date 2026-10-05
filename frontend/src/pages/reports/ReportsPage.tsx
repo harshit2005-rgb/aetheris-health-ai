@@ -5,9 +5,8 @@ export default function ReportsPage() {
   return (
     <ScaffoldPage
       title="Reports"
-      subtitle="Operational, financial and clinical analytics."
+      subtitle="Operational and financial reporting — planned."
       icon={BarChart3}
-      specRef="Spec Part 8"
       planned={[
         'Executive dashboard',
         'Patient & doctor reports',

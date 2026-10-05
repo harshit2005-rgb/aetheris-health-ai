@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { Check } from 'lucide-react'
+import { Hourglass } from 'lucide-react'
 import PageHeader from '@/components/layout/PageHeader'
 
 interface ScaffoldPageProps {
@@ -8,16 +8,17 @@ interface ScaffoldPageProps {
   icon: LucideIcon
   /** Planned capabilities for this module (from the spec), shown as a checklist. */
   planned: string[]
-  specRef: string
 }
 
-/** Placeholder for modules that are planned but not yet built (Phase 0). */
+/**
+ * Page for a module that is planned but not built. It says so plainly and lists
+ * what is intended, marked as planned rather than ticked off as done.
+ */
 export default function ScaffoldPage({
   title,
   subtitle,
   icon: Icon,
   planned,
-  specRef,
 }: ScaffoldPageProps) {
   return (
     <div className="w-full">
@@ -29,11 +30,10 @@ export default function ScaffoldPage({
             <Icon className="size-8" />
           </span>
           <h2 className="font-display text-headline-md text-primary font-bold">
-            This module is on the roadmap
+            {title} is not available yet
           </h2>
           <p className="font-body text-body-md text-on-surface-variant mt-2 max-w-md">
-            The {title} module is scaffolded and routed. Here is what it will include, per{' '}
-            {specRef}.
+            This module is on the roadmap and has no data behind it today. Planned for it:
           </p>
         </div>
 
@@ -43,7 +43,7 @@ export default function ScaffoldPage({
               key={item}
               className="neo-pressed bg-surface font-body text-body-sm text-on-surface flex items-center gap-2 rounded-xl px-4 py-3"
             >
-              <Check className="text-secondary size-4 shrink-0" />
+              <Hourglass className="text-outline size-4 shrink-0" aria-hidden />
               {item}
             </li>
           ))}

@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 const LINKS = [
   { label: 'Privacy Policy', to: '/privacy' },
   { label: 'Terms of Service', to: '/terms' },
-  { label: 'HIPAA Compliance', to: '/hipaa' },
+  { label: 'Security', to: '/security' },
   { label: 'Contact', to: '/contact' },
 ]
 

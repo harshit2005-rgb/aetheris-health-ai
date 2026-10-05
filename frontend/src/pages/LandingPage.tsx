@@ -4,16 +4,16 @@ import {
   Users,
   CalendarDays,
   Receipt,
-  Pill,
-  BarChart3,
-  Sparkles,
+  Building2,
+  Hourglass,
+  UserCog,
   ShieldCheck,
   Lock,
   BadgeCheck,
   Server,
   UserPlus,
   Stethoscope,
-  FlaskConical,
+  LogIn,
 } from 'lucide-react'
 import MarketingNav from '@/components/layout/MarketingNav'
 import MarketingFooter from '@/components/layout/MarketingFooter'
@@ -24,27 +24,27 @@ import {
   AccordionContent,
 } from '@/components/ui/accordion'
 
-// Compliance standards (not customer logos — honest signals for a healthcare buyer).
-const COMPLIANCE = [
-  { icon: ShieldCheck, label: 'HIPAA aligned' },
-  { icon: BadgeCheck, label: 'SOC 2 Type II' },
-  { icon: Lock, label: 'End-to-end encryption' },
-  { icon: Server, label: 'Cloud or on-premise' },
+// Controls the application actually implements — not certifications, which it does not hold.
+const SAFEGUARDS = [
+  { icon: ShieldCheck, label: 'Role-based access' },
+  { icon: Server, label: 'Per-hospital data separation' },
+  { icon: Lock, label: 'Hashed passwords, optional MFA' },
+  { icon: BadgeCheck, label: 'Append-only audit log' },
 ]
 
-// The clinical journey the platform runs end to end (Spec 2A workflow).
+// The visit the platform carries end to end today.
 const WORKFLOW = [
-  { icon: UserPlus, title: 'Register', body: 'Admit a patient and open their record in seconds.' },
-  { icon: CalendarDays, title: 'Schedule', body: 'Book the right doctor into an open slot.' },
-  { icon: Stethoscope, title: 'Diagnose', body: 'Chart vitals and history in one clinical view.' },
-  { icon: FlaskConical, title: 'Treat', body: 'Order labs and prescriptions, track results.' },
-  { icon: Receipt, title: 'Bill', body: 'Generate the invoice and reconcile payment.' },
+  { icon: UserPlus, title: 'Register', body: 'Create the patient record, or find it by name, phone, or MRN.' },
+  { icon: CalendarDays, title: 'Schedule', body: "Book the patient into one of the doctor's open slots." },
+  { icon: LogIn, title: 'Check in', body: 'Mark the arrival, or reschedule, cancel, or record a no-show.' },
+  { icon: Stethoscope, title: 'Consult', body: 'The doctor starts and completes the consultation from the queue.' },
+  { icon: Receipt, title: 'Bill', body: 'Issue the invoice and record payments and refunds against it.' },
 ]
 
 const OUTCOMES = [
   {
     title: 'Less time hunting for context',
-    body: 'One record holds every result, note, and medication, so staff stop switching between systems.',
+    body: "A patient's details, medical history, appointments, and invoices sit on one record.",
   },
   {
     title: 'Fewer things slip through',
@@ -58,24 +58,20 @@ const OUTCOMES = [
 
 const FAQ = [
   {
-    q: 'Is patient data secure and HIPAA aligned?',
-    a: 'Every record is encrypted in transit and at rest, access is scoped by role, and every change is written to an immutable audit log. We operate to HIPAA and SOC 2 Type II controls.',
+    q: 'How is patient data protected?',
+    a: "Access is scoped by role and permission, each hospital's data is kept separate, passwords are hashed and accounts can add a second factor, and changes are written to an append-only audit log. Aetheris has not been independently audited and does not currently claim HIPAA compliance or a SOC 2 report.",
+  },
+  {
+    q: 'Which modules are available today?',
+    a: 'Patients, doctors and departments, appointments, billing, notifications, user and role management, hospital settings, and the audit log. Laboratory, pharmacy, inventory, and reports are planned and are not part of the product yet.',
   },
   {
     q: 'Does Aetheris include AI features today?',
     a: 'Not yet. AI assistance is planned and is not part of the current product. When it arrives it will only suggest: a member of staff will review and approve every action, and it will never make a clinical decision on its own.',
   },
   {
-    q: 'Can it run on our own infrastructure?',
-    a: 'Yes. Aetheris deploys to our managed cloud or to your own environment, so data can stay inside your network where policy requires it.',
-  },
-  {
     q: 'Will it connect to our existing EHR and lab systems?',
-    a: 'The platform is built around standard integration seams for records, imaging, and lab results. Our team scopes the connections your hospital needs during onboarding.',
-  },
-  {
-    q: 'How long does implementation take?',
-    a: 'A single department can be live in a few weeks. A full multi-department rollout is phased with your team so day-to-day care is never interrupted.',
+    a: 'Not today. No integrations with other record, imaging, or lab systems have been built yet.',
   },
 ]
 
@@ -207,10 +203,10 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* ── Compliance band ────────────────────────────────────────────────── */}
+      {/* ── Safeguards band ────────────────────────────────────────────────── */}
       <section className="px-container-padding mx-auto max-w-7xl">
         <div className="neo-pressed bg-surface flex flex-wrap items-center justify-center gap-x-10 gap-y-4 rounded-2xl px-6 py-5">
-          {COMPLIANCE.map(({ icon: Icon, label }) => (
+          {SAFEGUARDS.map(({ icon: Icon, label }) => (
             <div key={label} className="text-on-surface-variant flex items-center gap-2">
               <Icon className="text-secondary size-5" />
               <span className="font-label text-label-caps">{label}</span>
@@ -223,32 +219,32 @@ export default function LandingPage() {
       <section id="modules" className="px-container-padding mx-auto mt-24 max-w-7xl scroll-mt-28">
         <div className="mb-10 max-w-2xl">
           <h2 className="font-display text-headline-lg text-primary">
-            Every hospital function, in one place.
+            The front desk, the consulting room, and billing in one place.
           </h2>
           <p className="font-body text-body-md text-on-surface-variant mt-3">
-            Each department works in its own module and shares the same patient record, so nothing is
-            re-entered and nothing is lost between teams.
+            Each team works in its own module and shares the same patient record, so nothing is
+            re-entered between them.
           </p>
         </div>
 
-        {/* 3x3: tall roadmap card (col 1) + 2x2 modules (cols 2-3) + full-width Reports footer */}
+        {/* 3x3: tall roadmap card (col 1) + 2x2 modules (cols 2-3) + full-width Administration footer */}
         <div className="grid gap-5 md:grid-cols-3">
           <ModuleCard
             dark
-            icon={Sparkles}
-            title="AI assistance — planned"
-            body="Not part of the product today. It is on the roadmap as an assistant that suggests and never acts alone: staff will review and approve anything it proposes."
+            icon={Hourglass}
+            title="On the roadmap"
+            body="Laboratory, pharmacy, inventory, reports, and AI assistance are planned. None of them is part of the product today."
             className="md:row-span-2"
           />
           <ModuleCard
             icon={Users}
             title="Patients"
-            body="A searchable registry with full history, admissions, and documents per patient."
+            body="A searchable registry with each patient's details, medical history, appointments, and invoices."
           />
           <ModuleCard
             icon={CalendarDays}
             title="Appointments"
-            body="Doctor availability, booking, and the daily queue in one calendar."
+            body="Slot booking against doctor availability, rescheduling, and the daily queue from check-in to completion."
           />
           <ModuleCard
             icon={Receipt}
@@ -256,14 +252,14 @@ export default function LandingPage() {
             body="Invoices, payments, and refunds tied to each visit."
           />
           <ModuleCard
-            icon={Pill}
-            title="Pharmacy & Lab"
-            body="Prescriptions and lab orders tracked from request to result."
+            icon={Building2}
+            title="Doctors & departments"
+            body="Doctor profiles, weekly availability, leave, and the departments they belong to."
           />
           <ModuleCard
-            icon={BarChart3}
-            title="Reports & Analytics"
-            body="Revenue, occupancy, and clinical activity in live dashboards across the hospital."
+            icon={UserCog}
+            title="Administration"
+            body="Users and roles with permission-based access, in-app notifications, hospital settings, and an audit log that can be exported."
             className="md:col-span-3"
           />
         </div>

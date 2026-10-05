@@ -1,9 +1,9 @@
 import { lazy, Suspense } from 'react'
-import { createBrowserRouter, Outlet } from 'react-router-dom'
+import { Navigate, createBrowserRouter, Outlet } from 'react-router-dom'
 import { RequireAuth } from '@/components/auth/RequireAuth'
 import { RequirePermission } from '@/components/auth/RequirePermission'
 import { RouteFallback } from '@/components/layout/RouteFallback'
-import { privacyDoc, termsDoc, hipaaDoc } from '@/content/legal'
+import { privacyDoc, termsDoc, securityDoc } from '@/content/legal'
 
 // Route-level code splitting: each page (and its heavy deps like Recharts)
 // lands in its own chunk, loaded on demand behind the Suspense boundary below.
@@ -44,7 +44,9 @@ export const router = createBrowserRouter([
       { path: '/contact', element: <ContactPage /> },
       { path: '/privacy', element: <LegalPage doc={privacyDoc} /> },
       { path: '/terms', element: <LegalPage doc={termsDoc} /> },
-      { path: '/hipaa', element: <LegalPage doc={hipaaDoc} /> },
+      { path: '/security', element: <LegalPage doc={securityDoc} /> },
+      // The page's old address, kept so existing links still land somewhere true.
+      { path: '/hipaa', element: <Navigate to="/security" replace /> },
 
       // Auth pages (public)
       { path: '/login', element: <LoginPage /> },
