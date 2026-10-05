@@ -43,6 +43,7 @@ export default function TopBar({ onOpenSidebar }: TopBarProps) {
           type="text"
           disabled
           title="Global search — coming soon"
+          aria-label="Global search (coming soon)"
           placeholder="Search (coming soon)"
           className="neo-pressed bg-surface/60 font-body text-body-sm placeholder:text-outline-variant w-full cursor-not-allowed rounded-full py-2.5 pr-4 pl-9 opacity-60 outline-none"
         />

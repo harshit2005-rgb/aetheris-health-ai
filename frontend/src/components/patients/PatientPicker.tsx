@@ -84,7 +84,10 @@ export function PatientPicker({
         </ul>
       )}
       {q && results.length === 0 && (
-        <p className="font-body text-outline text-xs">No patients match “{q}”.</p>
+        <p className="font-body text-outline text-xs">
+          No patients match “{q}”. Try the first or last name on its own, or the full MRN or phone
+          number.
+        </p>
       )}
     </div>
   )

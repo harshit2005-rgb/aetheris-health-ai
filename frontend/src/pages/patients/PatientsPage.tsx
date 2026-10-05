@@ -81,14 +81,18 @@ export default function PatientsPage() {
               <EmptyState
                 icon={Users}
                 title="No matching patients"
-                description="Names match from the start, and MRN or phone must match exactly."
+                description="Search by first name or last name on its own — a full name will not match. An MRN or phone number must be entered in full."
               />
             ) : (
               <EmptyState
                 icon={Users}
                 title="No patients yet"
-                description="Register your first patient to start building the registry."
-                action={<RegisterPatientDialog trigger={registerButton} />}
+                description={
+                  canRegister
+                    ? 'Register your first patient to start building the registry.'
+                    : 'Patients registered at this hospital will appear here.'
+                }
+                action={canRegister ? <RegisterPatientDialog trigger={registerButton} /> : undefined}
               />
             )
           }
