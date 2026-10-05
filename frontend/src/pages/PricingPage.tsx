@@ -10,13 +10,14 @@ const INCLUDED = [
   'Appointment booking and the daily queue',
   'Invoices, payments, and refunds',
   'Laboratory orders and results',
+  'Pharmacy prescribing, dispensing, and medicine stock',
   'In-app notifications',
   'Users, roles, and permission-based access',
   'Audit log with export',
 ]
 
 /** Planned modules. None is available yet. */
-const PLANNED = ['Pharmacy', 'Inventory', 'Reports', 'AI assistance']
+const PLANNED = ['Inventory', 'Reports', 'AI assistance']
 
 /**
  * Pricing. There are no published plans or prices — the product has no

@@ -12,6 +12,7 @@ import { usePermissions } from '@/hooks/usePermissions'
 import { PatientAppointments } from '@/components/appointments/PatientAppointments'
 import { PatientInvoices } from '@/components/billing/PatientInvoices'
 import { PatientLabOrders } from '@/components/laboratory/PatientLabOrders'
+import { PatientPrescriptions } from '@/components/pharmacy/PatientPrescriptions'
 import { EditPatientDialog } from './EditPatientDialog'
 
 function formatAddress(address: Record<string, unknown> | null): string | null {
@@ -179,6 +180,8 @@ export default function PatientDetailPage() {
       <PatientAppointments patient={patient} />
 
       <PatientLabOrders patientId={patient.id} />
+
+      <PatientPrescriptions patientId={patient.id} />
 
       <PatientInvoices patientId={patient.id} />
     </div>

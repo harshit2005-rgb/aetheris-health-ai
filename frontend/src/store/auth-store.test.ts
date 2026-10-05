@@ -31,7 +31,7 @@ describe('toAuthUser', () => {
   })
 
   it('maps unknown role display names to undefined role (display-only)', () => {
-    const user = toAuthUser({ id: 'u4', email: 'a@b.test', first_name: 'A', last_name: 'B', roles: ['Pharmacist'] })
+    const user = toAuthUser({ id: 'u4', email: 'a@b.test', first_name: 'A', last_name: 'B', roles: ['Physiotherapist'] })
     expect(user.role).toBeUndefined()
   })
 

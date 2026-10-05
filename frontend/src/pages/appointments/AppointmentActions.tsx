@@ -1,11 +1,13 @@
 import { useRef } from 'react'
 import { toast } from 'sonner'
-import { FlaskConical, Loader2 } from 'lucide-react'
+import { FlaskConical, Loader2, Pill } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAppointmentTransition, type AppointmentSummary } from '@/api/appointments'
 import { usePermissions } from '@/hooks/usePermissions'
 import { OrderLabTestsDialog } from '@/components/laboratory/OrderLabTestsDialog'
 import { canOrderLabTestsFor } from '@/components/laboratory/labPresentation'
+import { PrescribeDialog } from '@/components/pharmacy/PrescribeDialog'
+import { canPrescribeFor } from '@/components/pharmacy/pharmacyPresentation'
 import { CancelAppointmentDialog } from './CancelAppointmentDialog'
 import { MarkNoShowDialog } from './MarkNoShowDialog'
 import { RescheduleAppointmentDialog } from './RescheduleAppointmentDialog'
@@ -13,7 +15,7 @@ import { CANCELLABLE, NEXT_STEP, NO_SHOWABLE, RESCHEDULABLE, lifecycleErrorMessa
 
 /**
  * The lifecycle actions for one queue row: the next step for its status, plus
- * Lab tests, Reschedule, No-show and Cancel where the API allows them. An action the user's permissions don't cover
+ * Lab tests, Prescribe, Reschedule, No-show and Cancel where the API allows them. An action the user's permissions don't cover
  * is not rendered — a convenience only; the backend enforces each one.
  */
 export function AppointmentActions({ appointment }: { appointment: AppointmentSummary }) {
@@ -37,7 +39,13 @@ export function AppointmentActions({ appointment }: { appointment: AppointmentSu
   // order form lists the catalog, which needs its own permission.
   const canOrderTests =
     canOrderLabTestsFor(appointment.status) && can('lab.order.create') && can('lab.test.read')
-  if (!next && !canCancel && !canReschedule && !canMarkNoShow && !canOrderTests) return null
+  // A prescription hangs off a visit too. Its lines are picked from the
+  // medicine catalog, which needs its own permission.
+  const canPrescribe =
+    canPrescribeFor(appointment.status) &&
+    can('pharmacy.prescription.create') &&
+    can('pharmacy.medicine.read')
+  if (!next && !canCancel && !canReschedule && !canMarkNoShow && !canOrderTests && !canPrescribe) return null
 
   async function run() {
     if (!next || busy.current) return
@@ -79,6 +87,21 @@ export function AppointmentActions({ appointment }: { appointment: AppointmentSu
               aria-label={`Order lab tests for ${appointment.patient_name}`}
             >
               <FlaskConical className="size-4" /> Lab tests
+            </Button>
+          }
+        />
+      )}
+      {canPrescribe && (
+        <PrescribeDialog
+          visit={appointment}
+          trigger={
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={transition.isPending}
+              aria-label={`Write prescription for ${appointment.patient_name}`}
+            >
+              <Pill className="size-4" /> Prescribe
             </Button>
           }
         />

@@ -7,6 +7,7 @@ import {
   Building2,
   FlaskConical,
   Hourglass,
+  Pill,
   UserCog,
   ShieldCheck,
   Lock,
@@ -64,7 +65,7 @@ const FAQ = [
   },
   {
     q: 'Which modules are available today?',
-    a: 'Patients, doctors and departments, appointments, billing, laboratory orders and results, notifications, user and role management, hospital settings, and the audit log. Pharmacy, inventory, and reports are planned and are not part of the product yet.',
+    a: 'Patients, doctors and departments, appointments, billing, laboratory orders and results, pharmacy prescribing and dispensing with medicine stock, notifications, user and role management, hospital settings, and the audit log. Inventory and reports are planned and are not part of the product yet.',
   },
   {
     q: 'Does Aetheris include AI features today?',
@@ -228,13 +229,13 @@ export default function LandingPage() {
           </p>
         </div>
 
-        {/* 3x3: tall roadmap card (col 1) + 2x2 modules (cols 2-3) + Laboratory and Administration below */}
+        {/* 3x3: tall roadmap card (col 1) + 2x2 modules (cols 2-3) + Laboratory, Pharmacy and Administration below */}
         <div className="grid gap-5 md:grid-cols-3">
           <ModuleCard
             dark
             icon={Hourglass}
             title="On the roadmap"
-            body="Pharmacy, inventory, reports, and AI assistance are planned. None of them is part of the product today."
+            body="Inventory, reports, and AI assistance are planned. None of them is part of the product today."
             className="md:row-span-2"
           />
           <ModuleCard
@@ -263,10 +264,14 @@ export default function LandingPage() {
             body="Tests ordered from a visit, sample collection, result entry checked against the hospital's own reference ranges, release, and recorded corrections."
           />
           <ModuleCard
+            icon={Pill}
+            title="Pharmacy"
+            body="Medicines prescribed from a visit and dispensed from batch-tracked stock, with the charge added to the patient's invoice. A medicine catalog, vendors, and purchase orders for restocking."
+          />
+          <ModuleCard
             icon={UserCog}
             title="Administration"
             body="Users and roles with permission-based access, in-app notifications, hospital settings, and an audit log that can be exported."
-            className="md:col-span-2"
           />
         </div>
       </section>

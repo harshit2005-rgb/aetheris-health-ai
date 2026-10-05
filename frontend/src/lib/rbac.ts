@@ -1,5 +1,6 @@
 import {
   FlaskConical,
+  Pill,
   LayoutDashboard,
   Users,
   Stethoscope,
@@ -20,6 +21,8 @@ export type Role =
   | 'nurse'
   | 'billing_staff'
   | 'lab_technician'
+  | 'pharmacist'
+  | 'inventory_manager'
 
 export const ROLE_LABELS: Record<Role, string> = {
   super_admin: 'Super Admin',
@@ -29,6 +32,8 @@ export const ROLE_LABELS: Record<Role, string> = {
   nurse: 'Nurse',
   billing_staff: 'Billing Staff',
   lab_technician: 'Lab Technician',
+  pharmacist: 'Pharmacist',
+  inventory_manager: 'Inventory Manager',
 }
 
 /** Reverse lookup: the backend sends role *display names* ("Hospital Admin"). */
@@ -281,6 +286,27 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'lab.test.read', 'lab.order.read', 'lab.order.collect_sample', 'lab.order.enter_results',
     'department.read',
   ],
+  pharmacist: [
+    'notification.read.own', 'notification.preference.update.own',
+    'dashboard.view',
+    // Dispenses and takes stock in, but cannot change the catalog, prescribe
+    // or raise a purchase order (docs/18-API_CONTRACTS.md §9.2).
+    'pharmacy.medicine.read',
+    'pharmacy.batch.read', 'pharmacy.batch.create', 'pharmacy.batch.update',
+    'pharmacy.prescription.read', 'pharmacy.dispense.execute',
+    'pharmacy.po.read', 'pharmacy.po.receive', 'pharmacy.vendor.read',
+    'inventory.read', 'department.read',
+  ],
+  inventory_manager: [
+    'notification.read.own', 'notification.preference.update.own',
+    'dashboard.view',
+    // Owns purchase orders and vendors; sees stock but no prescriptions.
+    'pharmacy.medicine.read', 'pharmacy.batch.read',
+    'pharmacy.po.read', 'pharmacy.po.create', 'pharmacy.po.update', 'pharmacy.po.receive',
+    'pharmacy.vendor.read', 'pharmacy.vendor.create', 'pharmacy.vendor.update',
+    'inventory.read', 'inventory.create', 'inventory.update',
+    'department.read',
+  ],
 }
 
 /** Coarse permission groups the nav/routes are expressed in (spec Parts 3–10). */
@@ -291,6 +317,7 @@ export type PermissionGroup =
   | 'appointment.read'
   | 'invoice.read'
   | 'lab.order.read'
+  | 'pharmacy.medicine.read'
   | 'report.read'
   | 'user.read'
   | 'settings.read'
@@ -311,6 +338,7 @@ export const NAV: NavItem[] = [
   { to: '/appointments', label: 'Appointments', icon: CalendarDays, permission: 'appointment.read' },
   { to: '/billing', label: 'Billing', icon: Receipt, permission: 'invoice.read' },
   { to: '/laboratory', label: 'Laboratory', icon: FlaskConical, permission: 'lab.order.read' },
+  { to: '/pharmacy', label: 'Pharmacy', icon: Pill, permission: 'pharmacy.medicine.read' },
   { to: '/reports', label: 'Reports', icon: BarChart3, permission: 'report.read' },
   { to: '/users', label: 'Users & Roles', icon: UserCog, permission: 'user.read' },
   { to: '/settings', label: 'Settings', icon: SettingsIcon, permission: 'settings.read' },
@@ -331,6 +359,14 @@ const GROUP_ALIASES: Record<PermissionGroup, Permission[]> = {
   'invoice.read': ['invoice.read', 'invoice.read.own'],
   // The worklist is the module's first screen; every lab role can read orders.
   'lab.order.read': ['lab.order.read'],
+  // Every pharmacy role reads the catalog; the others cover a custom role
+  // that was given one pharmacy screen without it.
+  'pharmacy.medicine.read': [
+    'pharmacy.medicine.read',
+    'pharmacy.prescription.read',
+    'pharmacy.po.read',
+    'pharmacy.vendor.read',
+  ],
   'report.read': ['report.read'],
   'user.read': ['user.read'],
   'settings.read': ['settings.read'],

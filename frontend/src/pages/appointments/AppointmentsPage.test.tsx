@@ -30,6 +30,10 @@ vi.mock('@/api/appointments', () => ({
 vi.mock('@/api/lab', () => ({
   useCreateLabOrder: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
+vi.mock('@/api/pharmacy', () => ({
+  useCreatePrescription: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useMedicines: () => ({ data: undefined, isPending: false, isError: false }),
+}))
 // The queue header renders the (closed) BookAppointmentDialog, whose hooks run.
 vi.mock('@/api/doctors', () => ({ useDoctors: () => ({ data: { items: [] } }) }))
 vi.mock('@/api/patients', () => ({ usePatients: () => ({ data: { items: [] } }) }))

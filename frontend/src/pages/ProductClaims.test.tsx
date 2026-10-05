@@ -44,7 +44,11 @@ const UNSUPPORTED = [
   /admission|admit a patient/i,
   /real-time|live dashboards|occupancy/i,
   /Pharmacy & Lab/i,
-  /prescriptions/i,
+  // Pharmacy is real now; these are the parts of it that are not.
+  /e-?prescri|electronic prescri/i,
+  /interaction/i,
+  /substitut/i,
+  /low[- ]stock|reorder|stock alert/i,
   /clinical decision-support/i,
   /integration seams/i,
   /a few weeks/i,
@@ -133,12 +137,20 @@ describe('landing page', () => {
 
     const roadmap = screen.getByRole('heading', { name: 'On the roadmap' }).parentElement as HTMLElement
     expect(roadmap).toHaveTextContent(
-      'Pharmacy, inventory, reports, and AI assistance are planned. None of them is part of the product today.',
+      'Inventory, reports, and AI assistance are planned. None of them is part of the product today.',
     )
-    for (const built of ['Patients', 'Appointments', 'Billing', 'Doctors & departments', 'Laboratory', 'Administration']) {
+    for (const built of [
+      'Patients',
+      'Appointments',
+      'Billing',
+      'Doctors & departments',
+      'Laboratory',
+      'Pharmacy',
+      'Administration',
+    ]) {
       expect(screen.getByRole('heading', { name: built })).toBeInTheDocument()
     }
-    for (const unbuilt of [/Pharmacy/, /Reports/, /Inventory/]) {
+    for (const unbuilt of [/Reports/, /Inventory/]) {
       expect(screen.queryByRole('heading', { name: unbuilt })).not.toBeInTheDocument()
     }
   })
@@ -175,9 +187,14 @@ describe('pricing page', () => {
     expect(within(included).getByText('Audit log with export')).toBeInTheDocument()
     // Laboratory has real screens now, so it is listed as included, not planned.
     expect(within(included).getByText('Laboratory orders and results')).toBeInTheDocument()
+    // So does Pharmacy — named for what it does, not as a bare module name.
+    expect(
+      within(included).getByText('Pharmacy prescribing, dispensing, and medicine stock'),
+    ).toBeInTheDocument()
     const planned = screen.getByRole('region', { name: 'On the roadmap' })
     expect(within(planned).getByText('Planned, and not available yet.')).toBeInTheDocument()
-    for (const module of ['Pharmacy', 'Inventory', 'Reports', 'AI assistance']) {
+    expect(within(planned).queryByText(/Pharmacy/)).not.toBeInTheDocument()
+    for (const module of ['Inventory', 'Reports', 'AI assistance']) {
       expect(within(planned).getByText(module)).toBeInTheDocument()
       expect(within(included).queryByText(module)).not.toBeInTheDocument()
     }

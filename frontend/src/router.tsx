@@ -28,6 +28,14 @@ const ReportsPage = lazy(() => import('@/pages/reports/ReportsPage'))
 const LabOrdersPage = lazy(() => import('@/pages/laboratory/LabOrdersPage'))
 const LabOrderDetailPage = lazy(() => import('@/pages/laboratory/LabOrderDetailPage'))
 const LabCatalogPage = lazy(() => import('@/pages/laboratory/LabCatalogPage'))
+const PharmacyIndexPage = lazy(() => import('@/pages/pharmacy/PharmacyIndexPage'))
+const PrescriptionsPage = lazy(() => import('@/pages/pharmacy/PrescriptionsPage'))
+const PrescriptionDetailPage = lazy(() => import('@/pages/pharmacy/PrescriptionDetailPage'))
+const MedicinesPage = lazy(() => import('@/pages/pharmacy/MedicinesPage'))
+const MedicineStockPage = lazy(() => import('@/pages/pharmacy/MedicineStockPage'))
+const PurchaseOrdersPage = lazy(() => import('@/pages/pharmacy/PurchaseOrdersPage'))
+const PurchaseOrderDetailPage = lazy(() => import('@/pages/pharmacy/PurchaseOrderDetailPage'))
+const VendorsPage = lazy(() => import('@/pages/pharmacy/VendorsPage'))
 const UsersPage = lazy(() => import('@/pages/users/UsersPage'))
 const SettingsPage = lazy(() => import('@/pages/settings/SettingsPage'))
 const ProfilePage = lazy(() => import('@/pages/settings/ProfilePage'))
@@ -146,6 +154,73 @@ export const router = createBrowserRouter([
             element: (
               <RequirePermission permission="lab.test.read">
                 <LabCatalogPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            // Any pharmacy read code opens the module; the index sends each user to
+            // the first screen their permissions cover (docs/18-API_CONTRACTS.md §9.1).
+            path: '/pharmacy',
+            element: (
+              <RequirePermission group="pharmacy.medicine.read">
+                <PharmacyIndexPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/pharmacy/prescriptions',
+            element: (
+              <RequirePermission permission="pharmacy.prescription.read">
+                <PrescriptionsPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/pharmacy/prescriptions/:prescriptionId',
+            element: (
+              <RequirePermission permission="pharmacy.prescription.read">
+                <PrescriptionDetailPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/pharmacy/medicines',
+            element: (
+              <RequirePermission permission="pharmacy.medicine.read">
+                <MedicinesPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            // Stock is its own code: a doctor reads the catalog but not the batches.
+            path: '/pharmacy/medicines/:medicineId',
+            element: (
+              <RequirePermission permission="pharmacy.batch.read">
+                <MedicineStockPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/pharmacy/purchase-orders',
+            element: (
+              <RequirePermission permission="pharmacy.po.read">
+                <PurchaseOrdersPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/pharmacy/purchase-orders/:orderId',
+            element: (
+              <RequirePermission permission="pharmacy.po.read">
+                <PurchaseOrderDetailPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/pharmacy/vendors',
+            element: (
+              <RequirePermission permission="pharmacy.vendor.read">
+                <VendorsPage />
               </RequirePermission>
             ),
           },

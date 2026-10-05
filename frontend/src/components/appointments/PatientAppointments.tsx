@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CalendarPlus, FlaskConical } from 'lucide-react'
+import { CalendarPlus, FlaskConical, Pill } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppointments, type AppointmentSummary } from '@/api/appointments'
@@ -8,6 +8,8 @@ import { formatDate, formatTime } from '@/lib/format'
 import { AppointmentStatusBadge } from './AppointmentStatusBadge'
 import { OrderLabTestsDialog } from '@/components/laboratory/OrderLabTestsDialog'
 import { canOrderLabTestsFor } from '@/components/laboratory/labPresentation'
+import { PrescribeDialog } from '@/components/pharmacy/PrescribeDialog'
+import { canPrescribeFor } from '@/components/pharmacy/pharmacyPresentation'
 import { BookAppointmentDialog } from './BookAppointmentDialog'
 
 /** How many appointments to show before pointing at the rest. */
@@ -56,6 +58,7 @@ export function PatientAppointments({
   // The API refuses to book for a deactivated patient.
   const canBook = can('appointment.book') && patient.status === 'active'
   const canOrderTests = can('lab.order.create') && can('lab.test.read')
+  const canPrescribe = can('pharmacy.prescription.create') && can('pharmacy.medicine.read')
 
   return (
     <section className="neo-extruded bg-surface rounded-2xl p-6" aria-label="Appointments">
@@ -107,6 +110,20 @@ export function PatientAppointments({
                           aria-label={`Order lab tests for the visit on ${formatDate(a.scheduled_start)}`}
                         >
                           <FlaskConical className="size-4" /> Lab tests
+                        </Button>
+                      }
+                    />
+                  )}
+                  {canPrescribe && canPrescribeFor(a.status) && (
+                    <PrescribeDialog
+                      visit={a}
+                      trigger={
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Write prescription for the visit on ${formatDate(a.scheduled_start)}`}
+                        >
+                          <Pill className="size-4" /> Prescribe
                         </Button>
                       }
                     />
