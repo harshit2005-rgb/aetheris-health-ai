@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAppointments, type AppointmentStatus } from '@/api/appointments'
 import { usePermissions } from '@/hooks/usePermissions'
 import { todayISODate } from '@/lib/format'
-import { appointmentColumns } from './columns'
+import { appointmentQueueColumns } from './columns'
 
 const PAGE_SIZE = 25
 const ALL = 'all'
@@ -116,7 +116,7 @@ export default function AppointmentsPage() {
         </Alert>
       ) : (
         <DataTable
-          columns={appointmentColumns}
+          columns={appointmentQueueColumns}
           data={appointments}
           isLoading={isPending}
           emptyState={

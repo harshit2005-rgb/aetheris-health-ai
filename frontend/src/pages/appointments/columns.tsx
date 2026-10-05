@@ -2,6 +2,7 @@ import type { ColumnDef } from '@tanstack/react-table'
 import { Badge } from '@/components/ui/badge'
 import { formatTime } from '@/lib/format'
 import type { AppointmentStatus, AppointmentSummary, AppointmentType } from '@/api/appointments'
+import { AppointmentActions } from './AppointmentActions'
 
 type Variant = 'neutral' | 'primary' | 'accent' | 'success' | 'warning' | 'critical' | 'error'
 
@@ -50,5 +51,19 @@ export const appointmentColumns: ColumnDef<AppointmentSummary>[] = [
     accessorKey: 'status',
     header: 'Status',
     cell: ({ row }) => <AppointmentStatusBadge status={row.original.status} />,
+  },
+]
+
+/**
+ * The queue's columns: the shared ones plus the lifecycle actions. The
+ * dashboard's table stays read-only and uses `appointmentColumns` alone.
+ */
+export const appointmentQueueColumns: ColumnDef<AppointmentSummary>[] = [
+  ...appointmentColumns,
+  {
+    id: 'actions',
+    header: '',
+    enableSorting: false,
+    cell: ({ row }) => <AppointmentActions appointment={row.original} />,
   },
 ]

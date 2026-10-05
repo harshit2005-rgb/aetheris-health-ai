@@ -2,7 +2,7 @@ import { useRef } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { http } from '@/api/http'
 import { newIdempotencyKey } from '@/api/idempotency'
-import type { Paginated, ListQueryOptions } from '@/api/types'
+import { ApiError, type Paginated, type ListQueryOptions } from '@/api/types'
 
 /**
  * Appointment module API — typed hooks over the real backend contract
@@ -104,6 +104,50 @@ export function useAppointments(
       }),
     staleTime: 15_000,
     placeholderData: keepPreviousData,
+  })
+}
+
+/** The lifecycle endpoints that take no body: `POST /appointments/{id}/{action}`. */
+export type AppointmentTransition = 'check-in' | 'start' | 'complete'
+
+/**
+ * The server rejected a lifecycle call because the appointment is not in the
+ * state this screen showed (moved on, gone, or changed by someone else). The
+ * lists are stale, so they are refetched even though the call failed.
+ */
+function isStaleAppointment(err: unknown): boolean {
+  return err instanceof ApiError && [400, 404, 409].includes(err.status ?? 0)
+}
+
+/**
+ * Check in, start or complete an appointment (docs/18-API_CONTRACTS.md §5.4).
+ *
+ * The state machine lives on the server: an illegal move is a 400. The mutation
+ * settles only after the appointment lists have refetched, so `isPending`
+ * covers the whole window in which a row still shows its old status.
+ */
+export function useAppointmentTransition() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, action }: { id: string; action: AppointmentTransition }) =>
+      http.post<Appointment>(`/appointments/${id}/${action}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: appointmentKeys.all }),
+    onError: (err) => {
+      if (isStaleAppointment(err)) qc.invalidateQueries({ queryKey: appointmentKeys.all })
+    },
+  })
+}
+
+/** Cancel an appointment. The API requires a reason (module spec §11). */
+export function useCancelAppointment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) =>
+      http.post<Appointment>(`/appointments/${id}/cancel`, { reason }),
+    onSuccess: () => qc.invalidateQueries({ queryKey: appointmentKeys.all }),
+    onError: (err) => {
+      if (isStaleAppointment(err)) qc.invalidateQueries({ queryKey: appointmentKeys.all })
+    },
   })
 }
 
