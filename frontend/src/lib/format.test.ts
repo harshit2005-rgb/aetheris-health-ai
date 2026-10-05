@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatDate, formatRelativeTime } from './format'
+import { formatDate, formatRelativeTime, formatDayIn, formatTimeIn, isoDateIn } from './format'
 
 describe('formatRelativeTime', () => {
   const now = Date.parse('2026-10-05T12:00:00Z')
@@ -28,5 +28,32 @@ describe('formatRelativeTime', () => {
 
   it('echoes a value it cannot parse', () => {
     expect(formatRelativeTime('not a date', now)).toBe('not a date')
+  })
+})
+
+describe('hospital-clock helpers', () => {
+  // 20:00 UTC on 6 Oct is already 01:30 on 7 Oct in Asia/Kolkata.
+  const lateEvening = '2026-10-06T20:00:00Z'
+
+  it('isoDateIn gives the calendar day in the named zone', () => {
+    expect(isoDateIn(lateEvening, 'Asia/Kolkata')).toBe('2026-10-07')
+    expect(isoDateIn(lateEvening, 'UTC')).toBe('2026-10-06')
+    expect(isoDateIn(lateEvening, 'America/Los_Angeles')).toBe('2026-10-06')
+  })
+
+  it('isoDateIn falls back to the viewer for an unknown zone, and is empty for a bad date', () => {
+    expect(isoDateIn(lateEvening, 'Not/AZone')).toMatch(/^2026-10-0[67]$/)
+    expect(isoDateIn('not a date', 'UTC')).toBe('')
+  })
+
+  it('formatDayIn names the day in the named zone', () => {
+    expect(formatDayIn(lateEvening, 'Asia/Kolkata')).toMatch(/Wed.*7/)
+    expect(formatDayIn(lateEvening, 'UTC')).toMatch(/Tue.*6/)
+    expect(formatDayIn('not a date', 'UTC')).toBe('not a date')
+  })
+
+  it('formatTimeIn uses the named zone, or the viewer without one', () => {
+    expect(formatTimeIn(lateEvening, 'Asia/Kolkata')).toMatch(/1:30/)
+    expect(formatTimeIn(lateEvening)).toBe(formatTimeIn(lateEvening, undefined))
   })
 })

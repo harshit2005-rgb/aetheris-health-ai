@@ -166,6 +166,41 @@ export function useCancelAppointment() {
   })
 }
 
+/** Body for `PATCH /appointments/{id}` (`RescheduleAppointmentRequest`). Nothing else is accepted. */
+export interface RescheduleAppointmentInput {
+  scheduled_start: string
+  scheduled_end: string
+  /** Recorded on the status-history row for the move. */
+  reason?: string
+}
+
+/**
+ * Move a booked appointment to a new window (docs/18-API_CONTRACTS.md §5,
+ * module spec §5.3). Only the time moves — the doctor and patient stay.
+ *
+ * The server refuses anything but a `booked` appointment (400), a window that
+ * clashes with another appointment (409) and, without
+ * `appointment.book_override`, one outside the doctor's availability (400).
+ * On success the old slot is free and the new one taken, so the slots are
+ * refetched with the lists; on a refusal that means the screen was out of
+ * date, both are refetched too.
+ */
+export function useRescheduleAppointment() {
+  const qc = useQueryClient()
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: doctorKeys.slots() })
+    return qc.invalidateQueries({ queryKey: appointmentKeys.all })
+  }
+  return useMutation({
+    mutationFn: ({ id, ...input }: RescheduleAppointmentInput & { id: string }) =>
+      http.patch<Appointment>(`/appointments/${id}`, input),
+    onSuccess: refresh,
+    onError: (err) => {
+      if (isStaleAppointment(err)) refresh()
+    },
+  })
+}
+
 /**
  * Book an appointment, then refresh the queue. Throws ApiError (409 on doctor overlap).
  *

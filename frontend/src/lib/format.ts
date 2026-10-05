@@ -26,16 +26,52 @@ export function formatTime(iso: string): string {
 
 /**
  * Short time in a named IANA zone — for times that belong to the hospital's
- * clock (a doctor's slots), which is not necessarily the viewer's.
+ * clock (a doctor's slots), which is not necessarily the viewer's. Without a
+ * zone, or with one the browser does not know, the viewer's clock is used.
  */
-export function formatTimeIn(iso: string, timeZone: string): string {
+export function formatTimeIn(iso: string, timeZone?: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return iso
   try {
     return d.toLocaleTimeString(undefined, { timeStyle: 'short', timeZone })
   } catch {
-    // An unknown zone name: fall back to the viewer's clock rather than fail.
     return d.toLocaleTimeString(undefined, { timeStyle: 'short' })
+  }
+}
+
+/** Day with its weekday (e.g. "Tue, 6 Oct 2026") in a named IANA zone; see {@link formatTimeIn}. */
+export function formatDayIn(iso: string, timeZone?: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  const style = { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' } as const
+  try {
+    return d.toLocaleDateString(undefined, { ...style, timeZone })
+  } catch {
+    return d.toLocaleDateString(undefined, style)
+  }
+}
+
+/**
+ * The calendar day (YYYY-MM-DD) an instant falls on in a named IANA zone — the
+ * value a date input and the API's day filters expect. See {@link formatTimeIn}.
+ */
+export function isoDateIn(iso: string, timeZone?: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ''
+  const parts = (zone?: string) => {
+    const p = new Intl.DateTimeFormat('en-US', {
+      timeZone: zone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).formatToParts(d)
+    const get = (type: string) => p.find((x) => x.type === type)?.value ?? ''
+    return `${get('year')}-${get('month')}-${get('day')}`
+  }
+  try {
+    return parts(timeZone)
+  } catch {
+    return parts()
   }
 }
 

@@ -61,6 +61,9 @@ export const NEXT_STEP: Partial<Record<AppointmentStatus, LifecycleStep>> = {
 /** Statuses the cancel endpoint accepts (module spec §5.4). */
 export const CANCELLABLE: ReadonlySet<AppointmentStatus> = new Set(['booked', 'checked_in'])
 
+/** Statuses the reschedule endpoint accepts (module spec §5.3): not once the patient has checked in. */
+export const RESCHEDULABLE: ReadonlySet<AppointmentStatus> = new Set(['booked'])
+
 /**
  * Turn a failed lifecycle call into something reception can act on. Server
  * messages for 5xx and unknown failures are not shown — they are not written

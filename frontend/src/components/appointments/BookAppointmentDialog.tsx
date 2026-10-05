@@ -3,7 +3,7 @@ import { Controller, useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Check, Loader2, RotateCw } from 'lucide-react'
+import { Check, Loader2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -18,16 +18,14 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Alert } from '@/components/ui/alert'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { PatientPicker } from '@/components/patients/PatientPicker'
-import { useDoctorSlots, useDoctors, type DoctorSlot } from '@/api/doctors'
+import { useDoctors } from '@/api/doctors'
 import { useBookAppointment, type AppointmentType, type BookAppointmentInput } from '@/api/appointments'
 import { ApiError } from '@/api/types'
 import { usePermissions } from '@/hooks/usePermissions'
-import { formatTimeIn } from '@/lib/format'
-import { cn } from '@/lib/utils'
+import { SlotPicker } from './SlotPicker'
 
 const TYPES: { value: AppointmentType; label: string }[] = [
   { value: 'new', label: 'New' },
@@ -76,112 +74,6 @@ interface Notice {
   variant: 'warning' | 'error'
   title: string
   body: string
-}
-
-const SLOT_NOTE: Record<DoctorSlot['status'], string | undefined> = {
-  available: undefined,
-  booked: 'Booked',
-  on_leave: 'On leave',
-}
-
-/**
- * The doctor's slots for the chosen day (docs/18-API_CONTRACTS.md §4.6).
- * Only an available slot that has not already ended can be picked; the rest
- * are shown, disabled, so it is clear why a time is missing. Times are in the
- * hospital's timezone, which the API names.
- */
-function SlotPicker({
-  doctorId,
-  date,
-  value,
-  onChange,
-  error,
-}: {
-  doctorId: string
-  date: string
-  value: string
-  onChange: (slot: DoctorSlot) => void
-  error?: string
-}) {
-  const { data, isPending, isError, refetch } = useDoctorSlots(doctorId, date)
-  // Read once per mount: a slot should not flip to "past" mid-render.
-  const [now] = useState(() => Date.now())
-
-  let body: ReactNode
-  if (isPending) {
-    body = (
-      <div role="status" aria-label="Loading time slots" className="flex flex-wrap gap-2">
-        {[0, 1, 2, 3].map((i) => (
-          <Skeleton key={i} className="h-9 w-20 rounded-full" />
-        ))}
-      </div>
-    )
-  } else if (isError) {
-    body = (
-      <div className="flex flex-wrap items-center gap-3">
-        <p className="font-body text-body-sm text-on-surface-variant">
-          The doctor's time slots couldn't be loaded.
-        </p>
-        <Button type="button" variant="outline" size="sm" onClick={() => refetch()}>
-          <RotateCw className="size-4" /> Retry
-        </Button>
-      </div>
-    )
-  } else if (data.slots.length === 0) {
-    body = (
-      <p className="font-body text-body-sm text-on-surface-variant">
-        This doctor has no time slots on that day. Pick another date or doctor.
-      </p>
-    )
-  } else {
-    body = (
-      <div className="flex flex-wrap gap-2">
-        {data.slots.map((slot) => {
-          const over = new Date(slot.end).getTime() <= now
-          const note = SLOT_NOTE[slot.status] ?? (over ? 'Past' : undefined)
-          const selected = value === slot.start
-          const label = formatTimeIn(slot.start, data.timezone)
-          return (
-            <button
-              key={slot.start}
-              type="button"
-              disabled={!!note}
-              aria-pressed={selected}
-              aria-label={note ? `${label}, ${note.toLowerCase()}` : label}
-              title={note}
-              onClick={() => onChange(slot)}
-              className={cn(
-                'font-body text-body-sm focus-visible:ring-secondary rounded-full px-3 py-1.5 tabular-nums transition-colors outline-none focus-visible:ring-2',
-                selected
-                  ? 'bg-secondary-container text-on-secondary-container font-semibold'
-                  : 'neo-pressed bg-surface text-on-surface hover:bg-secondary/10',
-                note && 'cursor-not-allowed line-through opacity-50 hover:bg-surface',
-              )}
-            >
-              {label}
-            </button>
-          )
-        })}
-      </div>
-    )
-  }
-
-  return (
-    <div role="group" aria-label="Time slots" className="space-y-2">
-      <p className="font-label text-on-surface-variant flex items-center gap-1">
-        Time slot<span className="text-error">*</span>
-        {data && (
-          <span className="font-body text-outline text-xs font-normal">· {data.timezone} time</span>
-        )}
-      </p>
-      {body}
-      {error && (
-        <p className="font-body text-error text-xs" role="alert">
-          {error}
-        </p>
-      )}
-    </div>
-  )
 }
 
 /**
