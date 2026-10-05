@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { http } from '@/api/http'
+import { doctorKeys } from '@/api/doctors'
 import { newIdempotencyKey } from '@/api/idempotency'
 import { ApiError, type Paginated, type ListQueryOptions } from '@/api/types'
 
@@ -154,7 +155,11 @@ export function useCancelAppointment() {
   return useMutation({
     mutationFn: ({ id, reason }: { id: string; reason: string }) =>
       http.post<Appointment>(`/appointments/${id}/cancel`, { reason }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: appointmentKeys.all }),
+    onSuccess: () => {
+      // A cancelled appointment gives its slot back.
+      qc.invalidateQueries({ queryKey: doctorKeys.slots() })
+      return qc.invalidateQueries({ queryKey: appointmentKeys.all })
+    },
     onError: (err) => {
       if (isStaleAppointment(err)) qc.invalidateQueries({ queryKey: appointmentKeys.all })
     },
@@ -188,6 +193,13 @@ export function useBookAppointment() {
       // Booked: the next submission is a new booking even if the details match.
       attempt.current = null
       qc.invalidateQueries({ queryKey: appointmentKeys.all })
+      qc.invalidateQueries({ queryKey: doctorKeys.slots() })
+    },
+    onError: (err) => {
+      // 409: another desk took the slot. The slots on screen are out of date.
+      if (err instanceof ApiError && err.status === 409) {
+        qc.invalidateQueries({ queryKey: doctorKeys.slots() })
+      }
     },
   })
 }

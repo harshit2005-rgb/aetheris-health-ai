@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { CalendarClock, CalendarPlus, RotateCw } from 'lucide-react'
 import PageHeader from '@/components/layout/PageHeader'
-import { BookAppointmentDialog } from './BookAppointmentDialog'
+import { BookAppointmentDialog } from '@/components/appointments/BookAppointmentDialog'
 import { DataTable } from '@/components/ui/data-table'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Button } from '@/components/ui/button'

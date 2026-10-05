@@ -27,7 +27,13 @@ vi.mock('@/api/appointments', () => ({
 }))
 // The quick-action dialogs have their own tests and their own data hooks.
 vi.mock('@/pages/patients/RegisterPatientDialog', () => ({ RegisterPatientDialog: () => null }))
-vi.mock('@/pages/appointments/BookAppointmentDialog', () => ({ BookAppointmentDialog: () => null }))
+vi.mock('@/components/appointments/BookAppointmentDialog', () => ({
+  BookAppointmentDialog: () => null,
+}))
+// Covered by its own tests; it has its own data hooks.
+vi.mock('@/components/billing/InvoicesAwaitingPayment', () => ({
+  InvoicesAwaitingPayment: () => null,
+}))
 
 const count = (total: number) => ({
   data: { items: [], pagination: { page: 1, pageSize: 1, total, totalPages: 1 } },
@@ -101,6 +107,6 @@ describe('DashboardPage', () => {
     expect(screen.queryByText("Today's appointments")).not.toBeInTheDocument()
     expect(screen.queryByText(/Couldn't load/)).not.toBeInTheDocument()
     // The greeting is still there: the page is not blank.
-    expect(screen.getByText(/Good morning/)).toBeInTheDocument()
+    expect(screen.getByText(/Good (morning|afternoon|evening)/)).toBeInTheDocument()
   })
 })

@@ -9,6 +9,7 @@ import { formatDate } from '@/lib/format'
 import { ApiError } from '@/api/types'
 import { GENDER_LABELS, usePatient } from '@/api/patients'
 import { usePermissions } from '@/hooks/usePermissions'
+import { PatientAppointments } from '@/components/appointments/PatientAppointments'
 import { PatientInvoices } from '@/components/billing/PatientInvoices'
 import { EditPatientDialog } from './EditPatientDialog'
 
@@ -173,6 +174,8 @@ export default function PatientDetailPage() {
           />
         </div>
       </InfoCard>
+
+      <PatientAppointments patient={patient} />
 
       <PatientInvoices patientId={patient.id} />
     </div>

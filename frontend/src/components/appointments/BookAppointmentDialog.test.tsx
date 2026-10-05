@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -8,7 +8,7 @@ import { AxiosError, type AxiosAdapter, type InternalAxiosRequestConfig } from '
 import { api } from '@/lib/api'
 import type { AppointmentSummary } from '@/api/appointments'
 import { BookAppointmentDialog } from './BookAppointmentDialog'
-import AppointmentsPage from './AppointmentsPage'
+import AppointmentsPage from '@/pages/appointments/AppointmentsPage'
 
 /**
  * The booking request itself is never mocked here: the real `useBookAppointment`
@@ -17,14 +17,18 @@ import AppointmentsPage from './AppointmentsPage'
  * the real API) went unnoticed.
  */
 
-const { toastSuccess, toastError } = vi.hoisted(() => ({
+const { toastSuccess, toastError, denied } = vi.hoisted(() => ({
   toastSuccess: vi.fn(),
   toastError: vi.fn(),
+  /** Permission codes the signed-in user does NOT hold. */
+  denied: new Set<string>(),
 }))
 
 vi.mock('sonner', () => ({ toast: { success: toastSuccess, error: toastError } }))
 // The pickers only read; their data is fixed so the form can be filled in.
-vi.mock('@/api/doctors', () => ({
+vi.mock('@/api/doctors', async (original) => ({
+  // Everything but the doctor list is real — the slots request goes through Axios.
+  ...(await original<typeof import('@/api/doctors')>()),
   useDoctors: () => ({
     data: { items: [{ id: 'doc-1', full_name: 'Dr. Anita Chen', specialization: 'Cardiology' }] },
   }),
@@ -35,7 +39,12 @@ vi.mock('@/api/patients', () => ({
   }),
 }))
 vi.mock('@/hooks/usePermissions', () => ({
-  usePermissions: () => ({ can: () => true, canAny: () => true, nav: [], role: undefined }),
+  usePermissions: () => ({
+    can: (code: string) => !denied.has(code),
+    canAny: () => true,
+    nav: [],
+    role: undefined,
+  }),
 }))
 
 type Outcome = { status: number; data: unknown }
@@ -80,6 +89,11 @@ const keyOf = (config: InternalAxiosRequestConfig) => config.headers.get('Idempo
 
 beforeEach(() => {
   sent = []
+  // Without availability access the form falls back to a typed time, which is
+  // what the request-contract tests below exercise. Slot booking has its own
+  // describe block and clears this.
+  denied.clear()
+  denied.add('doctor.availability.read')
   toastSuccess.mockReset()
   toastError.mockReset()
   onPost = () => ok(booked, 201)
@@ -324,5 +338,183 @@ describe('AppointmentsPage booking', () => {
     expect(await screen.findByRole('cell', { name: 'Ravi Menon' })).toBeInTheDocument()
     expect(screen.getByRole('cell', { name: 'Dr. Anita Chen' })).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+})
+
+describe('booking from the doctor\'s slots', () => {
+  const SLOTS = {
+    date: '2030-01-07',
+    doctor_id: 'doc-1',
+    timezone: 'Asia/Kolkata',
+    slots: [
+      { start: '2030-01-07T09:00:00+05:30', end: '2030-01-07T09:30:00+05:30', status: 'available', appointment_id: null },
+      { start: '2030-01-07T09:30:00+05:30', end: '2030-01-07T10:00:00+05:30', status: 'booked', appointment_id: 'appt-9' },
+      { start: '2030-01-07T10:00:00+05:30', end: '2030-01-07T10:30:00+05:30', status: 'on_leave', appointment_id: null },
+      { start: '2030-01-07T10:30:00+05:30', end: '2030-01-07T11:00:00+05:30', status: 'available', appointment_id: null },
+    ],
+  }
+  let slots: typeof SLOTS
+  const slotRequests = () => sent.filter((c) => (c.url ?? '').endsWith('/slots'))
+  const time = (iso: string) =>
+    new Date(iso).toLocaleTimeString(undefined, { timeStyle: 'short', timeZone: 'Asia/Kolkata' })
+
+  beforeEach(() => {
+    // A receptionist: reads availability, cannot override it.
+    denied.clear()
+    denied.add('appointment.book_override')
+    slots = structuredClone(SLOTS)
+    onGet = (config) => ((config.url ?? '').endsWith('/slots') ? ok(slots) : listOf([]))
+  })
+
+  async function chooseDoctorAndDate(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole('button', { name: 'Open booking' }))
+    await screen.findByRole('dialog')
+    await user.type(screen.getByLabelText(/Patient/), 'Ravi')
+    await user.click(await screen.findByRole('button', { name: /Ravi Menon/ }))
+    await user.click(screen.getByRole('combobox', { name: /Doctor/ }))
+    await user.click(await screen.findByRole('option', { name: /Dr\. Anita Chen/ }))
+    await user.type(screen.getByLabelText(/Date/), '2030-01-07')
+    return within(await screen.findByRole('group', { name: 'Time slots' }))
+  }
+
+  it('asks for the doctor\'s slots on the chosen day and offers only the free ones', async () => {
+    const user = userEvent.setup()
+    renderDialog()
+    const picker = await chooseDoctorAndDate(user)
+
+    const free = await picker.findByRole('button', { name: time(SLOTS.slots[0].start) })
+    expect(free).toBeEnabled()
+    expect(picker.getByRole('button', { name: `${time(SLOTS.slots[1].start)}, booked` })).toBeDisabled()
+    expect(picker.getByRole('button', { name: `${time(SLOTS.slots[2].start)}, on leave` })).toBeDisabled()
+    // The times are the hospital's, and the form says so.
+    expect(picker.getByText(/Asia\/Kolkata time/)).toBeInTheDocument()
+
+    const request = slotRequests().at(-1) as InternalAxiosRequestConfig
+    expect(`${request.baseURL}${request.url}`).toBe('/api/v1/doctors/doc-1/slots')
+    expect(request.params).toEqual({ date: '2030-01-07' })
+    // No typed time for someone who cannot override availability.
+    expect(document.querySelector('input[type="time"]')).toBeNull()
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+  })
+
+  it('books the slot exactly as the API described it', async () => {
+    const user = userEvent.setup()
+    renderDialog()
+    const picker = await chooseDoctorAndDate(user)
+    await user.click(await picker.findByRole('button', { name: time(SLOTS.slots[3].start) }))
+    expect(picker.getByRole('button', { name: time(SLOTS.slots[3].start) })).toHaveAttribute('aria-pressed', 'true')
+
+    await submit(user)
+
+    await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Appointment booked'))
+    // The slot's own start and end, offset included: the hospital's clock, not the browser's.
+    expect(JSON.parse(posts()[0].data as string)).toEqual({
+      patient_id: 'pat-1',
+      doctor_id: 'doc-1',
+      scheduled_start: '2030-01-07T10:30:00+05:30',
+      scheduled_end: '2030-01-07T11:00:00+05:30',
+      type: 'new',
+    })
+    expect(typeof keyOf(posts()[0])).toBe('string')
+  })
+
+  it('requires a slot before booking', async () => {
+    const user = userEvent.setup()
+    renderDialog()
+    await chooseDoctorAndDate(user)
+
+    await submit(user)
+
+    expect(await screen.findByText('Pick a time slot')).toBeInTheDocument()
+    expect(posts()).toHaveLength(0)
+  })
+
+  it('refreshes the slots and asks again when another desk took the slot (409)', async () => {
+    onPost = () => {
+      slots.slots[0].status = 'booked'
+      return { status: 409, data: { success: false, message: 'Overlap.' } }
+    }
+    const user = userEvent.setup()
+    renderDialog()
+    const picker = await chooseDoctorAndDate(user)
+    await user.click(await picker.findByRole('button', { name: time(SLOTS.slots[0].start) }))
+    const before = slotRequests().length
+
+    await submit(user)
+
+    expect(await screen.findByText('Time unavailable')).toBeInTheDocument()
+    await waitFor(() => expect(slotRequests().length).toBeGreaterThan(before))
+    expect(
+      await picker.findByRole('button', { name: `${time(SLOTS.slots[0].start)}, booked` }),
+    ).toBeDisabled()
+  })
+
+  it('says so when the doctor has no slots that day', async () => {
+    slots.slots = []
+    const user = userEvent.setup()
+    renderDialog()
+    const picker = await chooseDoctorAndDate(user)
+
+    expect(await picker.findByText(/no time slots on that day/)).toBeInTheDocument()
+  })
+
+  it('offers a retry when the slots cannot be loaded', async () => {
+    let failing = true
+    onGet = (config) =>
+      (config.url ?? '').endsWith('/slots')
+        ? failing
+          ? { status: 500, data: { success: false, message: 'Internal error.' } }
+          : ok(slots)
+        : listOf([])
+    const user = userEvent.setup()
+    renderDialog()
+    const picker = await chooseDoctorAndDate(user)
+
+    expect(await picker.findByText(/couldn't be loaded/)).toBeInTheDocument()
+    failing = false
+    await user.click(picker.getByRole('button', { name: /Retry/ }))
+    expect(await picker.findByRole('button', { name: time(SLOTS.slots[0].start) })).toBeEnabled()
+  })
+
+  it('lets someone with the override type a time instead', async () => {
+    denied.clear()
+    const user = userEvent.setup()
+    renderDialog()
+    await chooseDoctorAndDate(user)
+
+    await user.click(screen.getByRole('checkbox'))
+    await user.type(document.querySelector('input[type="time"]') as HTMLElement, '20:00')
+    await submit(user)
+
+    await waitFor(() => expect(posts()).toHaveLength(1))
+    const start = new Date('2030-01-07T20:00')
+    expect(JSON.parse(posts()[0].data as string)).toMatchObject({
+      scheduled_start: start.toISOString(),
+      scheduled_end: new Date(start.getTime() + 15 * 60_000).toISOString(),
+    })
+  })
+
+  it('books for the patient it was opened from, with no patient search', async () => {
+    const user = userEvent.setup()
+    withClient(
+      <BookAppointmentDialog
+        patient={{ id: 'pat-7', full_name: 'Thomas George', mrn: 'MRN-2026-00004' }}
+        trigger={<button type="button">Open booking</button>}
+      />,
+    )
+    await user.click(screen.getByRole('button', { name: 'Open booking' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByText(/MRN-2026-00004/)).toBeInTheDocument()
+    expect(within(dialog).queryByPlaceholderText(/Search name/)).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('combobox', { name: /Doctor/ }))
+    await user.click(await screen.findByRole('option', { name: /Dr\. Anita Chen/ }))
+    await user.type(screen.getByLabelText(/Date/), '2030-01-07')
+    const picker = within(await screen.findByRole('group', { name: 'Time slots' }))
+    await user.click(await picker.findByRole('button', { name: time(SLOTS.slots[0].start) }))
+    await submit(user)
+
+    await waitFor(() => expect(posts()).toHaveLength(1))
+    expect(JSON.parse(posts()[0].data as string)).toMatchObject({ patient_id: 'pat-7' })
   })
 })

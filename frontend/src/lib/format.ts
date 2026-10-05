@@ -25,6 +25,21 @@ export function formatTime(iso: string): string {
 }
 
 /**
+ * Short time in a named IANA zone — for times that belong to the hospital's
+ * clock (a doctor's slots), which is not necessarily the viewer's.
+ */
+export function formatTimeIn(iso: string, timeZone: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  try {
+    return d.toLocaleTimeString(undefined, { timeStyle: 'short', timeZone })
+  } catch {
+    // An unknown zone name: fall back to the viewer's clock rather than fail.
+    return d.toLocaleTimeString(undefined, { timeStyle: 'short' })
+  }
+}
+
+/**
  * How long ago something happened, in the viewer's language: "now",
  * "5 minutes ago", "yesterday". Past a week it is clearer as a date, so it
  * falls back to {@link formatDate}. `now` is injectable for tests.

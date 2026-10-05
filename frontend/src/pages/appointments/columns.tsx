@@ -1,19 +1,13 @@
+import { Link } from 'react-router-dom'
 import type { ColumnDef } from '@tanstack/react-table'
 import { Badge } from '@/components/ui/badge'
 import { formatTime } from '@/lib/format'
-import type { AppointmentStatus, AppointmentSummary, AppointmentType } from '@/api/appointments'
+import type { AppointmentSummary, AppointmentType } from '@/api/appointments'
+import { AppointmentStatusBadge } from '@/components/appointments/AppointmentStatusBadge'
+import { usePermissions } from '@/hooks/usePermissions'
 import { AppointmentActions } from './AppointmentActions'
 
 type Variant = 'neutral' | 'primary' | 'accent' | 'success' | 'warning' | 'critical' | 'error'
-
-const STATUS: Record<AppointmentStatus, { label: string; variant: Variant }> = {
-  booked: { label: 'Booked', variant: 'neutral' },
-  checked_in: { label: 'Checked in', variant: 'accent' },
-  in_progress: { label: 'In progress', variant: 'warning' },
-  completed: { label: 'Completed', variant: 'success' },
-  cancelled: { label: 'Cancelled', variant: 'error' },
-  no_show: { label: 'No show', variant: 'critical' },
-}
 
 const TYPE: Record<AppointmentType, { label: string; variant: Variant }> = {
   new: { label: 'New', variant: 'primary' },
@@ -22,9 +16,18 @@ const TYPE: Record<AppointmentType, { label: string; variant: Variant }> = {
   emergency: { label: 'Emergency', variant: 'critical' },
 }
 
-export function AppointmentStatusBadge({ status }: { status: AppointmentStatus }) {
-  const s = STATUS[status]
-  return <Badge variant={s.variant}>{s.label}</Badge>
+/** The patient's name, linking to their record for a user who may open it. */
+function PatientCell({ appointment }: { appointment: AppointmentSummary }) {
+  const { can } = usePermissions()
+  if (!can('patient.read')) return <span className="font-semibold">{appointment.patient_name}</span>
+  return (
+    <Link
+      to={`/patients/${appointment.patient_id}`}
+      className="hover:text-secondary font-semibold transition-colors hover:underline"
+    >
+      {appointment.patient_name}
+    </Link>
+  )
 }
 
 export const appointmentColumns: ColumnDef<AppointmentSummary>[] = [
@@ -36,7 +39,7 @@ export const appointmentColumns: ColumnDef<AppointmentSummary>[] = [
   {
     accessorKey: 'patient_name',
     header: 'Patient',
-    cell: ({ row }) => <span className="font-semibold">{row.original.patient_name}</span>,
+    cell: ({ row }) => <PatientCell appointment={row.original} />,
   },
   { accessorKey: 'doctor_name', header: 'Doctor' },
   {

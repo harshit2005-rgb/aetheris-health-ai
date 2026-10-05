@@ -13,8 +13,9 @@ import { useDoctors } from '@/api/doctors'
 import { useAppointments } from '@/api/appointments'
 import { todayISODate } from '@/lib/format'
 import { RegisterPatientDialog } from '@/pages/patients/RegisterPatientDialog'
-import { BookAppointmentDialog } from '@/pages/appointments/BookAppointmentDialog'
-import { appointmentColumns } from '@/pages/appointments/columns'
+import { BookAppointmentDialog } from '@/components/appointments/BookAppointmentDialog'
+import { InvoicesAwaitingPayment } from '@/components/billing/InvoicesAwaitingPayment'
+import { appointmentQueueColumns } from '@/pages/appointments/columns'
 
 /** A KPI backed by a real count — a skeleton while loading, "—" if it can't be read. */
 function StatTile({
@@ -32,6 +33,13 @@ function StatTile({
 }) {
   if (isLoading) return <Skeleton className="h-[104px] rounded-2xl" />
   return <KpiCard label={label} icon={icon} value={isError || total === undefined ? '—' : total} />
+}
+
+/** The greeting for the viewer's own time of day. */
+function greeting(hour = new Date().getHours()): string {
+  if (hour < 12) return 'Good morning'
+  if (hour < 17) return 'Good afternoon'
+  return 'Good evening'
 }
 
 /** Grid classes by how many KPI tiles the user may see (static, so Tailwind keeps them). */
@@ -72,7 +80,7 @@ export default function DashboardPage() {
       <div className="neo-extruded bg-surface flex flex-wrap items-center justify-between gap-4 rounded-2xl p-6 md:p-8">
         <div>
           <h1 className="font-display text-primary text-2xl font-bold md:text-headline-lg">
-            Good morning, {name}
+            {greeting()}, {name}
           </h1>
           <p className="font-body text-body-sm text-on-surface-variant mt-1 max-w-xl">
             Your operations hub — register patients, book appointments, and work the day's queue.
@@ -136,7 +144,7 @@ export default function DashboardPage() {
         </div>
       )}
 
-      {/* Today's queue */}
+      {/* Today's queue, with the same actions as the Appointments page */}
       {canSeeAppointments && (
         <section className="space-y-4">
           <div className="flex items-center justify-between">
@@ -155,7 +163,7 @@ export default function DashboardPage() {
             </Alert>
           ) : (
             <DataTable
-              columns={appointmentColumns}
+              columns={appointmentQueueColumns}
               data={todaysAppointments}
               isLoading={appts.isPending}
               pageSize={25}
@@ -181,6 +189,9 @@ export default function DashboardPage() {
           )}
         </section>
       )}
+
+      {/* The desk that takes payments sees what is waiting for one. */}
+      <InvoicesAwaitingPayment />
     </div>
   )
 }

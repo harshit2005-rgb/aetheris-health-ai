@@ -80,6 +80,9 @@ export const doctorKeys = {
   lists: () => [...doctorKeys.all, 'list'] as const,
   list: (params: DoctorListParams) => [...doctorKeys.lists(), params] as const,
   detail: (id: string) => [...doctorKeys.all, 'detail', id] as const,
+  /** Every doctor's computed slots. Booking, cancelling or moving an appointment changes them. */
+  slots: () => [...doctorKeys.all, 'slots'] as const,
+  slotsFor: (id: string, date: string) => [...doctorKeys.slots(), id, date] as const,
 }
 
 /** List / search doctors. Supports `q`, `specialization`, `department`, page/size. */
@@ -90,6 +93,43 @@ export function useDoctors(params: DoctorListParams = {}, options: ListQueryOpti
     queryFn: () => http.getPaginated<DoctorSummary>('/doctors', { params }),
     staleTime: 30_000,
     placeholderData: keepPreviousData,
+  })
+}
+
+export type SlotStatus = 'available' | 'booked' | 'on_leave'
+
+/** One computed slot (`SlotResponse`). `start` and `end` carry the hospital's UTC offset. */
+export interface DoctorSlot {
+  start: string
+  end: string
+  status: SlotStatus
+  appointment_id: string | null
+}
+
+/** A doctor's slots for one day (`DaySlotsResponse`). */
+export interface DaySlots {
+  /** `YYYY-MM-DD`. */
+  date: string
+  doctor_id: string
+  /** IANA zone the slot times are in — the hospital's, not the viewer's. */
+  timezone: string
+  slots: DoctorSlot[]
+}
+
+/**
+ * A doctor's slots for one calendar day (docs/18-API_CONTRACTS.md §4.6).
+ *
+ * Slots are computed on demand from availability, leave and bookings — there
+ * is no slot id to book against; an appointment is booked by sending a slot's
+ * `start` and `end` back. Needs `doctor.availability.read`.
+ */
+export function useDoctorSlots(id: string, date: string, options: ListQueryOptions = {}) {
+  return useQuery<DaySlots>({
+    enabled: (options.enabled ?? true) && !!id && !!date,
+    queryKey: doctorKeys.slotsFor(id, date),
+    queryFn: () => http.get<DaySlots>(`/doctors/${id}/slots`, { params: { date } }),
+    // Another desk can take a slot at any moment; never show a cached day.
+    staleTime: 0,
   })
 }
 

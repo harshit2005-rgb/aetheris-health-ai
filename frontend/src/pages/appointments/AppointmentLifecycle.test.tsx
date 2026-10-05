@@ -24,7 +24,10 @@ const { toastSuccess, toastError } = vi.hoisted(() => ({
 
 vi.mock('sonner', () => ({ toast: { success: toastSuccess, error: toastError } }))
 // The (closed) booking dialog in the page header reads these.
-vi.mock('@/api/doctors', () => ({ useDoctors: () => ({ data: { items: [] } }) }))
+vi.mock('@/api/doctors', async (original) => ({
+  ...(await original<typeof import('@/api/doctors')>()),
+  useDoctors: () => ({ data: { items: [] } }),
+}))
 vi.mock('@/api/patients', () => ({ usePatients: () => ({ data: { items: [] } }) }))
 
 // Role → permission sets as seeded in backend/app/seeds/seed.py.
