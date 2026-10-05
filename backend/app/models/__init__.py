@@ -43,6 +43,16 @@ from app.models.doctor import (
     SlotStatus,
 )
 from app.models.hospital import Hospital
+from app.models.lab import (
+    LabOrder,
+    LabOrderItem,
+    LabOrderPriority,
+    LabOrderStatus,
+    LabResultAmendment,
+    LabResultFlag,
+    LabResultType,
+    LabTest,
+)
 from app.models.notification import (
     DeliveryStatus,
     Notification,
@@ -97,6 +107,15 @@ __all__ = [
     "PaymentMethod",
     "Refund",
     "Service",
+    # Laboratory
+    "LabOrder",
+    "LabOrderItem",
+    "LabOrderPriority",
+    "LabOrderStatus",
+    "LabResultAmendment",
+    "LabResultFlag",
+    "LabResultType",
+    "LabTest",
     # Notification
     "DeliveryStatus",
     "Notification",
