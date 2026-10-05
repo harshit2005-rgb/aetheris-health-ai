@@ -1,4 +1,5 @@
 import {
+  Boxes,
   FlaskConical,
   Pill,
   LayoutDashboard,
@@ -346,6 +347,7 @@ export type PermissionGroup =
   | 'invoice.read'
   | 'lab.order.read'
   | 'pharmacy.medicine.read'
+  | 'inventory.stock.read'
   | 'report.read'
   | 'user.read'
   | 'settings.read'
@@ -367,6 +369,7 @@ export const NAV: NavItem[] = [
   { to: '/billing', label: 'Billing', icon: Receipt, permission: 'invoice.read' },
   { to: '/laboratory', label: 'Laboratory', icon: FlaskConical, permission: 'lab.order.read' },
   { to: '/pharmacy', label: 'Pharmacy', icon: Pill, permission: 'pharmacy.medicine.read' },
+  { to: '/inventory', label: 'Inventory', icon: Boxes, permission: 'inventory.stock.read' },
   { to: '/reports', label: 'Reports', icon: BarChart3, permission: 'report.read' },
   { to: '/users', label: 'Users & Roles', icon: UserCog, permission: 'user.read' },
   { to: '/settings', label: 'Settings', icon: SettingsIcon, permission: 'settings.read' },
@@ -394,6 +397,14 @@ const GROUP_ALIASES: Record<PermissionGroup, Permission[]> = {
     'pharmacy.prescription.read',
     'pharmacy.po.read',
     'pharmacy.vendor.read',
+  ],
+  // Every inventory role reads stock; the others cover a custom role that was
+  // given one inventory screen without it.
+  'inventory.stock.read': [
+    'inventory.stock.read',
+    'inventory.item.read',
+    'inventory.location.read',
+    'inventory.po.read',
   ],
   'report.read': ['report.read'],
   'user.read': ['user.read'],

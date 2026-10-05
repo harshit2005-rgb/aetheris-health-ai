@@ -48,7 +48,8 @@ const UNSUPPORTED = [
   /e-?prescri|electronic prescri/i,
   /interaction/i,
   /substitut/i,
-  /low[- ]stock|reorder|stock alert/i,
+  // Inventory is real now; forecasting and automatic ordering are not.
+  /forecast|predict|auto(matic)?[- ]?(re)?order|barcode/i,
   /clinical decision-support/i,
   /integration seams/i,
   /a few weeks/i,
@@ -137,7 +138,7 @@ describe('landing page', () => {
 
     const roadmap = screen.getByRole('heading', { name: 'On the roadmap' }).parentElement as HTMLElement
     expect(roadmap).toHaveTextContent(
-      'Inventory, reports, and AI assistance are planned. None of them is part of the product today.',
+      'Reports and AI assistance are planned. Neither is part of the product today.',
     )
     for (const built of [
       'Patients',
@@ -146,11 +147,12 @@ describe('landing page', () => {
       'Doctors & departments',
       'Laboratory',
       'Pharmacy',
+      'Inventory',
       'Administration',
     ]) {
       expect(screen.getByRole('heading', { name: built })).toBeInTheDocument()
     }
-    for (const unbuilt of [/Reports/, /Inventory/]) {
+    for (const unbuilt of [/Reports/]) {
       expect(screen.queryByRole('heading', { name: unbuilt })).not.toBeInTheDocument()
     }
   })
@@ -193,8 +195,11 @@ describe('pricing page', () => {
     ).toBeInTheDocument()
     const planned = screen.getByRole('region', { name: 'On the roadmap' })
     expect(within(planned).getByText('Planned, and not available yet.')).toBeInTheDocument()
-    expect(within(planned).queryByText(/Pharmacy/)).not.toBeInTheDocument()
-    for (const module of ['Inventory', 'Reports', 'AI assistance']) {
+    expect(
+      within(included).getByText('Inventory of supplies by location, with purchase orders'),
+    ).toBeInTheDocument()
+    expect(within(planned).queryByText(/Pharmacy|Inventory/)).not.toBeInTheDocument()
+    for (const module of ['Reports', 'AI assistance']) {
       expect(within(planned).getByText(module)).toBeInTheDocument()
       expect(within(included).queryByText(module)).not.toBeInTheDocument()
     }

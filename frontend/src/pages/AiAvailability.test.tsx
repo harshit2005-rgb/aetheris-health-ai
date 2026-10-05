@@ -146,7 +146,7 @@ describe('the public pages', () => {
     expectNoAiClaims()
     const roadmap = screen.getByRole('heading', { name: 'On the roadmap' }).parentElement as HTMLElement
     expect(roadmap).toHaveTextContent(/AI assistance are planned/)
-    expect(roadmap).toHaveTextContent(/None of them is part of the product today/)
+    expect(roadmap).toHaveTextContent(/Neither is part of the product today/)
     expect(screen.getByText('Does Aetheris include AI features today?')).toBeInTheDocument()
     expect(screen.queryByText(/intelligent platform/i)).not.toBeInTheDocument()
   })

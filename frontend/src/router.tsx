@@ -36,6 +36,13 @@ const MedicineStockPage = lazy(() => import('@/pages/pharmacy/MedicineStockPage'
 const PurchaseOrdersPage = lazy(() => import('@/pages/pharmacy/PurchaseOrdersPage'))
 const PurchaseOrderDetailPage = lazy(() => import('@/pages/pharmacy/PurchaseOrderDetailPage'))
 const VendorsPage = lazy(() => import('@/pages/pharmacy/VendorsPage'))
+const InventoryIndexPage = lazy(() => import('@/pages/inventory/InventoryIndexPage'))
+const StockPage = lazy(() => import('@/pages/inventory/StockPage'))
+const MovementsPage = lazy(() => import('@/pages/inventory/MovementsPage'))
+const ItemsPage = lazy(() => import('@/pages/inventory/ItemsPage'))
+const LocationsPage = lazy(() => import('@/pages/inventory/LocationsPage'))
+const InventoryOrdersPage = lazy(() => import('@/pages/inventory/InventoryOrdersPage'))
+const InventoryOrderDetailPage = lazy(() => import('@/pages/inventory/InventoryOrderDetailPage'))
 const UsersPage = lazy(() => import('@/pages/users/UsersPage'))
 const SettingsPage = lazy(() => import('@/pages/settings/SettingsPage'))
 const ProfilePage = lazy(() => import('@/pages/settings/ProfilePage'))
@@ -221,6 +228,63 @@ export const router = createBrowserRouter([
             element: (
               <RequirePermission permission="pharmacy.vendor.read">
                 <VendorsPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            // The low-stock notification links here (docs/18-API_CONTRACTS.md §10.6).
+            path: '/inventory',
+            element: (
+              <RequirePermission group="inventory.stock.read">
+                <InventoryIndexPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/inventory/stock',
+            element: (
+              <RequirePermission permission="inventory.stock.read">
+                <StockPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/inventory/movements',
+            element: (
+              <RequirePermission permission="inventory.stock.read">
+                <MovementsPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/inventory/items',
+            element: (
+              <RequirePermission permission="inventory.item.read">
+                <ItemsPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/inventory/locations',
+            element: (
+              <RequirePermission permission="inventory.location.read">
+                <LocationsPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/inventory/purchase-orders',
+            element: (
+              <RequirePermission permission="inventory.po.read">
+                <InventoryOrdersPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/inventory/purchase-orders/:orderId',
+            element: (
+              <RequirePermission permission="inventory.po.read">
+                <InventoryOrderDetailPage />
               </RequirePermission>
             ),
           },

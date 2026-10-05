@@ -1,4 +1,4 @@
-import { Bell, FlaskConical, KeyRound, Megaphone, Receipt, UserPlus, type LucideIcon } from 'lucide-react'
+import { Bell, Boxes, FlaskConical, KeyRound, Megaphone, Receipt, UserPlus, type LucideIcon } from 'lucide-react'
 
 interface KindPresentation {
   icon: LucideIcon
@@ -18,6 +18,7 @@ const KINDS: Record<string, KindPresentation> = {
   'lab.results_released': { icon: FlaskConical, category: 'Laboratory' },
   'lab.critical_result': { icon: FlaskConical, category: 'Laboratory' },
   'lab.result_amended': { icon: FlaskConical, category: 'Laboratory' },
+  'inventory.low_stock': { icon: Boxes, category: 'Inventory' },
   'system.broadcast': { icon: Megaphone, category: 'Announcements' },
 }
 
