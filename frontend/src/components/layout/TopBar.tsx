@@ -1,4 +1,4 @@
-import { Menu, Search, Sparkles } from 'lucide-react'
+import { Menu, Search } from 'lucide-react'
 import Breadcrumbs from '@/components/layout/Breadcrumbs'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { NotificationBell } from '@/components/notifications/NotificationBell'
@@ -12,11 +12,10 @@ function initials(name: string) {
 
 interface TopBarProps {
   onOpenSidebar: () => void
-  onOpenCopilot: () => void
 }
 
-/** App top bar: search, notifications, AI Copilot, user menu (spec 2C §2, §6). */
-export default function TopBar({ onOpenSidebar, onOpenCopilot }: TopBarProps) {
+/** App top bar: search, notifications, user menu (spec 2C §2, §6). */
+export default function TopBar({ onOpenSidebar }: TopBarProps) {
   const user = useAuthStore((s) => s.user)
   const name = user?.name ?? 'User'
   const roleLabel = user?.role ? ROLE_LABELS[user.role] : ''
@@ -54,15 +53,6 @@ export default function TopBar({ onOpenSidebar, onOpenCopilot }: TopBarProps) {
         <ThemeToggle />
 
         <NotificationBell />
-
-        <button
-          type="button"
-          onClick={onOpenCopilot}
-          aria-label="AI Copilot"
-          className="text-secondary hover:bg-white/30 hidden size-10 items-center justify-center rounded-lg transition-colors sm:flex"
-        >
-          <Sparkles className="size-5" />
-        </button>
 
         {/* User identity — display only; logout lives in the sidebar (F10) */}
         <div className="flex items-center gap-2 py-1 pr-1 pl-2">

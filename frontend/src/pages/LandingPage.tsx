@@ -48,7 +48,7 @@ const OUTCOMES = [
   },
   {
     title: 'Fewer things slip through',
-    body: 'The AI Copilot flags risks and pending work for review, backing up a long clinical shift.',
+    body: "The day's queue and the invoices awaiting payment sit on one dashboard, and every change is written to the audit log.",
   },
   {
     title: 'Faster front desk',
@@ -62,8 +62,8 @@ const FAQ = [
     a: 'Every record is encrypted in transit and at rest, access is scoped by role, and every change is written to an immutable audit log. We operate to HIPAA and SOC 2 Type II controls.',
   },
   {
-    q: 'Does the AI make clinical decisions on its own?',
-    a: 'No. The AI Copilot surfaces findings, risks, and next steps as suggestions. A clinician reviews and approves every action. The platform is a decision-support tool, not an autonomous one.',
+    q: 'Does Aetheris include AI features today?',
+    a: 'Not yet. AI assistance is planned and is not part of the current product. When it arrives it will only suggest: a member of staff will review and approve every action, and it will never make a clinical decision on its own.',
   },
   {
     q: 'Can it run on our own infrastructure?',
@@ -144,15 +144,15 @@ export default function LandingPage() {
           <div className="space-y-6 md:col-span-6">
             <div className="glassmorphism inline-block rounded-full px-4 py-2">
               <span className="font-label text-label-caps text-secondary font-bold tracking-wider">
-                AI HOSPITAL MANAGEMENT PLATFORM
+                HOSPITAL MANAGEMENT PLATFORM
               </span>
             </div>
             <h1 className="font-display text-gradient text-[2rem] leading-[1.1] font-extrabold tracking-tight sm:text-4xl md:text-headline-xl">
-              Run your whole hospital on one intelligent platform.
+              Run your whole hospital on one connected platform.
             </h1>
             <p className="font-body text-body-md text-on-surface-variant max-w-lg">
-              Patients, scheduling, billing, and clinical work in a single system, with an AI
-              Copilot that reviews the record alongside your team.
+              Patients, scheduling, and billing in a single system that your front desk, doctors,
+              and billing staff all share.
             </p>
             <div className="flex flex-wrap gap-4 pt-2">
               <Link
@@ -176,13 +176,13 @@ export default function LandingPage() {
             <div className="from-secondary-fixed to-primary-fixed absolute -inset-4 z-0 rounded-[2rem] bg-gradient-to-tr opacity-20 blur-2xl" />
             <div className="glassmorphism relative z-10 rounded-[2rem] p-8">
               <p className="font-label text-label-caps text-outline mb-6">
-                HOW THE COPILOT ASSISTS
+                FROM ARRIVAL TO PAYMENT
               </p>
               <ol className="space-y-2">
                 {[
-                  { icon: Users, title: 'Connect', body: 'Records, vitals, and results land in one live view.' },
-                  { icon: Sparkles, title: 'Review', body: 'The AI reads the record and flags what needs attention.' },
-                  { icon: ShieldCheck, title: 'Approve', body: 'Your clinician confirms every recommended step.' },
+                  { icon: Users, title: 'Register', body: 'Open a patient record and find it again by name, phone, or MRN.' },
+                  { icon: CalendarDays, title: 'Schedule', body: "Book into a doctor's published slots and run the day's queue." },
+                  { icon: Receipt, title: 'Bill', body: 'Invoice the visit and record payments against it.' },
                 ].map((step, i, arr) => (
                   <li key={step.title} className="relative flex gap-4 pb-6 last:pb-0">
                     {i < arr.length - 1 && (
@@ -231,13 +231,13 @@ export default function LandingPage() {
           </p>
         </div>
 
-        {/* 3x3: tall AI feature (col 1) + 2x2 modules (cols 2-3) + full-width Reports footer */}
+        {/* 3x3: tall roadmap card (col 1) + 2x2 modules (cols 2-3) + full-width Reports footer */}
         <div className="grid gap-5 md:grid-cols-3">
           <ModuleCard
             dark
             icon={Sparkles}
-            title="AI Copilot"
-            body="A context-aware assistant that reads the record, drafts summaries, and flags risks for clinician review across every module."
+            title="AI assistance — planned"
+            body="Not part of the product today. It is on the roadmap as an assistant that suggests and never acts alone: staff will review and approve anything it proposes."
             className="md:row-span-2"
           />
           <ModuleCard

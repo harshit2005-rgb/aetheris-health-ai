@@ -49,7 +49,7 @@ export default function PatientsPage() {
     <div className="w-full">
       <PageHeader
         title="Patients"
-        subtitle="Patient registry, admissions and AI-assisted summaries."
+        subtitle="The patient registry — find a record or register a new patient."
         actions={
           <>
             <Button variant="outline" className="rounded-full">

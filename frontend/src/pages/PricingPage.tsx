@@ -18,7 +18,7 @@ interface Plan {
 const PLANS: Plan[] = [
   {
     name: 'Starter',
-    blurb: 'Essential AI tools for small clinics.',
+    blurb: 'The essentials for small clinics.',
     price: '$299',
     period: '/mo',
     features: ['Standard API access', 'Basic analytics', 'Community support', 'Up to 3 clinicians'],
@@ -32,7 +32,7 @@ const PLANS: Plan[] = [
     period: '/mo',
     features: [
       'FastAPI backend integration',
-      'Agentic AI orchestration',
+      'Role-based access control',
       'Priority support',
       'Real-time vitals monitoring',
     ],
@@ -46,7 +46,7 @@ const PLANS: Plan[] = [
     price: 'Custom',
     features: [
       'On-premise or private cloud',
-      'Custom AI agent training',
+      'Audit log export',
       'Dedicated success engineer',
       'HIPAA & SOC 2 compliance',
     ],
@@ -116,9 +116,9 @@ export default function PricingPage() {
 
       <main className="px-container-padding mx-auto max-w-7xl pt-28 pb-16 md:pt-36">
         <div className="mb-14 text-center">
-          <h1 className="font-display text-headline-xl text-primary mb-3">Enterprise AI Plans</h1>
+          <h1 className="font-display text-headline-xl text-primary mb-3">Plans for every hospital</h1>
           <p className="font-body text-body-md text-on-surface-variant mx-auto max-w-2xl">
-            Scalable healthcare intelligence tailored to your operational needs.
+            Hospital management that scales with your operational needs.
           </p>
         </div>
 
