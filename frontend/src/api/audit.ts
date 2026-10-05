@@ -1,6 +1,9 @@
-import { useQuery } from '@tanstack/react-query'
+import { AxiosError } from 'axios'
+import { useMutation, useQuery } from '@tanstack/react-query'
 import { http } from '@/api/http'
+import { ApiError } from '@/api/types'
 import { api } from '@/lib/api'
+import { filenameFromContentDisposition } from '@/lib/download'
 
 /** One audit entry as returned by GET /api/v1/audit-logs. */
 export interface AuditLogEntry {
@@ -56,36 +59,84 @@ export function useAuditLogs(filters: AuditFilters, page: number, pageSize: numb
   })
 }
 
+/** The formats `GET /audit-logs/export` produces (`?format=csv|json`). */
+export type AuditExportFormat = 'csv' | 'json'
+
+/** The most entries one export holds, newest first (`_EXPORT_ROW_LIMIT` in the audit router). */
+export const AUDIT_EXPORT_ROW_LIMIT = 1000
+
+export interface AuditExportFile {
+  blob: Blob
+  filename: string
+}
+
 /**
- * Download an export file (requires audit.export). Uses the raw axios
- * instance — the response is a file, not an API envelope.
+ * An export that failed is still answered with the API's JSON envelope, but
+ * the request asked for a blob, so that is what the envelope arrives in.
  */
-export async function exportAuditLogs(
-  format: 'csv' | 'json',
+async function exportError(err: unknown): Promise<ApiError> {
+  if (!(err instanceof AxiosError)) {
+    return new ApiError(err instanceof Error ? err.message : 'Unexpected error')
+  }
+  let body: unknown = err.response?.data
+  if (body instanceof Blob) {
+    try {
+      body = JSON.parse(await body.text())
+    } catch {
+      body = undefined
+    }
+  }
+  const envelope = (body ?? {}) as { message?: string; error_code?: string; errors?: unknown }
+  return new ApiError(
+    envelope.message ?? err.message,
+    envelope.error_code ?? 'network_error',
+    err.response?.status,
+    envelope.errors,
+  )
+}
+
+/**
+ * Fetch an export of the entries matching `filters` (requires `audit.export`).
+ *
+ * The response is the file itself, not an API envelope, so this uses the raw
+ * Axios instance. The server names the file in `Content-Disposition`; where
+ * that header is not readable (a cross-origin API does not expose it) a name
+ * of the same shape is made up here.
+ */
+export async function fetchAuditExport(
+  format: AuditExportFormat,
   filters: AuditFilters,
-): Promise<void> {
-  const res = await api.get('/audit-logs/export', {
-    params: {
-      format,
-      actor_id: filters.actor_id,
-      action: filters.action,
-      target_type: filters.target_type,
-      from: filters.from,
-      to: filters.to,
-      q: filters.q,
-    },
-    responseType: 'text',
+): Promise<AuditExportFile> {
+  try {
+    const res = await api.get<Blob>('/audit-logs/export', {
+      params: {
+        format,
+        actor_id: filters.actor_id,
+        action: filters.action,
+        target_type: filters.target_type,
+        from: filters.from,
+        to: filters.to,
+        q: filters.q,
+      },
+      responseType: 'blob',
+    })
+    const headers = res.headers as Record<string, unknown> | undefined
+    const stamp = new Date().toISOString().slice(0, 19).replace(/[-:]/g, '').replace('T', '-')
+    return {
+      blob: res.data,
+      filename:
+        filenameFromContentDisposition(headers?.['content-disposition']) ??
+        `audit-logs-${stamp}.${format}`,
+    }
+  } catch (err) {
+    throw await exportError(err)
+  }
+}
+
+/** Export the audit trail and return the file for the caller to save. */
+export function useExportAuditLogs() {
+  return useMutation({
+    mutationFn: ({ format, filters }: { format: AuditExportFormat; filters: AuditFilters }) =>
+      fetchAuditExport(format, filters),
   })
-  const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
-  const blob = new Blob([res.data as string], {
-    type: format === 'csv' ? 'text/csv' : 'application/json',
-  })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `audit-logs-${stamp}.${format}`
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  URL.revokeObjectURL(url)
 }

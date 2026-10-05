@@ -11,6 +11,8 @@ import { api } from '@/lib/api'
 export interface Outcome {
   status: number
   data: unknown
+  /** Response headers, for the few endpoints whose answer is a file. */
+  headers?: Record<string, string>
 }
 
 export type Handler = (config: InternalAxiosRequestConfig) => Outcome | Promise<Outcome>
@@ -55,7 +57,7 @@ export function installFakeApi(handler: Handler): FakeApi {
   const adapter: AxiosAdapter = async (config) => {
     sent.push(config)
     const outcome = await handler(config)
-    const response = { ...outcome, statusText: '', headers: {}, config }
+    const response = { ...outcome, statusText: '', headers: outcome.headers ?? {}, config }
     if (outcome.status >= 400) {
       throw new AxiosError('Request failed', 'ERR_BAD_REQUEST', config, null, response)
     }

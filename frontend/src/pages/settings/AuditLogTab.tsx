@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ColumnDef } from '@tanstack/react-table'
-import { toast } from 'sonner'
-import { Download, FileClock } from 'lucide-react'
+import { FileClock } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,8 +16,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { exportAuditLogs, useAuditLogs, type AuditLogEntry } from '@/api/audit'
+import { useAuditLogs, type AuditLogEntry } from '@/api/audit'
 import { usePermissions } from '@/hooks/usePermissions'
+import { AuditExportMenu } from './AuditExportMenu'
 
 const PAGE_SIZE = 10
 
@@ -115,18 +115,9 @@ export function AuditLogTab() {
     [debouncedQ, action, from, to],
   )
 
-  const { data, isLoading, isError, refetch } = useAuditLogs(filters, page, PAGE_SIZE)
+  const { data, isLoading, isError, isPlaceholderData, refetch } = useAuditLogs(filters, page, PAGE_SIZE)
   const entries = data?.items ?? []
   const pageCount = data?.pagination.totalPages ?? 1
-
-  async function onExport(format: 'csv' | 'json') {
-    try {
-      await exportAuditLogs(format, filters)
-      toast.success(`Audit export downloaded (${format.toUpperCase()})`)
-    } catch {
-      toast.error('Export failed. Please try again.')
-    }
-  }
 
   const columns: ColumnDef<AuditLogEntry>[] = useMemo(
     () => [
@@ -184,15 +175,10 @@ export function AuditLogTab() {
     [],
   )
 
-  const exportButtons = can('audit.export') && (
-    <div className="flex gap-2">
-      <Button variant="outline" size="sm" onClick={() => onExport('csv')}>
-        <Download className="size-4" /> CSV
-      </Button>
-      <Button variant="outline" size="sm" onClick={() => onExport('json')}>
-        <Download className="size-4" /> JSON
-      </Button>
-    </div>
+  // While a changed filter is still loading, `data` is the previous search's
+  // page, so its total says nothing about what would be exported.
+  const exportMenu = can('audit.export') && (
+    <AuditExportMenu filters={filters} matching={isPlaceholderData ? undefined : data?.pagination.total} />
   )
 
   return (
@@ -256,7 +242,7 @@ export function AuditLogTab() {
             onSearchChange={changeQ}
             pageSize={PAGE_SIZE}
             serverPagination={{ page, totalPages: pageCount, onPageChange: setPage }}
-            toolbarRight={exportButtons}
+            toolbarRight={exportMenu}
             emptyState={
               <EmptyState
                 icon={FileClock}
