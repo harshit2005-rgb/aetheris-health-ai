@@ -26,6 +26,7 @@ from app.api.v1 import (
     doctor_router,
     health_router,
     hospital_router,
+    inventory_router,
     invoice_router,
     lab_order_router,
     medicine_router,
@@ -250,6 +251,12 @@ def _register_routers(app: FastAPI) -> None:
         purchase_order_router,
     ):
         app.include_router(pharmacy_router, prefix=API_V1_PREFIX)
+
+    # Inventory routes — items, locations, stock and purchase orders
+    app.include_router(
+        inventory_router,
+        prefix=API_V1_PREFIX,
+    )
 
     # Notification routes — notification centre, preferences, broadcast
     app.include_router(

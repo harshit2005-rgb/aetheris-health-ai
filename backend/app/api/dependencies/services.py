@@ -44,6 +44,8 @@ from app.api.dependencies.repositories import (  # noqa: F401
     get_department_repository,
     get_doctor_repository,
     get_hospital_repository,
+    get_inventory_po_repository,
+    get_inventory_repository,
     get_invoice_number_sequence_repository,
     get_invoice_repository,
     get_lab_order_repository,
@@ -71,6 +73,8 @@ from app.repositories import (
     DepartmentRepository,
     DoctorRepository,
     HospitalRepository,
+    InventoryPurchaseOrderRepository,
+    InventoryRepository,
     InvoiceNumberSequenceRepository,
     InvoiceRepository,
     LabOrderRepository,
@@ -105,6 +109,8 @@ from app.services.doctor_service import (
     DoctorService,
 )
 from app.services.hospital_service import HospitalService
+from app.services.inventory_po_service import InventoryPurchaseOrderService
+from app.services.inventory_service import InventoryService
 from app.services.lab_catalog_service import LabCatalogService
 from app.services.lab_service import LabService
 from app.services.mrn_service import MRNService
@@ -463,6 +469,35 @@ def get_procurement_service(
     return ProcurementService(procurement, medicines, hospitals, session, audit)
 
 
+# ── Inventory module ────────────────────────────────────────────────────────
+def get_inventory_service(
+    inventory: InventoryRepository = Depends(get_inventory_repository),
+    departments: DepartmentRepository = Depends(get_department_repository),
+    hospitals: HospitalRepository = Depends(get_hospital_repository),
+    session: AsyncSession = Depends(get_db_session),
+    audit: AuditSink = Depends(get_audit_sink),
+    notifier: Notifier = Depends(get_notifier),
+) -> InventoryService:
+    """Provide an :class:`InventoryService` bound to the request session."""
+    return InventoryService(inventory, departments, hospitals, session, audit, notifier=notifier)
+
+
+def get_inventory_po_service(
+    orders: InventoryPurchaseOrderRepository = Depends(get_inventory_po_repository),
+    inventory: InventoryRepository = Depends(get_inventory_repository),
+    vendors: ProcurementRepository = Depends(get_procurement_repository),
+    hospitals: HospitalRepository = Depends(get_hospital_repository),
+    session: AsyncSession = Depends(get_db_session),
+    audit: AuditSink = Depends(get_audit_sink),
+) -> InventoryPurchaseOrderService:
+    """Provide an :class:`InventoryPurchaseOrderService` bound to the request session.
+
+    Vendors come from Pharmacy's repository: the table is shared by design
+    (``docs/modules/09-inventory.md`` §20).
+    """
+    return InventoryPurchaseOrderService(orders, inventory, vendors, hospitals, session, audit)
+
+
 # ── Appointment module ──────────────────────────────────────────────────────
 def get_invoice_draft_sink(
     billing: BillingService = Depends(get_billing_service),
@@ -557,6 +592,9 @@ __all__ = [
     # Billing module
     "get_billing_service",
     "get_charge_sink",
+    # Inventory module
+    "get_inventory_po_service",
+    "get_inventory_service",
     # Laboratory module
     "get_lab_catalog_service",
     "get_lab_service",

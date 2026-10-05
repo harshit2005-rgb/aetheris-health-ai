@@ -131,9 +131,21 @@ PERMISSION_DEFINITIONS: list[tuple[str, str, str]] = [
     ("pharmacy.vendor.update", "pharmacy", "Edit and retire vendors"),
     ("pharmacy.ai_substitute", "pharmacy", "Request an AI substitution suggestion"),
     # Inventory
-    ("inventory.read", "inventory", "View inventory"),
-    ("inventory.create", "inventory", "Create inventory items"),
-    ("inventory.update", "inventory", "Update inventory"),
+    ("inventory.item.read", "inventory", "View inventory items"),
+    ("inventory.item.create", "inventory", "Add inventory items"),
+    ("inventory.item.update", "inventory", "Edit and retire inventory items"),
+    ("inventory.location.read", "inventory", "View stock locations"),
+    ("inventory.location.create", "inventory", "Add stock locations"),
+    ("inventory.location.update", "inventory", "Edit and retire stock locations"),
+    ("inventory.stock.read", "inventory", "View stock levels and movements"),
+    ("inventory.consume", "inventory", "Record stock used"),
+    ("inventory.transfer", "inventory", "Transfer stock between locations"),
+    ("inventory.adjust", "inventory", "Adjust stock after a count"),
+    ("inventory.po.read", "inventory", "View inventory purchase orders"),
+    ("inventory.po.create", "inventory", "Draft inventory purchase orders"),
+    ("inventory.po.update", "inventory", "Send and cancel inventory purchase orders"),
+    ("inventory.po.receive", "inventory", "Receive inventory purchase orders"),
+    ("inventory.forecast.read", "inventory", "View AI reorder recommendations"),
     # Reports
     ("report.read", "reports", "View reports and dashboards"),
     ("report.export", "reports", "Export data"),
@@ -241,9 +253,21 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "pharmacy.vendor.create",
             "pharmacy.vendor.update",
             "pharmacy.ai_substitute",
-            "inventory.read",
-            "inventory.create",
-            "inventory.update",
+            "inventory.item.read",
+            "inventory.item.create",
+            "inventory.item.update",
+            "inventory.location.read",
+            "inventory.location.create",
+            "inventory.location.update",
+            "inventory.stock.read",
+            "inventory.consume",
+            "inventory.transfer",
+            "inventory.adjust",
+            "inventory.po.read",
+            "inventory.po.create",
+            "inventory.po.update",
+            "inventory.po.receive",
+            "inventory.forecast.read",
             "report.read",
             "report.export",
             "settings.read",
@@ -347,9 +371,21 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "pharmacy.vendor.create",
             "pharmacy.vendor.update",
             "pharmacy.ai_substitute",
-            "inventory.read",
-            "inventory.create",
-            "inventory.update",
+            "inventory.item.read",
+            "inventory.item.create",
+            "inventory.item.update",
+            "inventory.location.read",
+            "inventory.location.create",
+            "inventory.location.update",
+            "inventory.stock.read",
+            "inventory.consume",
+            "inventory.transfer",
+            "inventory.adjust",
+            "inventory.po.read",
+            "inventory.po.create",
+            "inventory.po.update",
+            "inventory.po.receive",
+            "inventory.forecast.read",
             "report.read",
             "report.export",
             "settings.read",
@@ -415,6 +451,10 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "appointment.read",
             "appointment.check_in",
             "lab.order.read",
+            "inventory.item.read",
+            "inventory.location.read",
+            "inventory.stock.read",
+            "inventory.consume",
             "department.read",
             "doctor.read",
             "doctor.availability.read",
@@ -496,7 +536,9 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "pharmacy.po.read",
             "pharmacy.po.receive",
             "pharmacy.vendor.read",
-            "inventory.read",
+            "inventory.item.read",
+            "inventory.location.read",
+            "inventory.stock.read",
             "department.read",
         ],
     ),
@@ -516,9 +558,21 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "pharmacy.vendor.read",
             "pharmacy.vendor.create",
             "pharmacy.vendor.update",
-            "inventory.read",
-            "inventory.create",
-            "inventory.update",
+            "inventory.item.read",
+            "inventory.item.create",
+            "inventory.item.update",
+            "inventory.location.read",
+            "inventory.location.create",
+            "inventory.location.update",
+            "inventory.stock.read",
+            "inventory.consume",
+            "inventory.transfer",
+            "inventory.adjust",
+            "inventory.po.read",
+            "inventory.po.create",
+            "inventory.po.update",
+            "inventory.po.receive",
+            "inventory.forecast.read",
             "department.read",
         ],
     ),
@@ -779,6 +833,34 @@ async def seed_database(database_url: str | None = None) -> None:
         else:
             logger.info("demo_pharmacist_exists", email=pharmacist_email)
 
+        # ── 6d. Create Demo Inventory Manager User ───────────────────────────
+        inventory_email = "inventory@demohospital.com"
+        inventory_result = await session.execute(
+            select(User).where(User.email == inventory_email, User.hospital_id == hospital.id)
+        )
+        inventory_user = inventory_result.unique().scalar_one_or_none()
+
+        if inventory_user is None:
+            inventory_user = User(
+                hospital_id=hospital.id,
+                email=inventory_email,
+                password_hash=hash_password("Inventory@1234567"),
+                first_name="Rohan",
+                last_name="Desai",
+                status=UserStatus.ACTIVE,
+                password_changed_at=datetime.now(UTC),
+            )
+            session.add(inventory_user)
+            await session.flush()
+
+            inventory_role = role_map.get("Inventory Manager")
+            if inventory_role:
+                session.add(UserRole(user_id=inventory_user.id, role_id=inventory_role.id))
+
+            logger.info("demo_inventory_manager_created", email=inventory_email)
+        else:
+            logger.info("demo_inventory_manager_exists", email=inventory_email)
+
         # ── 7. Demo Clinical Data ────────────────────────────────────────────
         # Departments, doctors, patients, appointments and billing, so the
         # frontend has real data to build against. Same transaction, same
@@ -795,6 +877,7 @@ async def seed_database(database_url: str | None = None) -> None:
             reception=receptionist_email,
             lab=lab_email,
             pharmacy=pharmacist_email,
+            inventory=inventory_email,
         )
 
 

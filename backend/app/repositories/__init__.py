@@ -25,6 +25,8 @@ from app.repositories.base import BaseRepository
 from app.repositories.department_repository import DepartmentRepository
 from app.repositories.doctor_repository import DoctorRepository
 from app.repositories.hospital_repository import HospitalRepository
+from app.repositories.inventory_po_repository import InventoryPurchaseOrderRepository
+from app.repositories.inventory_repository import InventoryRepository
 from app.repositories.invoice_number_sequence_repository import InvoiceNumberSequenceRepository
 from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.lab_order_repository import LabOrderRepository
@@ -49,6 +51,8 @@ __all__ = [
     "DepartmentRepository",
     "DoctorRepository",
     "HospitalRepository",
+    "InventoryPurchaseOrderRepository",
+    "InventoryRepository",
     "InvoiceNumberSequenceRepository",
     "InvoiceRepository",
     "LabOrderRepository",
