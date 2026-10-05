@@ -112,8 +112,24 @@ PERMISSION_DEFINITIONS: list[tuple[str, str, str]] = [
     ("lab.report.download", "lab", "Download lab report PDFs"),
     ("lab.ai_explain", "lab", "Request an AI explanation of lab results"),
     # Pharmacy
-    ("pharmacy.read", "pharmacy", "View prescriptions and inventory"),
-    ("pharmacy.dispense", "pharmacy", "Dispense medications"),
+    ("pharmacy.medicine.read", "pharmacy", "View the medicine catalog"),
+    ("pharmacy.medicine.create", "pharmacy", "Add medicines to the catalog"),
+    ("pharmacy.medicine.update", "pharmacy", "Edit and retire medicines"),
+    ("pharmacy.batch.read", "pharmacy", "View batches and stock"),
+    ("pharmacy.batch.create", "pharmacy", "Receive stock"),
+    ("pharmacy.batch.update", "pharmacy", "Recall batches and adjust stock"),
+    ("pharmacy.prescription.read", "pharmacy", "View prescriptions and dispenses"),
+    ("pharmacy.prescription.create", "pharmacy", "Write and cancel prescriptions"),
+    ("pharmacy.dispense.execute", "pharmacy", "Dispense prescriptions"),
+    ("pharmacy.interaction.check", "pharmacy", "Check drug interactions"),
+    ("pharmacy.po.read", "pharmacy", "View purchase orders"),
+    ("pharmacy.po.create", "pharmacy", "Draft purchase orders"),
+    ("pharmacy.po.update", "pharmacy", "Send and cancel purchase orders"),
+    ("pharmacy.po.receive", "pharmacy", "Receive purchase orders"),
+    ("pharmacy.vendor.read", "pharmacy", "View vendors"),
+    ("pharmacy.vendor.create", "pharmacy", "Add vendors"),
+    ("pharmacy.vendor.update", "pharmacy", "Edit and retire vendors"),
+    ("pharmacy.ai_substitute", "pharmacy", "Request an AI substitution suggestion"),
     # Inventory
     ("inventory.read", "inventory", "View inventory"),
     ("inventory.create", "inventory", "Create inventory items"),
@@ -207,8 +223,24 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "lab.order.amend",
             "lab.report.download",
             "lab.ai_explain",
-            "pharmacy.read",
-            "pharmacy.dispense",
+            "pharmacy.medicine.read",
+            "pharmacy.medicine.create",
+            "pharmacy.medicine.update",
+            "pharmacy.batch.read",
+            "pharmacy.batch.create",
+            "pharmacy.batch.update",
+            "pharmacy.prescription.read",
+            "pharmacy.prescription.create",
+            "pharmacy.dispense.execute",
+            "pharmacy.interaction.check",
+            "pharmacy.po.read",
+            "pharmacy.po.create",
+            "pharmacy.po.update",
+            "pharmacy.po.receive",
+            "pharmacy.vendor.read",
+            "pharmacy.vendor.create",
+            "pharmacy.vendor.update",
+            "pharmacy.ai_substitute",
             "inventory.read",
             "inventory.create",
             "inventory.update",
@@ -297,8 +329,24 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             # enforces BR-8 (an admin may only hand out permissions they hold),
             # and without these five the admin could not invite a Doctor, Lab
             # Technician, Pharmacist or Inventory Manager at all.
-            "pharmacy.read",
-            "pharmacy.dispense",
+            "pharmacy.medicine.read",
+            "pharmacy.medicine.create",
+            "pharmacy.medicine.update",
+            "pharmacy.batch.read",
+            "pharmacy.batch.create",
+            "pharmacy.batch.update",
+            "pharmacy.prescription.read",
+            "pharmacy.prescription.create",
+            "pharmacy.dispense.execute",
+            "pharmacy.interaction.check",
+            "pharmacy.po.read",
+            "pharmacy.po.create",
+            "pharmacy.po.update",
+            "pharmacy.po.receive",
+            "pharmacy.vendor.read",
+            "pharmacy.vendor.create",
+            "pharmacy.vendor.update",
+            "pharmacy.ai_substitute",
             "inventory.read",
             "inventory.create",
             "inventory.update",
@@ -343,6 +391,9 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "lab.order.read",
             "lab.order.create",
             "lab.order.cancel",
+            "pharmacy.medicine.read",
+            "pharmacy.prescription.read",
+            "pharmacy.prescription.create",
             "report.read",
             "department.read",
             "doctor.read",
@@ -436,8 +487,15 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             # Every role reads its own notifications (module spec 11 §3).
             "notification.read.own",
             "notification.preference.update.own",
-            "pharmacy.read",
-            "pharmacy.dispense",
+            "pharmacy.medicine.read",
+            "pharmacy.batch.read",
+            "pharmacy.batch.create",
+            "pharmacy.batch.update",
+            "pharmacy.prescription.read",
+            "pharmacy.dispense.execute",
+            "pharmacy.po.read",
+            "pharmacy.po.receive",
+            "pharmacy.vendor.read",
             "inventory.read",
             "department.read",
         ],
@@ -449,6 +507,15 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             # Every role reads its own notifications (module spec 11 §3).
             "notification.read.own",
             "notification.preference.update.own",
+            "pharmacy.medicine.read",
+            "pharmacy.batch.read",
+            "pharmacy.po.read",
+            "pharmacy.po.create",
+            "pharmacy.po.update",
+            "pharmacy.po.receive",
+            "pharmacy.vendor.read",
+            "pharmacy.vendor.create",
+            "pharmacy.vendor.update",
             "inventory.read",
             "inventory.create",
             "inventory.update",
@@ -684,6 +751,34 @@ async def seed_database(database_url: str | None = None) -> None:
         else:
             logger.info("demo_lab_technician_exists", email=lab_email)
 
+        # ── 6c. Create Demo Pharmacist User ──────────────────────────────────
+        pharmacist_email = "pharmacy@demohospital.com"
+        pharmacist_result = await session.execute(
+            select(User).where(User.email == pharmacist_email, User.hospital_id == hospital.id)
+        )
+        pharmacist_user = pharmacist_result.unique().scalar_one_or_none()
+
+        if pharmacist_user is None:
+            pharmacist_user = User(
+                hospital_id=hospital.id,
+                email=pharmacist_email,
+                password_hash=hash_password("Pharmacy@1234567"),
+                first_name="Kavya",
+                last_name="Reddy",
+                status=UserStatus.ACTIVE,
+                password_changed_at=datetime.now(UTC),
+            )
+            session.add(pharmacist_user)
+            await session.flush()
+
+            pharmacist_role = role_map.get("Pharmacist")
+            if pharmacist_role:
+                session.add(UserRole(user_id=pharmacist_user.id, role_id=pharmacist_role.id))
+
+            logger.info("demo_pharmacist_created", email=pharmacist_email)
+        else:
+            logger.info("demo_pharmacist_exists", email=pharmacist_email)
+
         # ── 7. Demo Clinical Data ────────────────────────────────────────────
         # Departments, doctors, patients, appointments and billing, so the
         # frontend has real data to build against. Same transaction, same
@@ -699,6 +794,7 @@ async def seed_database(database_url: str | None = None) -> None:
             doctor=doctor_email,
             reception=receptionist_email,
             lab=lab_email,
+            pharmacy=pharmacist_email,
         )
 
 

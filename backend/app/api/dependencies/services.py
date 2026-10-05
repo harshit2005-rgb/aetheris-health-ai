@@ -48,11 +48,14 @@ from app.api.dependencies.repositories import (  # noqa: F401
     get_invoice_repository,
     get_lab_order_repository,
     get_lab_test_repository,
+    get_medicine_repository,
     get_mrn_sequence_repository,
     get_notification_repository,
     get_password_reset_token_repository,
     get_patient_repository,
     get_permission_repository,
+    get_prescription_repository,
+    get_procurement_repository,
     get_refresh_token_repository,
     get_role_repository,
     get_service_catalog_repository,
@@ -72,11 +75,14 @@ from app.repositories import (
     InvoiceRepository,
     LabOrderRepository,
     LabTestRepository,
+    MedicineRepository,
     MrnSequenceRepository,
     NotificationRepository,
     PasswordResetTokenRepository,
     PatientRepository,
     PermissionRepository,
+    PrescriptionRepository,
+    ProcurementRepository,
     RefreshTokenRepository,
     RoleRepository,
     ServiceCatalogRepository,
@@ -92,6 +98,7 @@ from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
 from app.services.billing_service import BillingInvoiceDraftSink, BillingService
 from app.services.department_service import DepartmentService, DepartmentUsageSource
+from app.services.dispensing_service import DispensingService
 from app.services.doctor_service import (
     BookedIntervalSource,
     DoctorDepartmentUsageSource,
@@ -103,6 +110,8 @@ from app.services.lab_service import LabService
 from app.services.mrn_service import MRNService
 from app.services.notification_service import NotificationService
 from app.services.patient_service import PatientService
+from app.services.pharmacy_catalog_service import PharmacyCatalogService
+from app.services.procurement_service import ProcurementService
 from app.services.role_service import RoleService
 from app.services.service_catalog_service import ServiceCatalogService
 from app.services.user_service import UserService
@@ -412,6 +421,48 @@ def get_lab_service(
     )
 
 
+# ── Pharmacy module ─────────────────────────────────────────────────────────
+def get_pharmacy_catalog_service(
+    medicines: MedicineRepository = Depends(get_medicine_repository),
+    hospitals: HospitalRepository = Depends(get_hospital_repository),
+    session: AsyncSession = Depends(get_db_session),
+    audit: AuditSink = Depends(get_audit_sink),
+) -> PharmacyCatalogService:
+    """Provide a :class:`PharmacyCatalogService` bound to the request session."""
+    return PharmacyCatalogService(medicines, hospitals, session, audit)
+
+
+def get_dispensing_service(
+    prescriptions: PrescriptionRepository = Depends(get_prescription_repository),
+    medicines: MedicineRepository = Depends(get_medicine_repository),
+    appointments: AppointmentRepository = Depends(get_appointment_repository),
+    hospitals: HospitalRepository = Depends(get_hospital_repository),
+    session: AsyncSession = Depends(get_db_session),
+    audit: AuditSink = Depends(get_audit_sink),
+    charges: ChargeSink = Depends(get_charge_sink),
+) -> DispensingService:
+    """Provide a :class:`DispensingService` bound to the request session.
+
+    Billing shares the session through the charge sink, so the stock
+    movements, the dispense and its bill line commit or roll back together
+    (module spec §5.1 step 3).
+    """
+    return DispensingService(
+        prescriptions, medicines, appointments, hospitals, session, audit, charges=charges
+    )
+
+
+def get_procurement_service(
+    procurement: ProcurementRepository = Depends(get_procurement_repository),
+    medicines: MedicineRepository = Depends(get_medicine_repository),
+    hospitals: HospitalRepository = Depends(get_hospital_repository),
+    session: AsyncSession = Depends(get_db_session),
+    audit: AuditSink = Depends(get_audit_sink),
+) -> ProcurementService:
+    """Provide a :class:`ProcurementService` bound to the request session."""
+    return ProcurementService(procurement, medicines, hospitals, session, audit)
+
+
 # ── Appointment module ──────────────────────────────────────────────────────
 def get_invoice_draft_sink(
     billing: BillingService = Depends(get_billing_service),
@@ -509,6 +560,10 @@ __all__ = [
     # Laboratory module
     "get_lab_catalog_service",
     "get_lab_service",
+    # Pharmacy module
+    "get_dispensing_service",
+    "get_pharmacy_catalog_service",
+    "get_procurement_service",
     "get_service_catalog_service",
     # Appointment module
     "get_appointment_service",
