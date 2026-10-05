@@ -27,12 +27,18 @@ from app.api.v1 import (
     health_router,
     hospital_router,
     invoice_router,
+    lab_order_router,
+    medicine_router,
     notification_router,
     patient_router,
     permission_router,
+    prescription_router,
+    purchase_order_router,
     role_router,
     service_router,
+    tests_catalog_router,
     user_router,
+    vendor_router,
 )
 from app.core.config import settings
 from app.core.constants import API_DOCS_URL, API_OPENAPI_URL, API_REDOC_URL, API_V1_PREFIX
@@ -225,6 +231,25 @@ def _register_routers(app: FastAPI) -> None:
         invoice_router,
         prefix=API_V1_PREFIX,
     )
+
+    # Laboratory routes — test catalog and lab orders
+    app.include_router(
+        tests_catalog_router,
+        prefix=API_V1_PREFIX,
+    )
+    app.include_router(
+        lab_order_router,
+        prefix=API_V1_PREFIX,
+    )
+
+    # Pharmacy routes — medicines and stock, prescriptions, vendors, purchase orders
+    for pharmacy_router in (
+        medicine_router,
+        prescription_router,
+        vendor_router,
+        purchase_order_router,
+    ):
+        app.include_router(pharmacy_router, prefix=API_V1_PREFIX)
 
     # Notification routes — notification centre, preferences, broadcast
     app.include_router(

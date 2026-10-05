@@ -186,6 +186,22 @@ class InvoiceRepository(BaseRepository[Invoice]):
         invoice.items = self._build_items(invoice.hospital_id, lines)
         await self._session.flush()
 
+    async def append_items(self, invoice: Invoice, lines: Sequence[dict[str, Any]]) -> None:
+        """Add lines to the end of a draft, leaving the existing ones alone.
+
+        Used when another module charges something to an open draft. Flushes
+        but does not refresh; the caller follows with :meth:`update_invoice`.
+
+        :param invoice: The attached draft to modify.
+        :param lines: Column values per new line, already priced.
+        """
+        start = max((item.position for item in invoice.items), default=-1) + 1
+        for offset, line in enumerate(lines):
+            invoice.items.append(
+                InvoiceItem(hospital_id=invoice.hospital_id, position=start + offset, **line)
+            )
+        await self._session.flush()
+
     async def update_invoice(
         self, invoice: Invoice, *, updated_by: uuid.UUID | None = None, **fields: Any
     ) -> Invoice:

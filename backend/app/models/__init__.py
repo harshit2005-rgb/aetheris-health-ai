@@ -43,6 +43,16 @@ from app.models.doctor import (
     SlotStatus,
 )
 from app.models.hospital import Hospital
+from app.models.lab import (
+    LabOrder,
+    LabOrderItem,
+    LabOrderPriority,
+    LabOrderStatus,
+    LabResultAmendment,
+    LabResultFlag,
+    LabResultType,
+    LabTest,
+)
 from app.models.notification import (
     DeliveryStatus,
     Notification,
@@ -53,6 +63,21 @@ from app.models.notification import (
 from app.models.password_reset_token import PasswordResetToken
 from app.models.patient import BloodGroup, Gender, MrnSequence, Patient, PatientStatus
 from app.models.permission import Permission
+from app.models.pharmacy import (
+    Dispense,
+    DispenseItem,
+    Medicine,
+    MedicineBatch,
+    Prescription,
+    PrescriptionItem,
+    PrescriptionStatus,
+    PurchaseOrder,
+    PurchaseOrderItem,
+    PurchaseOrderStatus,
+    StockMovement,
+    StockMovementReason,
+    Vendor,
+)
 from app.models.refresh_token import RefreshToken
 from app.models.role import Role, RolePermission
 from app.models.user import User, UserRole, UserStatus
@@ -97,6 +122,29 @@ __all__ = [
     "PaymentMethod",
     "Refund",
     "Service",
+    # Laboratory
+    "LabOrder",
+    "LabOrderItem",
+    "LabOrderPriority",
+    "LabOrderStatus",
+    "LabResultAmendment",
+    "LabResultFlag",
+    "LabResultType",
+    "LabTest",
+    # Pharmacy
+    "Dispense",
+    "DispenseItem",
+    "Medicine",
+    "MedicineBatch",
+    "Prescription",
+    "PrescriptionItem",
+    "PrescriptionStatus",
+    "PurchaseOrder",
+    "PurchaseOrderItem",
+    "PurchaseOrderStatus",
+    "StockMovement",
+    "StockMovementReason",
+    "Vendor",
     # Notification
     "DeliveryStatus",
     "Notification",

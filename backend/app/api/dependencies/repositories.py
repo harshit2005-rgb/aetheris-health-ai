@@ -37,11 +37,16 @@ from app.repositories import (
     HospitalRepository,
     InvoiceNumberSequenceRepository,
     InvoiceRepository,
+    LabOrderRepository,
+    LabTestRepository,
+    MedicineRepository,
     MrnSequenceRepository,
     NotificationRepository,
     PasswordResetTokenRepository,
     PatientRepository,
     PermissionRepository,
+    PrescriptionRepository,
+    ProcurementRepository,
     RefreshTokenRepository,
     RoleRepository,
     ServiceCatalogRepository,
@@ -127,6 +132,31 @@ def get_invoice_number_sequence_repository(
 ) -> InvoiceNumberSequenceRepository:
     """Provide an :class:`InvoiceNumberSequenceRepository` bound to the request session."""
     return InvoiceNumberSequenceRepository(session)
+
+
+def get_lab_test_repository(session: DbSession) -> LabTestRepository:
+    """Provide a :class:`LabTestRepository` bound to the request session."""
+    return LabTestRepository(session)
+
+
+def get_lab_order_repository(session: DbSession) -> LabOrderRepository:
+    """Provide a :class:`LabOrderRepository` bound to the request session."""
+    return LabOrderRepository(session)
+
+
+def get_medicine_repository(session: DbSession) -> MedicineRepository:
+    """Provide a :class:`MedicineRepository` bound to the request session."""
+    return MedicineRepository(session)
+
+
+def get_prescription_repository(session: DbSession) -> PrescriptionRepository:
+    """Provide a :class:`PrescriptionRepository` bound to the request session."""
+    return PrescriptionRepository(session)
+
+
+def get_procurement_repository(session: DbSession) -> ProcurementRepository:
+    """Provide a :class:`ProcurementRepository` bound to the request session."""
+    return ProcurementRepository(session)
 
 
 def get_notification_repository(session: DbSession) -> NotificationRepository:

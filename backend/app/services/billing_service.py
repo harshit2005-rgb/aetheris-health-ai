@@ -100,6 +100,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from app.core.audit import AuditSink
+    from app.core.charges import Charge
     from app.models.billing import Invoice, Payment, Refund
     from app.repositories.appointment_repository import AppointmentRepository
     from app.repositories.doctor_repository import DoctorRepository
@@ -110,7 +111,7 @@ if TYPE_CHECKING:
     from app.repositories.invoice_repository import InvoiceRepository
     from app.repositories.patient_repository import PatientRepository
     from app.repositories.service_catalog_repository import ServiceCatalogRepository
-    from app.utils.invoice_math import InvoiceTotals
+    from app.utils.invoice_math import InvoiceTotals, LineAmounts
 
 logger = get_logger(__name__)
 
@@ -1061,6 +1062,154 @@ class BillingService:
             status=status.value,
         )
         return self._refund_result(refund, invoice, currency), True
+
+    # ── Charges from other modules ────────────────────────────────────────────
+
+    async def add_charges(
+        self,
+        hospital_id: uuid.UUID,
+        *,
+        patient_id: uuid.UUID,
+        appointment_id: uuid.UUID | None,
+        charges: list[Charge],
+        source: str,
+        actor_id: uuid.UUID | None = None,
+    ) -> uuid.UUID | None:
+        """Put another module's charges on a draft invoice for the patient.
+
+        This is Billing's side of :class:`~app.core.charges.ChargeSink`: the
+        Laboratory charges for tests ordered and the Pharmacy for medicines
+        dispensed without either knowing what an invoice looks like.
+
+        The lines join the visit's draft invoice if it has one that is still
+        open. Otherwise a new draft is raised — linked to the visit when the
+        visit has no invoice yet, standalone when its invoice has already been
+        issued, because an issued invoice's lines are frozen (AC-1).
+
+        **Does not commit.** The charge belongs to the caller's transaction, so
+        a test is never ordered without being charged, nor charged without
+        being ordered.
+
+        The lines are untaxed, as the consultation line is: whether a test or
+        a medicine is taxable is not recorded on its catalog, so the draft is
+        left for billing staff to correct before it is issued.
+
+        :param hospital_id: The tenant to scope to.
+        :param patient_id: Patient being charged.
+        :param appointment_id: The visit the charges belong to, if any.
+        :param charges: The lines to add.
+        :param source: Which module raised them, for the audit trail.
+        :param actor_id: UUID of the acting user.
+        :returns: The invoice the lines went onto, or ``None`` if there were
+            no charges.
+        """
+        if not charges:
+            return None
+
+        amounts = [compute_line(charge.unit_price, charge.quantity, ZERO) for charge in charges]
+        lines = [
+            {
+                "service_id": None,
+                "description": charge.description[:_DESCRIPTION_MAX_LENGTH],
+                "quantity": charge.quantity,
+                "unit_price": charge.unit_price,
+                "tax_rate": ZERO,
+                "line_total": amount.total,
+            }
+            for charge, amount in zip(charges, amounts, strict=True)
+        ]
+
+        visit_invoice = (
+            await self._invoices.get_live_invoice_for_appointment(hospital_id, appointment_id)
+            if appointment_id is not None
+            else None
+        )
+        if visit_invoice is not None:
+            # Lock before trusting the status: it may be issued between the
+            # read above and this write.
+            draft = await self._invoices.get_invoice_for_update(hospital_id, visit_invoice.id)
+            if draft is not None and draft.status is InvoiceStatus.DRAFT:
+                return await self._append_charges(draft, lines, amounts, source, actor_id)
+
+        try:
+            invoice = await self._insert_draft(
+                hospital_id=hospital_id,
+                patient_id=patient_id,
+                # Only one live invoice may point at a visit.
+                appointment_id=appointment_id if visit_invoice is None else None,
+                notes=None,
+                lines=lines,
+                totals=compute_invoice_totals(amounts),
+                actor_id=actor_id,
+            )
+        except DuplicateAppointmentInvoiceError:
+            # The visit gained an invoice between the check and the insert.
+            invoice = await self._insert_draft(
+                hospital_id=hospital_id,
+                patient_id=patient_id,
+                appointment_id=None,
+                notes=None,
+                lines=lines,
+                totals=compute_invoice_totals(amounts),
+                actor_id=actor_id,
+            )
+        await self._record_drafted(invoice, actor_id=actor_id, source=source)
+        return invoice.id
+
+    async def _append_charges(
+        self,
+        draft: Invoice,
+        lines: list[dict[str, Any]],
+        amounts: list[LineAmounts],
+        source: str,
+        actor_id: uuid.UUID | None,
+    ) -> uuid.UUID:
+        """Add priced lines to a locked draft and bring its totals up to date.
+
+        A discount on the draft was approved, or waved through, against the
+        lines it had then. More lines change that question, so it is asked
+        again — the same rule :meth:`update_invoice` applies to an edit.
+        """
+        existing = [
+            compute_line(item.unit_price, item.quantity, item.tax_rate) for item in draft.items
+        ]
+        totals = compute_invoice_totals([*existing, *amounts])
+        fields: dict[str, Any] = {
+            "subtotal": totals.subtotal,
+            "tax_amount": totals.tax_amount,
+            "total": totals.subtotal + totals.tax_amount - draft.discount_amount,
+        }
+        if draft.discount_amount > ZERO:
+            threshold = await self._discount_threshold_percent(draft.hospital_id)
+            fields["discount_pending_approval"] = (
+                draft.discount_amount > totals.subtotal * threshold / _HUNDRED
+            )
+            fields["discount_approved_by"] = None
+
+        await self._invoices.append_items(draft, lines)
+        invoice = await self._invoices.update_invoice(draft, updated_by=actor_id, **fields)
+
+        await self._audit.record(
+            AuditEvent(
+                action="invoice.charges_added",
+                hospital_id=invoice.hospital_id,
+                target_type="invoice",
+                target_id=invoice.id,
+                actor_id=actor_id,
+                context={
+                    "source": source,
+                    "lines_added": len(lines),
+                    "total": str(invoice.total),
+                },
+            )
+        )
+        logger.info(
+            "invoice.charges_added",
+            hospital_id=str(invoice.hospital_id),
+            invoice_id=str(invoice.id),
+            source=source,
+        )
+        return invoice.id
 
     # ── Queries ───────────────────────────────────────────────────────────────
 

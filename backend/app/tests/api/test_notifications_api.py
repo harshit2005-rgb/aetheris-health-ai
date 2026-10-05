@@ -19,6 +19,7 @@ from app.api.dependencies.services import get_audit_sink
 from app.main import create_app
 from app.models.notification import Notification
 from app.repositories.notification_repository import NotificationRepository
+from app.services.notification_catalog import KINDS
 from app.tests.billing_helpers import auth_headers, insert_user_with_permissions
 from app.tests.conftest import RecordingAuditSink
 
@@ -353,12 +354,8 @@ class TestPreferences:
 
         assert response.status_code == 200, response.text
         kinds = {k["kind"]: k for k in response.json()["data"]["kinds"]}
-        assert set(kinds) == {
-            "auth.user_invited",
-            "auth.password_reset_requested",
-            "billing.discount_approval_requested",
-            "system.broadcast",
-        }
+        # Every kind in the catalog, whichever module added it.
+        assert set(kinds) == set(KINDS)
         assert kinds["auth.user_invited"]["critical"] is True
         assert kinds["auth.user_invited"]["locked_channels"] == ["in_app", "email"]
         discount = kinds["billing.discount_approval_requested"]
