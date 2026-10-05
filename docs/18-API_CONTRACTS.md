@@ -1,7 +1,7 @@
 # 18 — Frontend API Contract Reference
 
 The exact request/response contracts for the endpoints the frontend consumes today:
-**Patients, Departments, Doctors, Appointments, Billing, Notifications, Laboratory, Pharmacy**. Written so a frontend module
+**Patients, Departments, Doctors, Appointments, Billing, Notifications, Laboratory, Pharmacy, Inventory**. Written so a frontend module
 can be built without reading backend code or guessing a shape.
 
 **Source of truth.** Every contract below was read out of the implementation, not the
@@ -119,7 +119,7 @@ refresh itself fails the session is cleared and route guards send the user to `/
 Keep that shape if you touch it, and give any second client the same single-flight guard.
 
 > **Diverges from `CLAUDE.md`,** which specifies the refresh token as an HTTP-only cookie.
-> That is the intended design; what ships is the body-based flow above. See §12.
+> That is the intended design; what ships is the body-based flow above. See §13.
 
 ### 1.5 Tenancy
 
@@ -1165,6 +1165,7 @@ the caller, so the page can be drawn from this response alone:
 | `auth.password_reset_requested` | `POST /auth/password/forgot` | That user | in-app + email | ✅ |
 | `billing.discount_approval_requested` | A draft's discount goes above the hospital's threshold (§6.7), or a pending discount's amount changes | Every active user holding `invoice.approve_discount`, except the person who applied it | in-app | — |
 | `system.broadcast` | `POST /notifications/broadcast` | The role, or the whole hospital | in-app | — |
+| `inventory.low_stock` | An item's usable stock crosses its reorder point (§10.6) | Every active user holding `inventory.po.create` | in-app | — |
 | `lab.critical_result` | A result is entered in the critical range (§8.5) | The ordering doctor | in-app only | ✅ |
 | `lab.results_released` | A lab order is released (§8.5) | The ordering doctor | in-app only | — |
 | `lab.result_amended` | A released result is corrected (§8.6) | The ordering doctor | in-app only | ✅ |
@@ -1723,7 +1724,223 @@ These paths from the module spec return `404`. Do not build against them:
 
 ---
 
-## 10. Frontend ↔ backend mapping (mismatch resolution)
+## 10. Inventory
+
+`backend/app/api/v1/inventory.py` · `backend/app/schemas/inventory.py`
+
+The core of [modules/09-inventory.md](modules/09-inventory.md): non-pharmacy consumables
+kept per location and batch, with consumption, transfers, corrections, low-stock alerts
+and purchase orders. **The AI reorder forecast is not built** — see §10.8.
+
+### 10.1 Endpoints
+
+All under `/api/v1/inventory`.
+
+| Method | Path | Permission | Success |
+|---|---|---|---|
+| GET | `/items` | `inventory.item.read` | 200 (paginated) |
+| POST | `/items` | `inventory.item.create` | 201 |
+| GET | `/items/{id}` | `inventory.item.read` | 200 |
+| PATCH | `/items/{id}` | `inventory.item.update` | 200 |
+| GET | `/locations` | `inventory.location.read` | 200 (plain list) |
+| POST | `/locations` | `inventory.location.create` | 201 |
+| PATCH | `/locations/{id}` | `inventory.location.update` | 200 |
+| GET | `/stock` | `inventory.stock.read` | 200 (paginated) |
+| GET | `/stock/summary` | `inventory.stock.read` | 200 (paginated) |
+| GET | `/movements` | `inventory.stock.read` | 200 (paginated) |
+| POST | `/consume` | `inventory.consume` | 200 |
+| POST | `/transfer` | `inventory.transfer` | 200 |
+| POST | `/adjust` | `inventory.adjust` | 200 |
+| GET | `/purchase-orders` | `inventory.po.read` | 200 (paginated) |
+| POST | `/purchase-orders` | `inventory.po.create` | 201 |
+| GET | `/purchase-orders/{id}` | `inventory.po.read` | 200 |
+| POST | `/purchase-orders/{id}/send` | `inventory.po.update` | 200 |
+| POST | `/purchase-orders/{id}/cancel` | `inventory.po.update` | 200 |
+| POST | `/purchase-orders/{id}/receive` | `inventory.po.receive` | 200 |
+
+**Quantities are decimal strings with two places** (`"4.50"`), in requests and
+responses: some items are issued in fractions of a unit of measure.
+
+### 10.2 Roles → permissions
+
+| Permission | Hospital Admin | Inventory Manager | Nurse | Pharmacist |
+|---|:--:|:--:|:--:|:--:|
+| `inventory.item.read` / `.location.read` / `.stock.read` | ✅ | ✅ | ✅ | ✅ |
+| `inventory.item.create` / `.update` | ✅ | ✅ | — | — |
+| `inventory.location.create` / `.update` | ✅ | ✅ | — | — |
+| `inventory.consume` | ✅ | ✅ | ✅ | — |
+| `inventory.transfer` / `inventory.adjust` | ✅ | ✅ | — | — |
+| `inventory.po.read` / `.create` / `.update` / `.receive` | ✅ | ✅ | — | — |
+
+A nurse sees stock and records what the ward uses, and nothing else. These replace the
+earlier `inventory.read` / `.create` / `.update` placeholders. `inventory.forecast.read` is
+in the catalog but guards nothing yet.
+
+### 10.3 Items and locations
+
+`POST /inventory/items`
+
+```json
+{
+  "sku": "GLOVE-M",
+  "name": "Nitrile gloves, medium",
+  "category": "Disposables",
+  "unit_of_measure": "box of 100",
+  "is_batch_tracked": false,
+  "reorder_point": 20,
+  "target_stock": 80
+}
+```
+
+- `sku` is uppercased and unique per hospital (`409`). **`sku` and `is_batch_tracked`
+  cannot be changed** after creation.
+- `reorder_point` and `target_stock` are whole numbers or `null`; the target may not be
+  below the reorder point (`422` naming `target_stock`). An item with no reorder point
+  never alerts.
+- `PATCH` takes `name`, `category`, `unit_of_measure`, `reorder_point`, `target_stock`,
+  `is_active`. `GET /items` takes `q` (name prefix or exact SKU), `category`, `is_active`.
+
+`POST /inventory/locations` — `{ "name", "code", "kind" }`, where `kind` is `ward`, `ot`,
+`icu` or `store` (default). `code` is uppercased, unique and immutable. `PATCH` takes
+`name`, `kind`, `is_active`. Stock can be used up in or moved out of an inactive location,
+but nothing can be sent to one.
+
+### 10.4 Reading stock
+
+`GET /inventory/stock` — one row per **batch of an item at a location**, ordered by item,
+location, then expiry. Filters: `item_id`, `location_id`, `in_stock_only` (default `true`).
+
+```json
+{
+  "id": "…",
+  "item_id": "…", "item_sku": "CANN-20G", "item_name": "IV cannula 20G", "unit_of_measure": "piece",
+  "location_id": "…", "location_code": "STORE", "location_name": "General store",
+  "batch_number": "CN-2401", "expiry_date": "2026-10-30",
+  "quantity": "80.00",
+  "is_expired": false
+}
+```
+
+`batch_number` and `expiry_date` are `null` for an item that is not batch-tracked. An
+expired row is still listed — it is physically there — but `is_expired` is true and it is
+never used.
+
+`GET /inventory/stock/summary` — one row per **active item**, hospital-wide:
+
+```json
+{
+  "item": { "id": "…", "sku": "SYR-5", "name": "Syringe 5 mL", "reorder_point": 20, "target_stock": 60, "…": "…" },
+  "quantity_on_hand": "20.00",
+  "usable_quantity": "20.00",
+  "is_low": true,
+  "suggested_order_quantity": "40.00"
+}
+```
+
+- `usable_quantity` leaves out expired stock; it is the number to show.
+- `is_low` is `usable_quantity <= reorder_point`.
+- `suggested_order_quantity` is what brings usable stock back to `target_stock` (or to the
+  reorder point if no target is set); `"0.00"` when not low.
+- **`?low_stock=true` is the reorder alerts panel.** It includes items with no stock at
+  all. Also takes `q` and `category`.
+
+`GET /inventory/movements` — the ledger, newest first; filters `item_id`, `location_id`,
+`reason` (`received`, `consumed`, `transferred_in`, `transferred_out`, `adjusted`,
+`expired`). Each entry has `quantity_change` (signed), `reason`, `batch_number`,
+`department_id`, `reference_type`, `reference_id`, `note`, `moved_at`, `moved_by`.
+
+### 10.5 Moving stock
+
+All three return `{ "movements": […], "summary": { … } }` — the ledger entries the request
+wrote, and the item's summary (§10.4) afterwards.
+
+`POST /inventory/consume`
+
+```json
+{ "item_id": "…", "location_id": "…", "quantity": "2", "department_id": null, "note": null }
+```
+
+`POST /inventory/transfer`
+
+```json
+{ "item_id": "…", "from_location_id": "…", "to_location_id": "…", "quantity": "10" }
+```
+
+`POST /inventory/adjust`
+
+```json
+{ "item_id": "…", "location_id": "…", "quantity_change": "-3", "reason": "expired",
+  "note": "Damaged in store", "batch_number": null, "expiry_date": null }
+```
+
+- Stock is taken **earliest expiry first**, never from an expired batch, and only from
+  the location named — stock elsewhere does not count. `batch_number` on consume or
+  transfer restricts it to one batch.
+- **A shortage is a `409` and changes nothing.** `errors` is
+  `{ "requested": "5.00", "available": "3.00" }`.
+- A transfer keeps each batch's number and expiry, and writes a `transferred_out` and a
+  `transferred_in` entry per batch sharing one `reference_id`. The two locations must
+  differ (`422`).
+- **Adjust** needs `note`. `reason` is `adjusted` (default) or `expired`; an `expired`
+  adjustment must remove stock. A positive adjustment may create the stock row — this is
+  how an opening balance is entered. A batch-tracked item needs `batch_number` and an
+  untracked one must not have it (`422` naming `batch_number`). Taking a row below zero is
+  a `400`.
+- An unknown `item_id`, `location_id` or `department_id` is a `422` naming the field.
+
+### 10.6 Low-stock alerts
+
+When a consume or a write-off takes an item's hospital-wide usable stock **from above its
+reorder point to at or below it**, every user who can raise a purchase order
+(`inventory.po.create`) gets an in-app notification of kind `inventory.low_stock` (§7).
+It fires once, on the movement that crosses the line. A transfer never alerts: it moves
+nothing out of the hospital. The response's `summary.is_low` tells the person who made the
+movement.
+
+The reorder point is one number per item for the whole hospital. The module spec's rule 3
+speaks of "per item per location", but its schema keeps one per item; a ward running out
+while the store is full needs a transfer, not a purchase.
+
+### 10.7 Purchase orders
+
+Same lifecycle as Pharmacy's (§9.8) — `draft` → `sent` → `received`, or `cancelled` — but
+separate orders, numbered `IPO-…`. **Vendors are the same ones** as Pharmacy's
+(`GET /api/v1/vendors`, §9.7).
+
+`POST /inventory/purchase-orders`
+
+```json
+{ "vendor_id": "…", "notes": null,
+  "items": [{ "item_id": "…", "quantity": "40", "unit_price": "210.00" }] }
+```
+
+`POST /inventory/purchase-orders/{id}/receive` — only on a `sent` order:
+
+```json
+{ "location_id": "…",
+  "items": [
+    { "po_item_id": "…", "quantity": "40" },
+    { "po_item_id": "…", "quantity": "250", "batch_number": "CN-1", "expiry_date": "2027-11-01" }
+  ] }
+```
+
+Everything on the receipt goes into `location_id`, which must be active. What arrived may
+differ from what was ordered, and one order line may be split across batches. A
+batch-tracked item needs `batch_number` on every line. An expired batch, or an expiry that
+disagrees with stock already held under that batch number, is a `422` and nothing is
+received. The response is the order, with `status`, `vendor_name`, `total_amount`,
+`received_location_id` and `items[]` (`item_sku`, `item_name`, `quantity`, `unit_price`,
+`total`).
+
+### 10.8 Not built yet
+
+This path from the module spec returns `404`. Do not build against it:
+
+- `GET /inventory/forecast`
+
+---
+
+## 11. Frontend ↔ backend mapping (mismatch resolution)
 
 The audit flagged the patient contract as mismatched. It was investigated against
 `API_CONTRACTS`/`05-DATABASE_DESIGN.md`, the module spec, the schemas and 944 passing
@@ -1748,7 +1965,7 @@ faked.
 
 ---
 
-## 11. Demo data
+## 12. Demo data
 
 `make -C backend seed` — idempotent, safe to re-run; see
 [10-DEVELOPMENT_GUIDE.md](10-DEVELOPMENT_GUIDE.md).
@@ -1787,6 +2004,12 @@ Seeded for the demo hospital (`demo-hospital`, timezone `Asia/Kolkata`):
   units; Pantoprazole's only batch is recalled; Insulin glargine has no stock. Plus one
   vendor. No prescriptions or purchase orders are seeded — write one live. Expiry dates
   are relative to the day the database was first seeded.
+- **4 stock locations** (general store, a ward, the ICU, a theatre) and **8 inventory items**
+  (one retired), with stock arranged to show each rule: syringes sit at 25 against a
+  reorder point of 20, so using six trips the low-stock alert live; surgical masks are
+  already low; IV cannulas have a batch expiring in 25 days that is used first; sterile
+  gauze has an expired batch that is held but unusable; bed sheets have no stock at all.
+  No inventory purchase orders are seeded.
 
 The in-flight appointments are deliberately left unbilled, so completing one in a demo
 drafts its invoice live (§6.10).
@@ -1805,12 +2028,13 @@ Demo logins (development only):
 | `reception@demohospital.com` | `Reception@1234567` | Receptionist |
 | `lab@demohospital.com` | `LabTech@1234567` | Lab Technician |
 | `pharmacy@demohospital.com` | `Pharmacy@1234567` | Pharmacist |
+| `inventory@demohospital.com` | `Inventory@1234567` | Inventory Manager |
 
 All seeded people are fictional. No real patient data exists in this repository.
 
 ---
 
-## 12. Known gaps
+## 13. Known gaps
 
 Things the frontend will ask for that do not exist yet. Do not build against them:
 
@@ -1858,6 +2082,15 @@ Things the frontend will ask for that do not exist yet. Do not build against the
   can manage the catalog (§9.2). Any doctor can prescribe against any visit in the
   hospital, not only their own. `pharmacy.prescription.read` / `.create` are codes the
   module spec does not list; it leaves prescriptions to Consultation.
+- **Inventory:** no AI reorder forecast (§10.8). The reorder point is per item for the
+  whole hospital, not per location (§10.6). A low-stock alert fires once, when the point is
+  crossed; nothing re-alerts while an item stays low — use the summary for that. Expired
+  stock is not written off automatically; it just stops being usable until someone
+  adjusts it out. There is no "request supplies" flow for ward staff, only recording
+  what was used. Purchase orders cannot be edited after drafting and are received once.
+  `GET /inventory/stock/summary`, `GET /inventory/movements`, `GET /inventory/items/{id}`,
+  `PATCH /inventory/locations/{id}` and the purchase-order send/cancel routes are not in
+  the module spec's endpoint list.
 - No `sort` parameter on any of these endpoints (§1.8).
 - No patient documents, timeline, or AI summary endpoints — they need object storage.
 - No appointment token/queue-number field (§5.5).
@@ -1872,8 +2105,11 @@ Things the frontend will ask for that do not exist yet. Do not build against the
 
 ---
 
-_Last updated: 2026-10-05. §9 (Pharmacy) added with the module; the then §9–11 are now
-§10–12. The `pharmacy.read` / `pharmacy.dispense` placeholder codes are gone._
+_Last updated: 2026-10-05. §10 (Inventory) added with the module; the then §10–12 are now
+§11–13. The `inventory.read` / `.create` / `.update` placeholder codes are gone._
+
+_Earlier on 2026-10-05: §9 (Pharmacy) added; the then §9–11 became §10–12. The `pharmacy.read` /
+`pharmacy.dispense` placeholder codes are gone._
 
 _Earlier on 2026-10-05: §8 (Laboratory) added; the then §8–10 became §9–11. The `lab.read` /
 `lab.create` / `lab.update` placeholder codes are gone._
