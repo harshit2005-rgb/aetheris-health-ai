@@ -12,11 +12,13 @@ from app.api.v1.doctors import router as doctor_router
 from app.api.v1.health import router as health_router
 from app.api.v1.hospitals import router as hospital_router
 from app.api.v1.invoices import router as invoice_router
+from app.api.v1.lab_orders import router as lab_order_router
 from app.api.v1.notifications import router as notification_router
 from app.api.v1.patients import router as patient_router
 from app.api.v1.roles import permission_router
 from app.api.v1.roles import router as role_router
 from app.api.v1.services import router as service_router
+from app.api.v1.tests_catalog import router as tests_catalog_router
 from app.api.v1.users import router as user_router
 
 __all__ = [
@@ -28,10 +30,12 @@ __all__ = [
     "health_router",
     "hospital_router",
     "invoice_router",
+    "lab_order_router",
     "notification_router",
     "patient_router",
     "permission_router",
     "role_router",
     "service_router",
+    "tests_catalog_router",
     "user_router",
 ]

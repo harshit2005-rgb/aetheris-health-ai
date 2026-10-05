@@ -91,7 +91,7 @@ describe('DashboardPage', () => {
 
   it('requests nothing and shows no error for a lab technician', () => {
     // Seeded Lab Technician holds none of the three read permissions.
-    renderWith(['lab.read'])
+    renderWith(['lab.order.read'])
 
     for (const mock of [usePatientsMock, useDoctorsMock, useAppointmentsMock]) {
       expect(mock.mock.calls[0][1]).toEqual({ enabled: false })

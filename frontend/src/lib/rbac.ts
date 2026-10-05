@@ -105,9 +105,18 @@ export type Permission =
   | 'notification.template.update'
   | 'notification.delivery.read'
   // Laboratory
-  | 'lab.read'
-  | 'lab.create'
-  | 'lab.update'
+  | 'lab.test.read'
+  | 'lab.test.create'
+  | 'lab.test.update'
+  | 'lab.order.read'
+  | 'lab.order.create'
+  | 'lab.order.cancel'
+  | 'lab.order.collect_sample'
+  | 'lab.order.enter_results'
+  | 'lab.order.release'
+  | 'lab.order.amend'
+  | 'lab.report.download'
+  | 'lab.ai_explain'
   // Pharmacy
   | 'pharmacy.read'
   | 'pharmacy.dispense'
@@ -156,7 +165,10 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'invoice.read', 'invoice.read.own', 'invoice.create', 'invoice.update', 'invoice.issue',
     'invoice.void', 'invoice.approve_discount', 'invoice.payment.record',
     'invoice.payment.record.cash', 'invoice.refund', 'invoice.pdf.download', 'invoice.ai_explain',
-    'lab.read', 'lab.create', 'lab.update',
+    'lab.test.read', 'lab.test.create', 'lab.test.update',
+    'lab.order.read', 'lab.order.create', 'lab.order.cancel', 'lab.order.collect_sample',
+    'lab.order.enter_results', 'lab.order.release', 'lab.order.amend',
+    'lab.report.download', 'lab.ai_explain',
     'pharmacy.read', 'pharmacy.dispense',
     'inventory.read', 'inventory.create', 'inventory.update',
     'report.read', 'report.export',
@@ -181,7 +193,10 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'invoice.read', 'invoice.read.own', 'invoice.create', 'invoice.update', 'invoice.issue',
     'invoice.void', 'invoice.approve_discount', 'invoice.payment.record',
     'invoice.payment.record.cash', 'invoice.refund', 'invoice.pdf.download', 'invoice.ai_explain',
-    'lab.read', 'lab.create', 'lab.update',
+    'lab.test.read', 'lab.test.create', 'lab.test.update',
+    'lab.order.read', 'lab.order.create', 'lab.order.cancel', 'lab.order.collect_sample',
+    'lab.order.enter_results', 'lab.order.release', 'lab.order.amend',
+    'lab.report.download', 'lab.ai_explain',
     'pharmacy.read', 'pharmacy.dispense',
     'inventory.read', 'inventory.create', 'inventory.update',
     'report.read', 'report.export',
@@ -208,7 +223,7 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     // Module spec 06 §3: a doctor sees the invoices for their own visits only.
     // The server applies that scope; the client just shows what it returns.
     'invoice.read.own',
-    'lab.read', 'lab.create', 'report.read',
+    'lab.test.read', 'lab.order.read', 'lab.order.create', 'lab.order.cancel', 'report.read',
     'department.read', 'doctor.read', 'doctor.availability.read', 'doctor.availability.update',
     'doctor.leave.create', 'doctor.leave.delete',
   ],
@@ -217,7 +232,7 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'dashboard.view',
     'patient.read', 'patient.update',
     'appointment.read', 'appointment.check_in',
-    'lab.read', 'department.read', 'doctor.read', 'doctor.availability.read',
+    'lab.order.read', 'department.read', 'doctor.read', 'doctor.availability.read',
   ],
   billing_staff: [
     'notification.read.own', 'notification.preference.update.own',
@@ -231,7 +246,9 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
   lab_technician: [
     'notification.read.own', 'notification.preference.update.own',
     'dashboard.view',
-    'lab.read', 'lab.create', 'lab.update', 'department.read',
+    // No `lab.order.release`: release is a supervisor step (module spec 07 §3).
+    'lab.test.read', 'lab.order.read', 'lab.order.collect_sample', 'lab.order.enter_results',
+    'department.read',
   ],
 }
 
