@@ -711,7 +711,11 @@ async def _queued_invite() -> tuple[_World, NotificationDelivery]:
     user = _user()
     world = _World(users=[user])
     await world.service.notify(_invite(user))
-    return world, world.repo.deliveries[0]
+    delivery = world.repo.deliveries[0]
+    # notify() stamps the real clock. Pin the due time to the tests' fixed
+    # clock, or every assertion below depends on the day the suite is run.
+    delivery.next_attempt_at = NOW
+    return world, delivery
 
 
 class TestDeliverDueEmails:
