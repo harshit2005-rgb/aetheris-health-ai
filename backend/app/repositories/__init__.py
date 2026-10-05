@@ -29,11 +29,14 @@ from app.repositories.invoice_number_sequence_repository import InvoiceNumberSeq
 from app.repositories.invoice_repository import InvoiceRepository
 from app.repositories.lab_order_repository import LabOrderRepository
 from app.repositories.lab_test_repository import LabTestRepository
+from app.repositories.medicine_repository import MedicineRepository
 from app.repositories.mrn_sequence_repository import MrnSequenceRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
 from app.repositories.patient_repository import PatientRepository
 from app.repositories.permission_repository import PermissionRepository
+from app.repositories.prescription_repository import PrescriptionRepository
+from app.repositories.procurement_repository import ProcurementRepository
 from app.repositories.refresh_token_repository import RefreshTokenRepository
 from app.repositories.role_repository import RoleRepository
 from app.repositories.service_catalog_repository import ServiceCatalogRepository
@@ -50,11 +53,14 @@ __all__ = [
     "InvoiceRepository",
     "LabOrderRepository",
     "LabTestRepository",
+    "MedicineRepository",
     "MrnSequenceRepository",
     "NotificationRepository",
     "PatientRepository",
     "PasswordResetTokenRepository",
     "PermissionRepository",
+    "PrescriptionRepository",
+    "ProcurementRepository",
     "RefreshTokenRepository",
     "RoleRepository",
     "ServiceCatalogRepository",
