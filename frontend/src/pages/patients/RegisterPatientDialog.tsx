@@ -18,7 +18,17 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { ApiError } from '@/api/types'
-import { GENDER_LABELS, useCreatePatient, type Gender } from '@/api/patients'
+import { GENDER_LABELS, useCreatePatient } from '@/api/patients'
+import {
+  BLOOD_GROUPS,
+  GENDERS,
+  birthDateField,
+  emailField,
+  firstNameField,
+  genderField,
+  lastNameField,
+  phoneField,
+} from './patientForm'
 
 /**
  * Registers a patient against `POST /api/v1/patients`
@@ -30,43 +40,13 @@ import { GENDER_LABELS, useCreatePatient, type Gender } from '@/api/patients'
  * one. The MRN is generated server-side and cannot be supplied.
  */
 
-const GENDERS: Gender[] = ['male', 'female', 'other', 'unspecified']
-
-const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'] as const
-
-/** Backend rule: date of birth cannot be in the future, and age cannot exceed 130. */
-const MAX_AGE_YEARS = 130
-
-function isPlausibleBirthDate(value: string): boolean {
-  const dob = new Date(value)
-  if (Number.isNaN(dob.getTime())) return false
-  const today = new Date()
-  if (dob > today) return false
-  const oldest = new Date()
-  oldest.setFullYear(oldest.getFullYear() - MAX_AGE_YEARS)
-  return dob >= oldest
-}
-
 const schema = z.object({
-  first_name: z.string().trim().min(1, 'First name is required').max(100),
-  last_name: z.string().trim().min(1, 'Last name is required').max(100),
-  date_of_birth: z
-    .string()
-    .min(1, 'Date of birth is required')
-    .refine(isPlausibleBirthDate, 'Enter a date in the past, within the last 130 years'),
-  gender: z.enum(['male', 'female', 'other', 'unspecified'], { message: 'Select a gender' }),
-  // Optional, but must be E.164-able if given — the backend normalizes
-  // `9876543210` to `+919876543210` and rejects anything it cannot parse.
-  phone: z
-    .string()
-    .trim()
-    .refine((v) => v === '' || /^\+?[0-9\s-]{7,20}$/.test(v), 'Enter a valid phone number')
-    .optional(),
-  email: z
-    .string()
-    .trim()
-    .refine((v) => v === '' || /^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(v), 'Enter a valid email')
-    .optional(),
+  first_name: firstNameField,
+  last_name: lastNameField,
+  date_of_birth: birthDateField,
+  gender: genderField,
+  phone: phoneField.optional(),
+  email: emailField.optional(),
   blood_group: z.string().optional(),
 })
 

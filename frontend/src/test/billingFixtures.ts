@@ -1,5 +1,4 @@
 import type { Invoice, InvoiceSummary, Payment, Refund, Service } from '@/api/billing'
-import { useAuthStore } from '@/store/auth-store'
 
 /** Test data and helpers shared by the billing tests. */
 
@@ -37,16 +36,7 @@ export const RECEPTIONIST = [
 ]
 export const DOCTOR = ['patient.read', 'appointment.read', 'invoice.read.own']
 
-export function signIn(permissions: string[]) {
-  useAuthStore.setState({
-    user: { id: 'u1', name: 'Test User', email: 'user@example.com', permissions },
-    isAuthenticated: true,
-  })
-}
-
-export function signOut() {
-  useAuthStore.setState({ user: null, isAuthenticated: false })
-}
+export { signIn, signOut } from '@/test/auth'
 
 export const SERVICES: Service[] = [
   {

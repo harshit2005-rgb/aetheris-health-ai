@@ -8,6 +8,7 @@ import { Field } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
+import { FormDialog } from '@/components/forms/FormDialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
   useApproveDiscount,
@@ -22,7 +23,6 @@ import {
 import { usePermissions } from '@/hooks/usePermissions'
 import { formatMoney } from '@/lib/format'
 import { EditChargesDialog } from './EditChargesDialog'
-import { InvoiceFormDialog } from './InvoiceFormDialog'
 import {
   MONEY_PATTERN,
   PAYMENT_METHODS,
@@ -53,7 +53,7 @@ function MethodField<T extends FieldValues>({
         <Field label={label} required error={fieldState.error?.message}>
           {(p) => (
             <Select value={field.value} onValueChange={field.onChange}>
-              <SelectTrigger id={p.id} aria-invalid={p['aria-invalid']}>
+              <SelectTrigger ref={field.ref} id={p.id} aria-invalid={p['aria-invalid']}>
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -89,7 +89,7 @@ type PaymentValues = z.infer<typeof paymentSchema>
 function RecordPaymentDialog({ invoice, methods }: { invoice: Invoice; methods: PaymentMethod[] }) {
   const record = useRecordPayment(invoice.id)
   return (
-    <InvoiceFormDialog<PaymentValues>
+    <FormDialog<PaymentValues>
       trigger={
         <Button size="sm">
           <CreditCard className="size-4" /> Record payment
@@ -135,7 +135,7 @@ function RecordPaymentDialog({ invoice, methods }: { invoice: Invoice; methods: 
           </Field>
         </>
       )}
-    </InvoiceFormDialog>
+    </FormDialog>
   )
 }
 
@@ -157,7 +157,7 @@ type RefundValues = z.infer<typeof refundSchema>
 function RefundDialog({ invoice }: { invoice: Invoice }) {
   const refund = useRecordRefund(invoice.id)
   return (
-    <InvoiceFormDialog<RefundValues>
+    <FormDialog<RefundValues>
       trigger={
         <Button variant="outline" size="sm" className="text-error hover:text-error">
           <Undo2 className="size-4" /> Refund
@@ -206,7 +206,7 @@ function RefundDialog({ invoice }: { invoice: Invoice }) {
           </Field>
         </>
       )}
-    </InvoiceFormDialog>
+    </FormDialog>
   )
 }
 
@@ -235,7 +235,7 @@ type DiscountValues = z.infer<typeof discountSchema>
 function DiscountDialog({ invoice }: { invoice: Invoice }) {
   const update = useUpdateInvoice(invoice.id)
   return (
-    <InvoiceFormDialog<DiscountValues>
+    <FormDialog<DiscountValues>
       trigger={
         <Button variant="outline" size="sm">
           <Percent className="size-4" /> Discount
@@ -281,7 +281,7 @@ function DiscountDialog({ invoice }: { invoice: Invoice }) {
           </Field>
         </>
       )}
-    </InvoiceFormDialog>
+    </FormDialog>
   )
 }
 
@@ -294,7 +294,7 @@ type ConfirmValues = z.infer<typeof confirmSchema>
 function IssueInvoiceDialog({ invoice, blocked }: { invoice: Invoice; blocked?: string }) {
   const issue = useIssueInvoice(invoice.id)
   return (
-    <InvoiceFormDialog<ConfirmValues>
+    <FormDialog<ConfirmValues>
       trigger={
         <Button size="sm" disabled={!!blocked} title={blocked}>
           <Send className="size-4" /> Issue invoice
@@ -320,7 +320,7 @@ function IssueInvoiceDialog({ invoice, blocked }: { invoice: Invoice; blocked?: 
       }}
     >
       {() => null}
-    </InvoiceFormDialog>
+    </FormDialog>
   )
 }
 
@@ -337,7 +337,7 @@ type VoidValues = z.infer<typeof voidSchema>
 function VoidInvoiceDialog({ invoice }: { invoice: Invoice }) {
   const voidInvoice = useVoidInvoice(invoice.id)
   return (
-    <InvoiceFormDialog<VoidValues>
+    <FormDialog<VoidValues>
       trigger={
         <Button variant="outline" size="sm" className="text-error hover:text-error">
           <Ban className="size-4" /> Void
@@ -367,7 +367,7 @@ function VoidInvoiceDialog({ invoice }: { invoice: Invoice }) {
           {(p) => <Textarea rows={2} {...p} {...register('reason')} />}
         </Field>
       )}
-    </InvoiceFormDialog>
+    </FormDialog>
   )
 }
 
