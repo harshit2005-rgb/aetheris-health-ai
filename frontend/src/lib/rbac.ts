@@ -137,9 +137,21 @@ export type Permission =
   | 'pharmacy.vendor.update'
   | 'pharmacy.ai_substitute'
   // Inventory
-  | 'inventory.read'
-  | 'inventory.create'
-  | 'inventory.update'
+  | 'inventory.item.read'
+  | 'inventory.item.create'
+  | 'inventory.item.update'
+  | 'inventory.location.read'
+  | 'inventory.location.create'
+  | 'inventory.location.update'
+  | 'inventory.stock.read'
+  | 'inventory.consume'
+  | 'inventory.transfer'
+  | 'inventory.adjust'
+  | 'inventory.po.read'
+  | 'inventory.po.create'
+  | 'inventory.po.update'
+  | 'inventory.po.receive'
+  | 'inventory.forecast.read'
   // Reports
   | 'report.read'
   | 'report.export'
@@ -192,7 +204,11 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'pharmacy.po.read', 'pharmacy.po.create', 'pharmacy.po.update', 'pharmacy.po.receive',
     'pharmacy.vendor.read', 'pharmacy.vendor.create', 'pharmacy.vendor.update',
     'pharmacy.ai_substitute',
-    'inventory.read', 'inventory.create', 'inventory.update',
+    'inventory.item.read', 'inventory.item.create', 'inventory.item.update',
+    'inventory.location.read', 'inventory.location.create', 'inventory.location.update',
+    'inventory.stock.read', 'inventory.consume', 'inventory.transfer', 'inventory.adjust',
+    'inventory.po.read', 'inventory.po.create', 'inventory.po.update', 'inventory.po.receive',
+    'inventory.forecast.read',
     'report.read', 'report.export',
     'settings.read', 'settings.update',
     'department.read', 'department.create', 'department.update', 'department.delete',
@@ -226,7 +242,11 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'pharmacy.po.read', 'pharmacy.po.create', 'pharmacy.po.update', 'pharmacy.po.receive',
     'pharmacy.vendor.read', 'pharmacy.vendor.create', 'pharmacy.vendor.update',
     'pharmacy.ai_substitute',
-    'inventory.read', 'inventory.create', 'inventory.update',
+    'inventory.item.read', 'inventory.item.create', 'inventory.item.update',
+    'inventory.location.read', 'inventory.location.create', 'inventory.location.update',
+    'inventory.stock.read', 'inventory.consume', 'inventory.transfer', 'inventory.adjust',
+    'inventory.po.read', 'inventory.po.create', 'inventory.po.update', 'inventory.po.receive',
+    'inventory.forecast.read',
     'report.read', 'report.export',
     'settings.read', 'settings.update',
     'department.read', 'department.create', 'department.update', 'department.delete',
@@ -262,7 +282,10 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'dashboard.view',
     'patient.read', 'patient.update',
     'appointment.read', 'appointment.check_in',
-    'lab.order.read', 'department.read', 'doctor.read', 'doctor.availability.read',
+    'lab.order.read',
+    // Module spec 09 §3: ward staff view local stock and record what they use.
+    'inventory.item.read', 'inventory.location.read', 'inventory.stock.read', 'inventory.consume',
+    'department.read', 'doctor.read', 'doctor.availability.read',
   ],
   billing_staff: [
     'notification.read.own', 'notification.preference.update.own',

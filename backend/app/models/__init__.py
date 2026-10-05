@@ -43,6 +43,16 @@ from app.models.doctor import (
     SlotStatus,
 )
 from app.models.hospital import Hospital
+from app.models.inventory import (
+    InventoryItem,
+    InventoryLocation,
+    InventoryLocationKind,
+    InventoryMovement,
+    InventoryMovementReason,
+    InventoryPurchaseOrder,
+    InventoryPurchaseOrderItem,
+    InventoryStock,
+)
 from app.models.lab import (
     LabOrder,
     LabOrderItem,
@@ -122,6 +132,15 @@ __all__ = [
     "PaymentMethod",
     "Refund",
     "Service",
+    # Inventory
+    "InventoryItem",
+    "InventoryLocation",
+    "InventoryLocationKind",
+    "InventoryMovement",
+    "InventoryMovementReason",
+    "InventoryPurchaseOrder",
+    "InventoryPurchaseOrderItem",
+    "InventoryStock",
     # Laboratory
     "LabOrder",
     "LabOrderItem",
