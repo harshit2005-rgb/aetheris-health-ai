@@ -23,6 +23,7 @@ const DoctorsPage = lazy(() => import('@/pages/doctors/DoctorsPage'))
 const DoctorDetailPage = lazy(() => import('@/pages/doctors/DoctorDetailPage'))
 const AppointmentsPage = lazy(() => import('@/pages/appointments/AppointmentsPage'))
 const BillingPage = lazy(() => import('@/pages/billing/BillingPage'))
+const InvoiceDetailPage = lazy(() => import('@/pages/billing/InvoiceDetailPage'))
 const ReportsPage = lazy(() => import('@/pages/reports/ReportsPage'))
 const UsersPage = lazy(() => import('@/pages/users/UsersPage'))
 const SettingsPage = lazy(() => import('@/pages/settings/SettingsPage'))
@@ -100,10 +101,20 @@ export const router = createBrowserRouter([
             ),
           },
           {
+            // Either invoice read code opens Billing; the server narrows a
+            // doctor's list to their own visits (docs/18-API_CONTRACTS.md §6.11).
             path: '/billing',
             element: (
-              <RequirePermission permission="invoice.read">
+              <RequirePermission group="invoice.read">
                 <BillingPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/billing/:invoiceId',
+            element: (
+              <RequirePermission group="invoice.read">
+                <InvoiceDetailPage />
               </RequirePermission>
             ),
           },

@@ -7,6 +7,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Detail, InfoCard } from '@/components/ui/detail-card'
 import { formatDate } from '@/lib/format'
 import { usePatient, type Patient } from '@/api/patients'
+import { PatientInvoices } from '@/components/billing/PatientInvoices'
 
 const GENDER_LABEL: Record<Patient['gender'], string> = {
   male: 'Male',
@@ -117,6 +118,8 @@ export default function PatientDetailPage() {
           <Detail label="Current medications" value={medications || null} />
         </InfoCard>
       )}
+
+      <PatientInvoices patientId={patient.id} />
     </div>
   )
 }

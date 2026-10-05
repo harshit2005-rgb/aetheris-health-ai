@@ -107,6 +107,16 @@ export function useAppointments(
   })
 }
 
+/** One appointment's full record. Pass `enabled: false` for users without `appointment.read`. */
+export function useAppointment(id: string, options: ListQueryOptions = {}) {
+  return useQuery<Appointment>({
+    enabled: (options.enabled ?? true) && !!id,
+    queryKey: appointmentKeys.detail(id),
+    queryFn: () => http.get<Appointment>(`/appointments/${id}`),
+    staleTime: 15_000,
+  })
+}
+
 /** The lifecycle endpoints that take no body: `POST /appointments/{id}/{action}`. */
 export type AppointmentTransition = 'check-in' | 'start' | 'complete'
 
