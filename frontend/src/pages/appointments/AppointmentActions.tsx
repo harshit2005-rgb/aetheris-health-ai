@@ -5,12 +5,13 @@ import { Button } from '@/components/ui/button'
 import { useAppointmentTransition, type AppointmentSummary } from '@/api/appointments'
 import { usePermissions } from '@/hooks/usePermissions'
 import { CancelAppointmentDialog } from './CancelAppointmentDialog'
+import { MarkNoShowDialog } from './MarkNoShowDialog'
 import { RescheduleAppointmentDialog } from './RescheduleAppointmentDialog'
-import { CANCELLABLE, NEXT_STEP, RESCHEDULABLE, lifecycleErrorMessage } from './lifecycle'
+import { CANCELLABLE, NEXT_STEP, NO_SHOWABLE, RESCHEDULABLE, lifecycleErrorMessage } from './lifecycle'
 
 /**
  * The lifecycle actions for one queue row: the next step for its status, plus
- * Reschedule and Cancel where the API allows them. An action the user's permissions don't cover
+ * Reschedule, No-show and Cancel where the API allows them. An action the user's permissions don't cover
  * is not rendered — a convenience only; the backend enforces each one.
  */
 export function AppointmentActions({ appointment }: { appointment: AppointmentSummary }) {
@@ -23,12 +24,14 @@ export function AppointmentActions({ appointment }: { appointment: AppointmentSu
   const step = NEXT_STEP[appointment.status]
   const next = step && can(step.permission) ? step : undefined
   const canCancel = CANCELLABLE.has(appointment.status) && can('appointment.cancel')
+  // The no-show endpoint is guarded by `appointment.cancel`; it has no permission of its own.
+  const canMarkNoShow = NO_SHOWABLE.has(appointment.status) && can('appointment.cancel')
   // The new time is picked from the doctor's slots, which need their own permission.
   const canReschedule =
     RESCHEDULABLE.has(appointment.status) &&
     can('appointment.reschedule') &&
     can('doctor.availability.read')
-  if (!next && !canCancel && !canReschedule) return null
+  if (!next && !canCancel && !canReschedule && !canMarkNoShow) return null
 
   async function run() {
     if (!next || busy.current) return
@@ -62,6 +65,7 @@ export function AppointmentActions({ appointment }: { appointment: AppointmentSu
       {canReschedule && (
         <RescheduleAppointmentDialog appointment={appointment} disabled={transition.isPending} />
       )}
+      {canMarkNoShow && <MarkNoShowDialog appointment={appointment} disabled={transition.isPending} />}
       {canCancel && <CancelAppointmentDialog appointment={appointment} disabled={transition.isPending} />}
     </div>
   )

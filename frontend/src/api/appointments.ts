@@ -166,6 +166,26 @@ export function useCancelAppointment() {
   })
 }
 
+/**
+ * Mark an appointment as a no-show (`POST /appointments/{id}/no-show`, no
+ * body). Needs `appointment.cancel` — the API has no separate permission — and
+ * is accepted from `booked` or `checked_in`; anything else is a 400. Final,
+ * like a cancellation, and it gives the slot back the same way.
+ */
+export function useMarkNoShow() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (id: string) => http.post<Appointment>(`/appointments/${id}/no-show`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: doctorKeys.slots() })
+      return qc.invalidateQueries({ queryKey: appointmentKeys.all })
+    },
+    onError: (err) => {
+      if (isStaleAppointment(err)) qc.invalidateQueries({ queryKey: appointmentKeys.all })
+    },
+  })
+}
+
 /** Body for `PATCH /appointments/{id}` (`RescheduleAppointmentRequest`). Nothing else is accepted. */
 export interface RescheduleAppointmentInput {
   scheduled_start: string

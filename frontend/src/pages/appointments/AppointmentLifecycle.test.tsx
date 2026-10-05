@@ -148,7 +148,7 @@ async function actionsIn(patient: string) {
   const row = await rowOf(patient)
   return within(row)
     .queryAllByRole('button')
-    .map((b) => b.textContent)
+    .map((b) => b.textContent?.trim())
 }
 
 describe('appointment lifecycle actions', () => {
@@ -163,8 +163,8 @@ describe('appointment lifecycle actions', () => {
     ]
     renderQueue(ADMIN)
 
-    expect(await actionsIn('Booked Patient')).toEqual(['Check in', 'Cancel'])
-    expect(await actionsIn('Arrived Patient')).toEqual(['Start', 'Cancel'])
+    expect(await actionsIn('Booked Patient')).toEqual(['Check in', 'No-show', 'Cancel'])
+    expect(await actionsIn('Arrived Patient')).toEqual(['Start', 'No-show', 'Cancel'])
     expect(await actionsIn('Consulting Patient')).toEqual(['Complete'])
     expect(await actionsIn('Done Patient')).toEqual([])
     expect(await actionsIn('Dropped Patient')).toEqual([])
@@ -172,7 +172,7 @@ describe('appointment lifecycle actions', () => {
   })
 
   it.each([
-    { from: 'booked', button: 'Check in', path: 'check-in', badge: 'Checked in', next: ['Start', 'Cancel'], toast: 'Patient checked in' },
+    { from: 'booked', button: 'Check in', path: 'check-in', badge: 'Checked in', next: ['Start', 'No-show', 'Cancel'], toast: 'Patient checked in' },
     { from: 'checked_in', button: 'Start', path: 'start', badge: 'In progress', next: ['Complete'], toast: 'Consultation started' },
     { from: 'in_progress', button: 'Complete', path: 'complete', badge: 'Completed', next: [], toast: 'Consultation completed' },
   ] as const)('$button posts to /$path and the row moves on', async ({ from, button, path, badge, next, toast }) => {
@@ -261,7 +261,7 @@ describe('appointment lifecycle actions', () => {
     finish(ok(null))
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledTimes(1))
     expect(posts()).toHaveLength(1)
-    expect(await actionsIn('Ravi Menon')).toEqual(['Start', 'Cancel'])
+    expect(await actionsIn('Ravi Menon')).toEqual(['Start', 'No-show', 'Cancel'])
   })
 })
 
@@ -408,8 +408,8 @@ describe('appointment lifecycle permissions', () => {
     server = all()
     renderQueue(RECEPTIONIST)
 
-    expect(await actionsIn('Booked Patient')).toEqual(['Check in', 'Cancel'])
-    expect(await actionsIn('Arrived Patient')).toEqual(['Cancel'])
+    expect(await actionsIn('Booked Patient')).toEqual(['Check in', 'No-show', 'Cancel'])
+    expect(await actionsIn('Arrived Patient')).toEqual(['No-show', 'Cancel'])
     expect(await actionsIn('Consulting Patient')).toEqual([])
   })
 

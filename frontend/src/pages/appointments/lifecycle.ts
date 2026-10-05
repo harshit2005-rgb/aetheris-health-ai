@@ -61,6 +61,12 @@ export const NEXT_STEP: Partial<Record<AppointmentStatus, LifecycleStep>> = {
 /** Statuses the cancel endpoint accepts (module spec §5.4). */
 export const CANCELLABLE: ReadonlySet<AppointmentStatus> = new Set(['booked', 'checked_in'])
 
+/**
+ * Statuses the no-show endpoint accepts: any that is not terminal and not
+ * already a consultation (`ALLOWED_TRANSITIONS` in the appointment service).
+ */
+export const NO_SHOWABLE: ReadonlySet<AppointmentStatus> = new Set(['booked', 'checked_in'])
+
 /** Statuses the reschedule endpoint accepts (module spec §5.3): not once the patient has checked in. */
 export const RESCHEDULABLE: ReadonlySet<AppointmentStatus> = new Set(['booked'])
 

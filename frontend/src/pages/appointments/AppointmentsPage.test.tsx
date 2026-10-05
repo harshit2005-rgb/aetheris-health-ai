@@ -23,6 +23,7 @@ vi.mock('@/api/appointments', () => ({
   useBookAppointment: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useAppointmentTransition: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useCancelAppointment: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useMarkNoShow: () => ({ mutateAsync: vi.fn(), isPending: false }),
   appointmentKeys: { all: ['appointments'] },
 }))
 // The queue header renders the (closed) BookAppointmentDialog, whose hooks run.
