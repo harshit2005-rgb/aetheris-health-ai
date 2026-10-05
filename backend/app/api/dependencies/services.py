@@ -46,6 +46,8 @@ from app.api.dependencies.repositories import (  # noqa: F401
     get_hospital_repository,
     get_invoice_number_sequence_repository,
     get_invoice_repository,
+    get_lab_order_repository,
+    get_lab_test_repository,
     get_mrn_sequence_repository,
     get_notification_repository,
     get_password_reset_token_repository,
@@ -57,6 +59,7 @@ from app.api.dependencies.repositories import (  # noqa: F401
     get_user_repository,
 )
 from app.core.audit import AuditSink
+from app.core.charges import ChargeSink
 from app.core.notifications import Notifier
 from app.database.unit_of_work import UnitOfWork
 from app.repositories import (
@@ -67,6 +70,8 @@ from app.repositories import (
     HospitalRepository,
     InvoiceNumberSequenceRepository,
     InvoiceRepository,
+    LabOrderRepository,
+    LabTestRepository,
     MrnSequenceRepository,
     NotificationRepository,
     PasswordResetTokenRepository,
@@ -93,6 +98,8 @@ from app.services.doctor_service import (
     DoctorService,
 )
 from app.services.hospital_service import HospitalService
+from app.services.lab_catalog_service import LabCatalogService
+from app.services.lab_service import LabService
 from app.services.mrn_service import MRNService
 from app.services.notification_service import NotificationService
 from app.services.patient_service import PatientService
@@ -370,6 +377,41 @@ def get_billing_service(
     )
 
 
+def get_charge_sink(billing: BillingService = Depends(get_billing_service)) -> ChargeSink:
+    """Provide the :class:`~app.core.charges.ChargeSink` other modules charge through.
+
+    Laboratory and Pharmacy depend on the protocol, not on Billing, so they
+    can be built and tested without it. Billing shares the request session, so
+    a charge commits or rolls back with the order or dispense that raised it.
+    """
+    return billing
+
+
+# ── Laboratory module ───────────────────────────────────────────────────────
+def get_lab_catalog_service(
+    tests: LabTestRepository = Depends(get_lab_test_repository),
+    session: AsyncSession = Depends(get_db_session),
+    audit: AuditSink = Depends(get_audit_sink),
+) -> LabCatalogService:
+    """Provide a :class:`LabCatalogService` bound to the request session."""
+    return LabCatalogService(tests, session, audit)
+
+
+def get_lab_service(
+    orders: LabOrderRepository = Depends(get_lab_order_repository),
+    tests: LabTestRepository = Depends(get_lab_test_repository),
+    appointments: AppointmentRepository = Depends(get_appointment_repository),
+    session: AsyncSession = Depends(get_db_session),
+    audit: AuditSink = Depends(get_audit_sink),
+    charges: ChargeSink = Depends(get_charge_sink),
+    notifier: Notifier = Depends(get_notifier),
+) -> LabService:
+    """Provide a :class:`LabService` bound to the request session."""
+    return LabService(
+        orders, tests, appointments, session, audit, charges=charges, notifier=notifier
+    )
+
+
 # ── Appointment module ──────────────────────────────────────────────────────
 def get_invoice_draft_sink(
     billing: BillingService = Depends(get_billing_service),
@@ -463,6 +505,10 @@ __all__ = [
     "get_notifier",
     # Billing module
     "get_billing_service",
+    "get_charge_sink",
+    # Laboratory module
+    "get_lab_catalog_service",
+    "get_lab_service",
     "get_service_catalog_service",
     # Appointment module
     "get_appointment_service",

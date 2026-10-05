@@ -27,6 +27,8 @@ from app.repositories.doctor_repository import DoctorRepository
 from app.repositories.hospital_repository import HospitalRepository
 from app.repositories.invoice_number_sequence_repository import InvoiceNumberSequenceRepository
 from app.repositories.invoice_repository import InvoiceRepository
+from app.repositories.lab_order_repository import LabOrderRepository
+from app.repositories.lab_test_repository import LabTestRepository
 from app.repositories.mrn_sequence_repository import MrnSequenceRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
@@ -46,6 +48,8 @@ __all__ = [
     "HospitalRepository",
     "InvoiceNumberSequenceRepository",
     "InvoiceRepository",
+    "LabOrderRepository",
+    "LabTestRepository",
     "MrnSequenceRepository",
     "NotificationRepository",
     "PatientRepository",

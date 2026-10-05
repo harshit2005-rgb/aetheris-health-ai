@@ -145,6 +145,43 @@ KINDS: dict[str, NotificationKind] = {
                 "${action_url}"
             ),
         ),
+        # Lab kinds have no email form on purpose: a result is clinical
+        # information about a named patient, and stays inside the application.
+        NotificationKind(
+            code="lab.results_released",
+            category="Laboratory",
+            label="Lab results released",
+            title="Lab results ready for ${patient_name}",
+            body="Results for ${patient_name} have been released: ${test_names}.",
+            link="/laboratory",
+            default_channels=frozenset({_IN_APP}),
+        ),
+        NotificationKind(
+            code="lab.critical_result",
+            category="Laboratory",
+            label="Critical lab result",
+            title="Critical result for ${patient_name}",
+            body=(
+                "${test_name} for ${patient_name} is ${result}, which is in the critical "
+                "range. The result has not been released yet."
+            ),
+            link="/laboratory",
+            default_channels=frozenset({_IN_APP}),
+            critical=True,
+        ),
+        NotificationKind(
+            code="lab.result_amended",
+            category="Laboratory",
+            label="Lab result corrected",
+            title="A lab result for ${patient_name} was corrected",
+            body=(
+                "${test_name} for ${patient_name} was corrected from ${previous_result} to "
+                "${result}. Reason: ${reason}"
+            ),
+            link="/laboratory",
+            default_channels=frozenset({_IN_APP}),
+            critical=True,
+        ),
         NotificationKind(
             code="system.broadcast",
             category="Announcements",

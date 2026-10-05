@@ -37,6 +37,8 @@ from app.repositories import (
     HospitalRepository,
     InvoiceNumberSequenceRepository,
     InvoiceRepository,
+    LabOrderRepository,
+    LabTestRepository,
     MrnSequenceRepository,
     NotificationRepository,
     PasswordResetTokenRepository,
@@ -127,6 +129,16 @@ def get_invoice_number_sequence_repository(
 ) -> InvoiceNumberSequenceRepository:
     """Provide an :class:`InvoiceNumberSequenceRepository` bound to the request session."""
     return InvoiceNumberSequenceRepository(session)
+
+
+def get_lab_test_repository(session: DbSession) -> LabTestRepository:
+    """Provide a :class:`LabTestRepository` bound to the request session."""
+    return LabTestRepository(session)
+
+
+def get_lab_order_repository(session: DbSession) -> LabOrderRepository:
+    """Provide a :class:`LabOrderRepository` bound to the request session."""
+    return LabOrderRepository(session)
 
 
 def get_notification_repository(session: DbSession) -> NotificationRepository:

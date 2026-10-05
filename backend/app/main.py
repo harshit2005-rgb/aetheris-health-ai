@@ -27,11 +27,13 @@ from app.api.v1 import (
     health_router,
     hospital_router,
     invoice_router,
+    lab_order_router,
     notification_router,
     patient_router,
     permission_router,
     role_router,
     service_router,
+    tests_catalog_router,
     user_router,
 )
 from app.core.config import settings
@@ -223,6 +225,16 @@ def _register_routers(app: FastAPI) -> None:
     )
     app.include_router(
         invoice_router,
+        prefix=API_V1_PREFIX,
+    )
+
+    # Laboratory routes — test catalog and lab orders
+    app.include_router(
+        tests_catalog_router,
+        prefix=API_V1_PREFIX,
+    )
+    app.include_router(
+        lab_order_router,
         prefix=API_V1_PREFIX,
     )
 

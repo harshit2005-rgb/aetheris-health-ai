@@ -65,6 +65,7 @@ from app.models.patient import BloodGroup, Gender, Patient
 from app.models.user import User, UserRole, UserStatus
 from app.repositories.mrn_sequence_repository import MrnSequenceRepository
 from app.seeds.demo_billing import seed_demo_billing
+from app.seeds.demo_lab import seed_demo_lab
 from app.services.mrn_service import MRNService
 
 if TYPE_CHECKING:
@@ -1228,5 +1229,6 @@ async def seed_demo_data(
     await _seed_appointments(session, hospital, doctors, patients, today=today, actor_id=actor_id)
     # After the appointments: seeded invoices bill the completed ones.
     await seed_demo_billing(session, hospital, patients, zone=CLINIC_TZ, actor_id=actor_id)
+    await seed_demo_lab(session, hospital)
 
     logger.info("demo_data_seeded")

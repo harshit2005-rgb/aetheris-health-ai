@@ -99,9 +99,18 @@ PERMISSION_DEFINITIONS: list[tuple[str, str, str]] = [
     ("notification.template.update", "notification", "Edit notification templates"),
     ("notification.delivery.read", "notification", "View the notification delivery log"),
     # Laboratory
-    ("lab.read", "lab", "View lab orders and results"),
-    ("lab.create", "lab", "Create lab orders"),
-    ("lab.update", "lab", "Update lab results"),
+    ("lab.test.read", "lab", "View the lab test catalog"),
+    ("lab.test.create", "lab", "Add tests to the lab catalog"),
+    ("lab.test.update", "lab", "Edit and retire lab tests"),
+    ("lab.order.read", "lab", "View lab orders and results"),
+    ("lab.order.create", "lab", "Order lab tests"),
+    ("lab.order.cancel", "lab", "Cancel a lab order"),
+    ("lab.order.collect_sample", "lab", "Record sample collection"),
+    ("lab.order.enter_results", "lab", "Enter lab results"),
+    ("lab.order.release", "lab", "Release lab results"),
+    ("lab.order.amend", "lab", "Correct a released lab result"),
+    ("lab.report.download", "lab", "Download lab report PDFs"),
+    ("lab.ai_explain", "lab", "Request an AI explanation of lab results"),
     # Pharmacy
     ("pharmacy.read", "pharmacy", "View prescriptions and inventory"),
     ("pharmacy.dispense", "pharmacy", "Dispense medications"),
@@ -186,9 +195,18 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "invoice.refund",
             "invoice.pdf.download",
             "invoice.ai_explain",
-            "lab.read",
-            "lab.create",
-            "lab.update",
+            "lab.test.read",
+            "lab.test.create",
+            "lab.test.update",
+            "lab.order.read",
+            "lab.order.create",
+            "lab.order.cancel",
+            "lab.order.collect_sample",
+            "lab.order.enter_results",
+            "lab.order.release",
+            "lab.order.amend",
+            "lab.report.download",
+            "lab.ai_explain",
             "pharmacy.read",
             "pharmacy.dispense",
             "inventory.read",
@@ -262,14 +280,23 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "invoice.refund",
             "invoice.pdf.download",
             "invoice.ai_explain",
-            "lab.read",
+            "lab.test.read",
+            "lab.test.create",
+            "lab.test.update",
+            "lab.order.read",
+            "lab.order.create",
+            "lab.order.cancel",
+            "lab.order.collect_sample",
+            "lab.order.enter_results",
+            "lab.order.release",
+            "lab.order.amend",
+            "lab.report.download",
+            "lab.ai_explain",
             # The Hospital Admin is "full access within a single hospital", so
             # its grant must cover every hospital-scoped role. Role assignment
             # enforces BR-8 (an admin may only hand out permissions they hold),
             # and without these five the admin could not invite a Doctor, Lab
             # Technician, Pharmacist or Inventory Manager at all.
-            "lab.create",
-            "lab.update",
             "pharmacy.read",
             "pharmacy.dispense",
             "inventory.read",
@@ -312,8 +339,10 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             # docs/modules/06-billing.md §3: "view invoices for their patients",
             # scoped to appointments where they are the doctor.
             "invoice.read.own",
-            "lab.read",
-            "lab.create",
+            "lab.test.read",
+            "lab.order.read",
+            "lab.order.create",
+            "lab.order.cancel",
             "report.read",
             "department.read",
             "doctor.read",
@@ -334,7 +363,7 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "patient.update",
             "appointment.read",
             "appointment.check_in",
-            "lab.read",
+            "lab.order.read",
             "department.read",
             "doctor.read",
             "doctor.availability.read",
@@ -393,9 +422,10 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             # Every role reads its own notifications (module spec 11 §3).
             "notification.read.own",
             "notification.preference.update.own",
-            "lab.read",
-            "lab.create",
-            "lab.update",
+            "lab.test.read",
+            "lab.order.read",
+            "lab.order.collect_sample",
+            "lab.order.enter_results",
             "department.read",
         ],
     ),
@@ -626,6 +656,34 @@ async def seed_database(database_url: str | None = None) -> None:
         else:
             logger.info("demo_receptionist_exists", email=receptionist_email)
 
+        # ── 6b. Create Demo Lab Technician User ──────────────────────────────
+        lab_email = "lab@demohospital.com"
+        lab_result = await session.execute(
+            select(User).where(User.email == lab_email, User.hospital_id == hospital.id)
+        )
+        lab_user = lab_result.unique().scalar_one_or_none()
+
+        if lab_user is None:
+            lab_user = User(
+                hospital_id=hospital.id,
+                email=lab_email,
+                password_hash=hash_password("LabTech@1234567"),
+                first_name="Arjun",
+                last_name="Pillai",
+                status=UserStatus.ACTIVE,
+                password_changed_at=datetime.now(UTC),
+            )
+            session.add(lab_user)
+            await session.flush()
+
+            lab_role = role_map.get("Lab Technician")
+            if lab_role:
+                session.add(UserRole(user_id=lab_user.id, role_id=lab_role.id))
+
+            logger.info("demo_lab_technician_created", email=lab_email)
+        else:
+            logger.info("demo_lab_technician_exists", email=lab_email)
+
         # ── 7. Demo Clinical Data ────────────────────────────────────────────
         # Departments, doctors, patients, appointments and billing, so the
         # frontend has real data to build against. Same transaction, same
@@ -636,7 +694,11 @@ async def seed_database(database_url: str | None = None) -> None:
         await session.commit()
         logger.info("database_seeded_successfully")
         logger.info(
-            "demo_credentials", admin=admin_email, doctor=doctor_email, reception=receptionist_email
+            "demo_credentials",
+            admin=admin_email,
+            doctor=doctor_email,
+            reception=receptionist_email,
+            lab=lab_email,
         )
 
 
