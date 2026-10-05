@@ -35,6 +35,8 @@ from app.repositories import (
     DepartmentRepository,
     DoctorRepository,
     HospitalRepository,
+    InventoryPurchaseOrderRepository,
+    InventoryRepository,
     InvoiceNumberSequenceRepository,
     InvoiceRepository,
     LabOrderRepository,
@@ -157,6 +159,16 @@ def get_prescription_repository(session: DbSession) -> PrescriptionRepository:
 def get_procurement_repository(session: DbSession) -> ProcurementRepository:
     """Provide a :class:`ProcurementRepository` bound to the request session."""
     return ProcurementRepository(session)
+
+
+def get_inventory_repository(session: DbSession) -> InventoryRepository:
+    """Provide an :class:`InventoryRepository` bound to the request session."""
+    return InventoryRepository(session)
+
+
+def get_inventory_po_repository(session: DbSession) -> InventoryPurchaseOrderRepository:
+    """Provide an :class:`InventoryPurchaseOrderRepository` bound to the request session."""
+    return InventoryPurchaseOrderRepository(session)
 
 
 def get_notification_repository(session: DbSession) -> NotificationRepository:

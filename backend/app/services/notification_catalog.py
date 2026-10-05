@@ -183,6 +183,26 @@ KINDS: dict[str, NotificationKind] = {
             critical=True,
         ),
         NotificationKind(
+            code="inventory.low_stock",
+            category="Inventory",
+            label="Item running low",
+            title="${item_name} is running low",
+            body=(
+                "${item_name} is down to ${quantity} ${unit_of_measure} across the hospital, "
+                "at or below its reorder point of ${reorder_point}."
+            ),
+            link="/inventory",
+            default_channels=frozenset({_IN_APP}),
+            email_subject="${item_name} is running low",
+            email_body=(
+                "Hello ${first_name},\n\n"
+                "${item_name} is down to ${quantity} ${unit_of_measure} across the hospital, "
+                "at or below its reorder point of ${reorder_point}.\n\n"
+                "Review stock and raise a purchase order:\n"
+                "${action_url}"
+            ),
+        ),
+        NotificationKind(
             code="system.broadcast",
             category="Announcements",
             label="Announcements from your hospital",
