@@ -17,6 +17,7 @@ import { useMyProfile, useUpdateMyProfile } from '@/api/profile'
 import { useAuthStore } from '@/store/auth-store'
 import { ChangePasswordDialog } from './ChangePasswordDialog'
 import { MfaCard } from './MfaCard'
+import { NotificationPreferencesCard } from './NotificationPreferencesCard'
 
 /** Optional phone: either blank or E.164, matching `UserProfileUpdateRequest`. */
 const phoneOrEmpty = z.union([
@@ -96,7 +97,7 @@ export default function ProfilePage() {
   if (isError) {
     return (
       <div className="w-full">
-        <PageHeader title="My profile" subtitle="Your account details and security." />
+        <PageHeader title="My profile" subtitle="Your account details, security and notifications." />
         <Alert variant="error" title="Couldn't load your profile">
           Something went wrong fetching your account.{' '}
           <button onClick={() => refetch()} className="text-secondary font-bold hover:underline">
@@ -109,7 +110,7 @@ export default function ProfilePage() {
 
   return (
     <div className="w-full max-w-3xl">
-      <PageHeader title="My profile" subtitle="Your account details and security." />
+      <PageHeader title="My profile" subtitle="Your account details, security and notifications." />
 
       <div className="space-y-6">
         <Card>
@@ -202,6 +203,8 @@ export default function ProfilePage() {
         </Card>
 
         <MfaCard enabled={!!profile?.mfa_enabled} loading={isLoading} />
+
+        <NotificationPreferencesCard />
       </div>
     </div>
   )

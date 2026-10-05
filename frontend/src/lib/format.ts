@@ -24,6 +24,24 @@ export function formatTime(iso: string): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleTimeString(undefined, { timeStyle: 'short' })
 }
 
+/**
+ * How long ago something happened, in the viewer's language: "now",
+ * "5 minutes ago", "yesterday". Past a week it is clearer as a date, so it
+ * falls back to {@link formatDate}. `now` is injectable for tests.
+ */
+export function formatRelativeTime(iso: string, now: number = Date.now()): string {
+  const then = new Date(iso).getTime()
+  if (Number.isNaN(then)) return iso
+  const seconds = Math.round((then - now) / 1000)
+  const elapsed = Math.abs(seconds)
+  const relative = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' })
+  if (elapsed < 45) return relative.format(0, 'second')
+  if (elapsed < 3600) return relative.format(Math.round(seconds / 60), 'minute')
+  if (elapsed < 86_400) return relative.format(Math.round(seconds / 3600), 'hour')
+  if (elapsed < 7 * 86_400) return relative.format(Math.round(seconds / 86_400), 'day')
+  return formatDate(iso)
+}
+
 /** Today's date in the viewer's local timezone as YYYY-MM-DD (for date inputs and day filters). */
 export function todayISODate(): string {
   const d = new Date()

@@ -1,6 +1,7 @@
-import { Menu, Search, Bell, Sparkles } from 'lucide-react'
+import { Menu, Search, Sparkles } from 'lucide-react'
 import Breadcrumbs from '@/components/layout/Breadcrumbs'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
+import { NotificationBell } from '@/components/notifications/NotificationBell'
 import { useAuthStore } from '@/store/auth-store'
 import { ROLE_LABELS } from '@/lib/rbac'
 
@@ -52,16 +53,7 @@ export default function TopBar({ onOpenSidebar, onOpenCopilot }: TopBarProps) {
       <div className="flex items-center gap-1.5">
         <ThemeToggle />
 
-        {/* Notifications — no data source yet; disabled, no unread dot (F10) */}
-        <button
-          type="button"
-          disabled
-          aria-label="Notifications (coming soon)"
-          title="Notifications — coming soon"
-          className="text-outline-variant flex size-10 cursor-not-allowed items-center justify-center rounded-lg opacity-60"
-        >
-          <Bell className="size-5" />
-        </button>
+        <NotificationBell />
 
         <button
           type="button"
