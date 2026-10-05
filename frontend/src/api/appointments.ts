@@ -1,5 +1,7 @@
+import { useRef } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { http } from '@/api/http'
+import { newIdempotencyKey } from '@/api/idempotency'
 import type { Paginated, ListQueryOptions } from '@/api/types'
 
 /**
@@ -105,12 +107,32 @@ export function useAppointments(
   })
 }
 
-/** Book an appointment, then refresh the queue. Throws ApiError (409 on doctor overlap). */
+/**
+ * Book an appointment, then refresh the queue. Throws ApiError (409 on doctor overlap).
+ *
+ * `POST /appointments` requires an `Idempotency-Key` (docs/18-API_CONTRACTS.md
+ * §5.2). The key belongs to one logical booking: resubmitting the same details
+ * after a timeout or a dropped connection reuses it, so the server replays the
+ * original appointment (200) instead of booking twice. Changed details are a
+ * different booking and get a new key — the server answers a known key with the
+ * appointment it already holds, whatever the new body says.
+ */
 export function useBookAppointment() {
   const qc = useQueryClient()
+  const attempt = useRef<{ fingerprint: string; key: string } | null>(null)
   return useMutation({
-    mutationFn: (input: BookAppointmentInput) => http.post<Appointment>('/appointments', input),
+    mutationFn: (input: BookAppointmentInput) => {
+      const fingerprint = JSON.stringify(input)
+      if (attempt.current?.fingerprint !== fingerprint) {
+        attempt.current = { fingerprint, key: newIdempotencyKey() }
+      }
+      return http.post<Appointment>('/appointments', input, {
+        headers: { 'Idempotency-Key': attempt.current.key },
+      })
+    },
     onSuccess: () => {
+      // Booked: the next submission is a new booking even if the details match.
+      attempt.current = null
       qc.invalidateQueries({ queryKey: appointmentKeys.all })
     },
   })

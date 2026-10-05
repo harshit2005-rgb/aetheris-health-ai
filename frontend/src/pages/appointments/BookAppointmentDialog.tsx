@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useState } from 'react'
+import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { Controller, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -41,10 +41,27 @@ const schema = z.object({
   time: z.string().min(1, 'Pick a time'),
   duration: z.coerce.number().int().positive(),
   type: z.enum(['new', 'follow_up', 'walk_in', 'emergency']),
-  reason: z.string().max(2000).optional(),
+  // Module spec §11: the API rejects a reason over 500 characters.
+  reason: z.string().max(500, 'Keep the reason under 500 characters').optional(),
 })
 
 type FormValues = z.input<typeof schema>
+
+/** Where a field named in a 422 from the API is shown on this form. */
+const SERVER_FIELDS: Record<string, keyof FormValues> = {
+  patient_id: 'patient_id',
+  doctor_id: 'doctor_id',
+  scheduled_start: 'time',
+  scheduled_end: 'time',
+  type: 'type',
+  reason: 'reason',
+}
+
+interface Notice {
+  variant: 'warning' | 'error'
+  title: string
+  body: string
+}
 
 /** Searchable patient picker. Shows the chosen patient as a chip once selected. */
 function PatientPicker({
@@ -136,7 +153,10 @@ function PatientPicker({
 /** Basic appointment booking: patient + doctor + time + type. Handles the 409 conflict. */
 export function BookAppointmentDialog({ trigger }: { trigger: ReactNode }) {
   const [open, setOpen] = useState(false)
-  const [conflict, setConflict] = useState<string | null>(null)
+  const [notice, setNotice] = useState<Notice | null>(null)
+  // `isPending` only disables the button after a re-render; this also stops a
+  // second submit (double click, Enter held down) fired before that happens.
+  const submitting = useRef(false)
   const book = useBookAppointment()
   const { data: doctorsPage } = useDoctors({ page: 1, page_size: 100 })
   const doctors = doctorsPage?.items ?? []
@@ -157,12 +177,13 @@ export function BookAppointmentDialog({ trigger }: { trigger: ReactNode }) {
     setOpen(next)
     if (!next) {
       reset()
-      setConflict(null)
+      setNotice(null)
     }
   }
 
   async function onSubmit(values: FormValues) {
-    setConflict(null)
+    if (submitting.current) return
+    setNotice(null)
     const start = new Date(`${values.date}T${values.time}`)
     if (Number.isNaN(start.getTime())) {
       setError('date', { message: 'Enter a valid date and time' })
@@ -178,28 +199,43 @@ export function BookAppointmentDialog({ trigger }: { trigger: ReactNode }) {
       ...(values.reason ? { reason: values.reason } : {}),
     }
 
+    submitting.current = true
     try {
       await book.mutateAsync(payload)
       toast.success('Appointment booked')
       closeAndReset(false)
     } catch (err) {
       if (err instanceof ApiError && err.status === 409) {
-        setConflict('That doctor already has an appointment in this window. Pick another time.')
+        setNotice({
+          variant: 'warning',
+          title: 'Time unavailable',
+          body: 'That doctor already has an appointment in this window. Pick another time.',
+        })
         return
       }
       if (err instanceof ApiError && Array.isArray(err.details)) {
         const fieldErrors = err.details as Array<{ field?: string; message?: string }>
-        let mapped = false
+        const unmapped: string[] = []
         for (const fe of fieldErrors) {
-          if (fe.field && fe.field in schema.shape) {
-            setError(fe.field as keyof FormValues, { message: fe.message ?? 'Invalid value' })
-            mapped = true
-          }
+          const target = fe.field ? SERVER_FIELDS[fe.field] : undefined
+          if (target) setError(target, { message: fe.message ?? 'Invalid value' })
+          else if (fe.message) unmapped.push(fe.message)
         }
-        if (!mapped) toast.error(err.message)
+        // Errors about the whole request (the booking window, a header) have no
+        // field to sit under, so they are shown above the form instead.
+        if (unmapped.length > 0) {
+          setNotice({ variant: 'error', title: "Couldn't book", body: unmapped.join(' ') })
+        }
+        return
+      }
+      // 400 is a business rule the user can act on, e.g. outside availability.
+      if (err instanceof ApiError && (err.status === 400 || err.status === 422)) {
+        setNotice({ variant: 'error', title: "Couldn't book", body: err.message })
         return
       }
       toast.error(err instanceof ApiError ? err.message : 'Could not book the appointment.')
+    } finally {
+      submitting.current = false
     }
   }
 
@@ -212,10 +248,10 @@ export function BookAppointmentDialog({ trigger }: { trigger: ReactNode }) {
           <DialogDescription>Schedule a patient with a doctor.</DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-          {conflict && (
-            <Alert variant="warning" title="Time unavailable">
-              {conflict}
+        <form onSubmit={(e) => handleSubmit(onSubmit)(e)} className="space-y-4" noValidate>
+          {notice && (
+            <Alert variant={notice.variant} title={notice.title}>
+              {notice.body}
             </Alert>
           )}
 
@@ -323,9 +359,9 @@ export function BookAppointmentDialog({ trigger }: { trigger: ReactNode }) {
             <Button type="button" variant="ghost" onClick={() => closeAndReset(false)}>
               Cancel
             </Button>
-            <Button type="submit" disabled={book.isPending}>
+            <Button type="submit" disabled={book.isPending} aria-busy={book.isPending}>
               {book.isPending ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-              Book
+              {book.isPending ? 'Booking…' : 'Book'}
             </Button>
           </DialogFooter>
         </form>
