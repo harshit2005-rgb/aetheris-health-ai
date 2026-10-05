@@ -1,7 +1,7 @@
 # 18 — Frontend API Contract Reference
 
 The exact request/response contracts for the endpoints the frontend consumes today:
-**Patients, Departments, Doctors, Appointments, Billing, Notifications**. Written so a frontend module
+**Patients, Departments, Doctors, Appointments, Billing, Notifications, Laboratory**. Written so a frontend module
 can be built without reading backend code or guessing a shape.
 
 **Source of truth.** Every contract below was read out of the implementation, not the
@@ -119,7 +119,7 @@ refresh itself fails the session is cleared and route guards send the user to `/
 Keep that shape if you touch it, and give any second client the same single-flight guard.
 
 > **Diverges from `CLAUDE.md`,** which specifies the refresh token as an HTTP-only cookie.
-> That is the intended design; what ships is the body-based flow above. See §10.
+> That is the intended design; what ships is the body-based flow above. See §11.
 
 ### 1.5 Tenancy
 
@@ -1165,6 +1165,9 @@ the caller, so the page can be drawn from this response alone:
 | `auth.password_reset_requested` | `POST /auth/password/forgot` | That user | in-app + email | ✅ |
 | `billing.discount_approval_requested` | A draft's discount goes above the hospital's threshold (§6.7), or a pending discount's amount changes | Every active user holding `invoice.approve_discount`, except the person who applied it | in-app | — |
 | `system.broadcast` | `POST /notifications/broadcast` | The role, or the whole hospital | in-app | — |
+| `lab.critical_result` | A result is entered in the critical range (§8.5) | The ordering doctor | in-app only | ✅ |
+| `lab.results_released` | A lab order is released (§8.5) | The ordering doctor | in-app only | — |
+| `lab.result_amended` | A released result is corrected (§8.6) | The ordering doctor | in-app only | ✅ |
 
 The invitation and reset emails carry the single-use link
 `{FRONTEND_BASE_URL}/reset-password?token=…`, which is the frontend's existing
@@ -1224,7 +1227,247 @@ emails. Recipients are staff users only.
 
 ---
 
-## 8. Frontend ↔ backend mapping (mismatch resolution)
+## 8. Laboratory
+
+`backend/app/api/v1/tests_catalog.py` · `backend/app/api/v1/lab_orders.py` ·
+`backend/app/schemas/lab.py`
+
+The core of [modules/07-laboratory.md](modules/07-laboratory.md): a test catalog with
+reference ranges, and lab orders taken from order through sample collection and result
+entry to release, with corrections after release. **PDF reports and AI explain are not
+built** — see §8.8.
+
+### 8.1 Endpoints
+
+| Method | Path | Permission | Success |
+|---|---|---|---|
+| GET | `/api/v1/tests-catalog` | `lab.test.read` | 200 (paginated) |
+| POST | `/api/v1/tests-catalog` | `lab.test.create` | 201 |
+| GET | `/api/v1/tests-catalog/{test_id}` | `lab.test.read` | 200 |
+| PATCH | `/api/v1/tests-catalog/{test_id}` | `lab.test.update` | 200 |
+| GET | `/api/v1/lab-orders` | `lab.order.read` | 200 (paginated) |
+| POST | `/api/v1/lab-orders` | `lab.order.create` | 201 |
+| GET | `/api/v1/lab-orders/{order_id}` | `lab.order.read` | 200 |
+| PATCH | `/api/v1/lab-orders/{order_id}` | `lab.order.create` | 200 — priority and notes only |
+| POST | `/api/v1/lab-orders/{order_id}/collect` | `lab.order.collect_sample` | 200 |
+| POST | `/api/v1/lab-orders/{order_id}/enter-results` | `lab.order.enter_results` | 200 |
+| POST | `/api/v1/lab-orders/{order_id}/release` | `lab.order.release` | 200 |
+| POST | `/api/v1/lab-orders/{order_id}/cancel` | `lab.order.cancel` | 200 |
+| POST | `/api/v1/lab-orders/{order_id}/items/{item_id}/amend` | `lab.order.amend` | 200 |
+
+A step attempted from the wrong status is a `400` with `error_code:
+"BUSINESS_RULE_VIOLATION"`. An order or test in another hospital is a `404`.
+
+### 8.2 Roles → permissions
+
+| Permission | Hospital Admin | Doctor | Nurse | Lab Technician |
+|---|:--:|:--:|:--:|:--:|
+| `lab.test.read` | ✅ | ✅ | — | ✅ |
+| `lab.test.create` / `.update` | ✅ | — | — | — |
+| `lab.order.read` | ✅ | ✅ | ✅ | ✅ |
+| `lab.order.create` / `.cancel` | ✅ | ✅ | — | — |
+| `lab.order.collect_sample` | ✅ | — | — | ✅ |
+| `lab.order.enter_results` | ✅ | — | — | ✅ |
+| `lab.order.release` | ✅ | — | — | — |
+| `lab.order.amend` | ✅ | — | — | — |
+
+The spec gives release and amendment to a *Lab Supervisor*. There is no such seeded role,
+so today **only an admin can release or amend** — a technician cannot release their own
+results. Receptionist, Billing Staff, Pharmacist and Inventory Manager hold no lab code.
+These replace the earlier `lab.read` / `lab.create` / `lab.update` placeholders.
+`lab.report.download` and `lab.ai_explain` are in the catalog but guard nothing yet.
+
+### 8.3 Test catalog
+
+`POST /api/v1/tests-catalog`
+
+```json
+{
+  "code": "HB",
+  "name": "Haemoglobin",
+  "category": "Haematology",
+  "unit": "g/dL",
+  "result_type": "numeric",
+  "reference_ranges": [
+    { "sex": "male", "age_min": 18, "low": "13.0", "high": "17.0", "critical_low": "7.0" },
+    { "sex": "female", "age_min": 18, "low": "12.0", "high": "15.5", "critical_low": "7.0" },
+    { "sex": "any", "age_min": 0, "age_max": 17, "low": "11.0", "high": "14.5" }
+  ],
+  "turnaround_hours": 4,
+  "price": "250.00"
+}
+```
+
+| Field | Rules |
+|---|---|
+| `code` | Required, ≤ 50, letters/digits/`-`/`_`. Uppercased. Unique per hospital → `409` |
+| `name` | Required, ≤ 200 |
+| `category`, `unit` | Optional free text (≤ 100, ≤ 20) |
+| `result_type` | `numeric` (default) or `text`. **Cannot be changed later** |
+| `reference_ranges` | A `numeric` test needs at least one; a `text` test cannot have any |
+| `turnaround_hours` | Optional, > 0 |
+| `price` | Decimal string, ≥ 0. Default `"0.00"` |
+
+One range entry: `sex` is `male`, `female` or `any` (default); `age_min` / `age_max` are
+whole years, inclusive, either may be omitted; at least one of `low` / `high`;
+`critical_low` / `critical_high` are optional. Bounds are decimal strings.
+
+`PATCH` takes `name`, `category`, `unit`, `reference_ranges` (replaces the whole list),
+`turnaround_hours`, `price`, `is_active`. Sending `code` or `result_type` is a `422`.
+Editing a test never changes an order already placed.
+
+`GET /api/v1/tests-catalog` takes `q` (name prefix, or exact code), `category`,
+`is_active`, `page`, `page_size`; ordered by name. For an order form, ask for
+`is_active=true`.
+
+The response adds `id`, `is_active`, `created_at`, `updated_at`.
+
+### 8.4 Ordering
+
+`POST /api/v1/lab-orders`
+
+```json
+{
+  "appointment_id": "3fa85f64-5717-4562-b3fc-2c963f66afa6",
+  "test_ids": ["8a6e0804-2bd0-4672-b79d-d97027f9071a"],
+  "priority": "routine",
+  "notes": "Fasting sample."
+}
+```
+
+- **`appointment_id` is required.** The patient and the ordering doctor are taken from
+  that appointment — do not send them; `patient_id` or `doctor_id` in the body is a `422`.
+  A `cancelled` or `no_show` appointment is refused.
+- `test_ids`: 1–50, no repeats, each an active test of this hospital. A bad one is a
+  `422` naming `test_ids.<index>`.
+- `priority`: `routine` (default), `urgent`, `stat`.
+
+`LabOrderResponse`:
+
+```json
+{
+  "id": "…",
+  "appointment_id": "…",
+  "patient_id": "…", "patient_name": "Ananya Rao", "patient_mrn": "MRN-2026-00007",
+  "doctor_id": "…", "doctor_name": "Dr. Priya Sharma",
+  "ordered_at": "2026-10-05T09:00:00Z",
+  "priority": "routine",
+  "status": "ordered",
+  "notes": "Fasting sample.",
+  "collected_at": null, "results_entered_at": null,
+  "released_at": null, "released_by": null,
+  "cancelled_at": null, "cancel_reason": null,
+  "invoice_id": "…",
+  "turnaround_minutes": null,
+  "has_abnormal": false,
+  "has_critical": false,
+  "items": [
+    {
+      "id": "…", "test_id": "…", "test_code": "HB", "test_name": "Haemoglobin",
+      "result_type": "numeric", "price": "250.00",
+      "sample_id": null, "sample_collected_at": null,
+      "result_value": null, "result_unit": null, "result_flag": null,
+      "reference_low": null, "reference_high": null,
+      "result_entered_at": null, "released_at": null,
+      "notes": null, "amendments": []
+    }
+  ]
+}
+```
+
+The same shape is returned by every order endpoint, list included.
+
+`GET /api/v1/lab-orders` — newest first. Filters: `status`, `priority`, `patient_id`,
+`doctor_id`, `appointment_id`, plus `page` / `page_size`. This is the lab worklist; the
+release queue is `status=results_entered`.
+
+`PATCH /api/v1/lab-orders/{id}` changes `priority` and/or `notes` while the order is not
+released or cancelled. The tests on an order cannot be changed.
+
+### 8.5 Lifecycle
+
+```
+ordered ──collect──▶ collected ──enter-results──▶ in_progress ──▶ results_entered ──release──▶ released
+   └────────────────────── cancel (any status before released) ──────────────────────▶ cancelled
+```
+
+| Step | From | Body | Result |
+|---|---|---|---|
+| `collect` | `ordered` | none, or `{ "items": [{ "item_id", "sample_id"? }] }` | `collected` once no sample is outstanding; stays `ordered` if some are |
+| `enter-results` | `collected`, `in_progress`, `results_entered` | `{ "results": [{ "item_id", "value", "notes"? }] }` | `in_progress` while results are missing, `results_entered` when none are |
+| `release` | `results_entered` | none | `released` |
+| `cancel` | anything before `released` | `{ "reason": "…" }` | `cancelled` |
+
+- **Collect.** With no body every outstanding sample is collected and given a generated
+  id (`S-` + ten characters). A supplied `sample_id` is uppercased and must be unique in
+  the hospital → `409` if it is not.
+- **Results.** `value` is a string. A `numeric` test needs a number → `422` naming
+  `results.<index>.value` otherwise. Results can be re-entered until release.
+- **Flags are the server's.** Each numeric result is judged against the range for the
+  patient's sex and their age on the day the sample was collected, and comes back as
+  `result_flag`: `normal`, `low`, `high` or `critical`, with the `reference_low` /
+  `reference_high` it was judged against. **`null` means no range applied** (a text test,
+  or no range for this patient) — show it as "no reference range", not as normal. Sending
+  a `result_flag` is a `422`.
+- **A patient whose sex is `other` or `unspecified`** is matched only against `any`
+  ranges, never a sex-specific one.
+- **Critical values.** A result entered in the critical range notifies the ordering doctor
+  immediately, before release.
+- **Release** notifies the ordering doctor and sets `turnaround_minutes` (order to
+  release). After release nothing on the order can be edited except through §8.6.
+
+`has_abnormal` is true when any item is `low`, `high` or `critical`; `has_critical` when
+any is `critical`. Use them for row colouring on the worklist.
+
+### 8.6 Amending a released result
+
+`POST /api/v1/lab-orders/{order_id}/items/{item_id}/amend`
+
+```json
+{ "new_value": "5.9", "reason": "Transcription error" }
+```
+
+Only on a `released` order (`400` otherwise — before release, just re-enter the result).
+The item takes the new value and is flagged again; the item's `amendments` list keeps the
+history, oldest first:
+
+```json
+{
+  "id": "…",
+  "previous_value": "4.2", "new_value": "5.9",
+  "previous_flag": "normal", "new_flag": "high",
+  "reason": "Transcription error",
+  "amended_by": "…", "amended_at": "2026-10-05T11:30:00Z"
+}
+```
+
+An unchanged value, or text for a numeric test, is a `422`. The ordering doctor is
+notified. Show an amended result as amended — a non-empty `amendments` is the signal.
+
+### 8.7 Billing
+
+Placing an order adds one line per test (`Lab test — <name>`, at the catalog price) to a
+draft invoice for the patient, in the same transaction; `invoice_id` on the order says
+which.
+
+- If the appointment has a draft invoice, the lines join it.
+- If the appointment has no invoice, a draft is created and linked to it.
+- If the appointment's invoice is already issued, the lines go on a new draft with no
+  appointment link, because an issued invoice cannot be edited.
+
+The lines are untaxed; billing staff adjust the draft before issuing. **Cancelling an
+order does not remove its lines** — the invoice has to be corrected by hand.
+
+### 8.8 Not built yet
+
+These paths from the module spec return `404`. Do not build against them:
+
+- `GET /lab-orders/{id}/report.pdf`
+- `POST /lab-orders/{id}/ai-explain`
+
+---
+
+## 9. Frontend ↔ backend mapping (mismatch resolution)
 
 The audit flagged the patient contract as mismatched. It was investigated against
 `API_CONTRACTS`/`05-DATABASE_DESIGN.md`, the module spec, the schemas and 944 passing
@@ -1249,7 +1492,7 @@ faked.
 
 ---
 
-## 9. Demo data
+## 10. Demo data
 
 `make -C backend seed` — idempotent, safe to re-run; see
 [10-DEVELOPMENT_GUIDE.md](10-DEVELOPMENT_GUIDE.md).
@@ -1278,6 +1521,10 @@ Seeded for the demo hospital (`demo-hospital`, timezone `Asia/Kolkata`):
 - **5 payments** and **2 refunds**.
 - A **10% discount approval threshold** on the demo hospital, so a small discount goes
   straight through and the seeded 20% one sits in the approval queue.
+- **10 lab tests** across five categories: eight numeric tests with reference ranges
+  (several with critical bounds, three with ranges that differ by sex or age), one text
+  test (`URINE-ME`) and one retired test (`ESR`). **The ranges are illustrative, not a
+  validated clinical dataset.** No lab orders are seeded — place one live.
 
 The in-flight appointments are deliberately left unbilled, so completing one in a demo
 drafts its invoice live (§6.10).
@@ -1294,12 +1541,13 @@ Demo logins (development only):
 | `admin@demohospital.com` | `Admin@1234567` | Hospital Admin |
 | `doctor@demohospital.com` | `Doctor@1234567` | Doctor |
 | `reception@demohospital.com` | `Reception@1234567` | Receptionist |
+| `lab@demohospital.com` | `LabTech@1234567` | Lab Technician |
 
 All seeded people are fictional. No real patient data exists in this repository.
 
 ---
 
-## 10. Known gaps
+## 11. Known gaps
 
 Things the frontend will ask for that do not exist yet. Do not build against them:
 
@@ -1326,6 +1574,15 @@ Things the frontend will ask for that do not exist yet. Do not build against the
   so the bell does not have to fetch a page to show a number. An email can take up to ten
   seconds to leave the queue, which is inside the spec's 30-second acceptance criterion but
   not its 5-second target.
+- **Laboratory:** no PDF report or AI explain (§8.8). An order must hang off an
+  appointment — there is no Consultation module yet. Cancelling an order does not remove
+  its charge from the invoice (§8.7). There is no way to reject one sample or cancel one
+  test on an order; cancel the order and place another. A text result is never flagged,
+  and nobody can override a flag. `POST /lab-orders/{id}/items/{item_id}/amend` is not in
+  the module spec's endpoint list; the spec defines the permission but no route.
+- **Laboratory roles:** the spec's *Lab Supervisor* is not a seeded role, so only an admin
+  can release or amend (§8.2). Nurses see every lab order in the hospital, not only those
+  of "their" patients — nothing records which patients a nurse is assigned to.
 - No `sort` parameter on any of these endpoints (§1.8).
 - No patient documents, timeline, or AI summary endpoints — they need object storage.
 - No appointment token/queue-number field (§5.5).
@@ -1340,8 +1597,10 @@ Things the frontend will ask for that do not exist yet. Do not build against the
 
 ---
 
-_Last updated: 2026-10-04. §7 (Notifications) added with the module; the old §7–9 are now
-§8–10._
+_Last updated: 2026-10-05. §8 (Laboratory) added with the module; the old §8–10 are now
+§9–11. The `lab.read` / `lab.create` / `lab.update` placeholder codes are gone._
+
+_2026-10-04: §7 (Notifications) added with the module; the then §7–9 became §8–10._
 
 _2026-10-03: §6.7 (discounts and approval) and §6.8 (refunds) added, with
 the fields and endpoints they bring; the old §6.7–6.10 are now §6.9–6.12. §5.3 changed on
@@ -1349,7 +1608,7 @@ the same day: `date` is the hospital's local day and `tz_offset_hours` is gone._
 
 _2026-10-01: §6 (Billing) added with the module, and checked against the
 running app and a freshly seeded database: every endpoint, permission, status code and
-response shape in §6, the roles table (now §6.11) against the seeded roles, and the billing rows of §9 (then §8).
+response shape in §6, the roles table (now §6.11) against the seeded roles, and the billing rows of the demo data section (then §8).
 Sections 6–8 of the revision before that became §7–9._
 
 _§2–5 were last re-verified on 2026-09-22 at commit `e3927e2`: every endpoint, permission,
