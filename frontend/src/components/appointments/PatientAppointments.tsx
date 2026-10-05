@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { CalendarPlus } from 'lucide-react'
+import { CalendarPlus, FlaskConical } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAppointments, type AppointmentSummary } from '@/api/appointments'
 import { usePermissions } from '@/hooks/usePermissions'
 import { formatDate, formatTime } from '@/lib/format'
 import { AppointmentStatusBadge } from './AppointmentStatusBadge'
+import { OrderLabTestsDialog } from '@/components/laboratory/OrderLabTestsDialog'
+import { canOrderLabTestsFor } from '@/components/laboratory/labPresentation'
 import { BookAppointmentDialog } from './BookAppointmentDialog'
 
 /** How many appointments to show before pointing at the rest. */
@@ -53,6 +55,7 @@ export function PatientAppointments({
   const shown = mostRelevant(data?.items ?? [], now)
   // The API refuses to book for a deactivated patient.
   const canBook = can('appointment.book') && patient.status === 'active'
+  const canOrderTests = can('lab.order.create') && can('lab.test.read')
 
   return (
     <section className="neo-extruded bg-surface rounded-2xl p-6" aria-label="Appointments">
@@ -93,7 +96,23 @@ export function PatientAppointments({
                   <span className="text-outline"> · </span>
                   {a.doctor_name}
                 </span>
-                <AppointmentStatusBadge status={a.status} />
+                <span className="flex flex-wrap items-center gap-2">
+                  {canOrderTests && canOrderLabTestsFor(a.status) && (
+                    <OrderLabTestsDialog
+                      visit={a}
+                      trigger={
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          aria-label={`Order lab tests for the visit on ${formatDate(a.scheduled_start)}`}
+                        >
+                          <FlaskConical className="size-4" /> Lab tests
+                        </Button>
+                      }
+                    />
+                  )}
+                  <AppointmentStatusBadge status={a.status} />
+                </span>
               </li>
             ))}
           </ul>

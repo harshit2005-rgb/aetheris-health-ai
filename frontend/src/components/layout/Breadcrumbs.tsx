@@ -7,6 +7,8 @@ const LABELS: Record<string, string> = {
   doctors: 'Doctors',
   appointments: 'Appointments',
   billing: 'Billing',
+  laboratory: 'Laboratory',
+  catalog: 'Test catalog',
   reports: 'Reports',
   settings: 'Settings',
 }

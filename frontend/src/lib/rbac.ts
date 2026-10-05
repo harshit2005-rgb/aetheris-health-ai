@@ -1,4 +1,5 @@
 import {
+  FlaskConical,
   LayoutDashboard,
   Users,
   Stethoscope,
@@ -289,6 +290,7 @@ export type PermissionGroup =
   | 'doctor.read'
   | 'appointment.read'
   | 'invoice.read'
+  | 'lab.order.read'
   | 'report.read'
   | 'user.read'
   | 'settings.read'
@@ -308,6 +310,7 @@ export const NAV: NavItem[] = [
   { to: '/doctors', label: 'Doctors', icon: Stethoscope, permission: 'doctor.read' },
   { to: '/appointments', label: 'Appointments', icon: CalendarDays, permission: 'appointment.read' },
   { to: '/billing', label: 'Billing', icon: Receipt, permission: 'invoice.read' },
+  { to: '/laboratory', label: 'Laboratory', icon: FlaskConical, permission: 'lab.order.read' },
   { to: '/reports', label: 'Reports', icon: BarChart3, permission: 'report.read' },
   { to: '/users', label: 'Users & Roles', icon: UserCog, permission: 'user.read' },
   { to: '/settings', label: 'Settings', icon: SettingsIcon, permission: 'settings.read' },
@@ -326,6 +329,8 @@ const GROUP_ALIASES: Record<PermissionGroup, Permission[]> = {
   // Either read code opens the Billing module: every billing screen starts
   // from the invoice list, and the server narrows that list for `.own`.
   'invoice.read': ['invoice.read', 'invoice.read.own'],
+  // The worklist is the module's first screen; every lab role can read orders.
+  'lab.order.read': ['lab.order.read'],
   'report.read': ['report.read'],
   'user.read': ['user.read'],
   'settings.read': ['settings.read'],

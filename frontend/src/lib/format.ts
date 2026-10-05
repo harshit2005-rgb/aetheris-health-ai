@@ -18,6 +18,14 @@ export function formatDate(iso: string): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleDateString(undefined, { dateStyle: 'medium' })
 }
 
+/** Medium date with a short time (e.g. "Oct 5, 2026, 9:30 AM"); echoes the input if unparseable. */
+export function formatDateTime(iso: string): string {
+  const d = new Date(iso)
+  return Number.isNaN(d.getTime())
+    ? iso
+    : d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
+
 /** Short local time (e.g. "9:30 AM") from an ISO datetime; echoes the input if unparseable. */
 export function formatTime(iso: string): string {
   const d = new Date(iso)

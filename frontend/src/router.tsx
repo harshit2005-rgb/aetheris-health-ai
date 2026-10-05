@@ -25,6 +25,9 @@ const AppointmentsPage = lazy(() => import('@/pages/appointments/AppointmentsPag
 const BillingPage = lazy(() => import('@/pages/billing/BillingPage'))
 const InvoiceDetailPage = lazy(() => import('@/pages/billing/InvoiceDetailPage'))
 const ReportsPage = lazy(() => import('@/pages/reports/ReportsPage'))
+const LabOrdersPage = lazy(() => import('@/pages/laboratory/LabOrdersPage'))
+const LabOrderDetailPage = lazy(() => import('@/pages/laboratory/LabOrderDetailPage'))
+const LabCatalogPage = lazy(() => import('@/pages/laboratory/LabCatalogPage'))
 const UsersPage = lazy(() => import('@/pages/users/UsersPage'))
 const SettingsPage = lazy(() => import('@/pages/settings/SettingsPage'))
 const ProfilePage = lazy(() => import('@/pages/settings/ProfilePage'))
@@ -117,6 +120,32 @@ export const router = createBrowserRouter([
             element: (
               <RequirePermission group="invoice.read">
                 <InvoiceDetailPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/laboratory',
+            element: (
+              <RequirePermission permission="lab.order.read">
+                <LabOrdersPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/laboratory/orders/:orderId',
+            element: (
+              <RequirePermission permission="lab.order.read">
+                <LabOrderDetailPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            // Reading the catalog is its own code: a nurse can read orders
+            // but not the catalog (docs/18-API_CONTRACTS.md §8.2).
+            path: '/laboratory/catalog',
+            element: (
+              <RequirePermission permission="lab.test.read">
+                <LabCatalogPage />
               </RequirePermission>
             ),
           },

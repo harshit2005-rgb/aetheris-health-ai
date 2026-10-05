@@ -5,6 +5,7 @@ import {
   CalendarDays,
   Receipt,
   Building2,
+  FlaskConical,
   Hourglass,
   UserCog,
   ShieldCheck,
@@ -63,7 +64,7 @@ const FAQ = [
   },
   {
     q: 'Which modules are available today?',
-    a: 'Patients, doctors and departments, appointments, billing, notifications, user and role management, hospital settings, and the audit log. Laboratory, pharmacy, inventory, and reports are planned and are not part of the product yet.',
+    a: 'Patients, doctors and departments, appointments, billing, laboratory orders and results, notifications, user and role management, hospital settings, and the audit log. Pharmacy, inventory, and reports are planned and are not part of the product yet.',
   },
   {
     q: 'Does Aetheris include AI features today?',
@@ -227,13 +228,13 @@ export default function LandingPage() {
           </p>
         </div>
 
-        {/* 3x3: tall roadmap card (col 1) + 2x2 modules (cols 2-3) + full-width Administration footer */}
+        {/* 3x3: tall roadmap card (col 1) + 2x2 modules (cols 2-3) + Laboratory and Administration below */}
         <div className="grid gap-5 md:grid-cols-3">
           <ModuleCard
             dark
             icon={Hourglass}
             title="On the roadmap"
-            body="Laboratory, pharmacy, inventory, reports, and AI assistance are planned. None of them is part of the product today."
+            body="Pharmacy, inventory, reports, and AI assistance are planned. None of them is part of the product today."
             className="md:row-span-2"
           />
           <ModuleCard
@@ -257,10 +258,15 @@ export default function LandingPage() {
             body="Doctor profiles, weekly availability, leave, and the departments they belong to."
           />
           <ModuleCard
+            icon={FlaskConical}
+            title="Laboratory"
+            body="Tests ordered from a visit, sample collection, result entry checked against the hospital's own reference ranges, release, and recorded corrections."
+          />
+          <ModuleCard
             icon={UserCog}
             title="Administration"
             body="Users and roles with permission-based access, in-app notifications, hospital settings, and an audit log that can be exported."
-            className="md:col-span-3"
+            className="md:col-span-2"
           />
         </div>
       </section>

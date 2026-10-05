@@ -44,7 +44,7 @@ const UNSUPPORTED = [
   /admission|admit a patient/i,
   /real-time|live dashboards|occupancy/i,
   /Pharmacy & Lab/i,
-  /order labs|lab orders|prescriptions/i,
+  /prescriptions/i,
   /clinical decision-support/i,
   /integration seams/i,
   /a few weeks/i,
@@ -133,12 +133,12 @@ describe('landing page', () => {
 
     const roadmap = screen.getByRole('heading', { name: 'On the roadmap' }).parentElement as HTMLElement
     expect(roadmap).toHaveTextContent(
-      'Laboratory, pharmacy, inventory, reports, and AI assistance are planned. None of them is part of the product today.',
+      'Pharmacy, inventory, reports, and AI assistance are planned. None of them is part of the product today.',
     )
-    for (const built of ['Patients', 'Appointments', 'Billing', 'Doctors & departments', 'Administration']) {
+    for (const built of ['Patients', 'Appointments', 'Billing', 'Doctors & departments', 'Laboratory', 'Administration']) {
       expect(screen.getByRole('heading', { name: built })).toBeInTheDocument()
     }
-    for (const unbuilt of [/Pharmacy/, /Lab/, /Reports/, /Inventory/]) {
+    for (const unbuilt of [/Pharmacy/, /Reports/, /Inventory/]) {
       expect(screen.queryByRole('heading', { name: unbuilt })).not.toBeInTheDocument()
     }
   })
@@ -173,9 +173,11 @@ describe('pricing page', () => {
     const included = screen.getByRole('region', { name: 'Included today' })
     expect(within(included).getByText('Invoices, payments, and refunds')).toBeInTheDocument()
     expect(within(included).getByText('Audit log with export')).toBeInTheDocument()
+    // Laboratory has real screens now, so it is listed as included, not planned.
+    expect(within(included).getByText('Laboratory orders and results')).toBeInTheDocument()
     const planned = screen.getByRole('region', { name: 'On the roadmap' })
     expect(within(planned).getByText('Planned, and not available yet.')).toBeInTheDocument()
-    for (const module of ['Laboratory', 'Pharmacy', 'Inventory', 'Reports', 'AI assistance']) {
+    for (const module of ['Pharmacy', 'Inventory', 'Reports', 'AI assistance']) {
       expect(within(planned).getByText(module)).toBeInTheDocument()
       expect(within(included).queryByText(module)).not.toBeInTheDocument()
     }

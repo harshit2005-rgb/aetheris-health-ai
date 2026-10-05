@@ -1,9 +1,11 @@
 import { useRef } from 'react'
 import { toast } from 'sonner'
-import { Loader2 } from 'lucide-react'
+import { FlaskConical, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAppointmentTransition, type AppointmentSummary } from '@/api/appointments'
 import { usePermissions } from '@/hooks/usePermissions'
+import { OrderLabTestsDialog } from '@/components/laboratory/OrderLabTestsDialog'
+import { canOrderLabTestsFor } from '@/components/laboratory/labPresentation'
 import { CancelAppointmentDialog } from './CancelAppointmentDialog'
 import { MarkNoShowDialog } from './MarkNoShowDialog'
 import { RescheduleAppointmentDialog } from './RescheduleAppointmentDialog'
@@ -11,7 +13,7 @@ import { CANCELLABLE, NEXT_STEP, NO_SHOWABLE, RESCHEDULABLE, lifecycleErrorMessa
 
 /**
  * The lifecycle actions for one queue row: the next step for its status, plus
- * Reschedule, No-show and Cancel where the API allows them. An action the user's permissions don't cover
+ * Lab tests, Reschedule, No-show and Cancel where the API allows them. An action the user's permissions don't cover
  * is not rendered — a convenience only; the backend enforces each one.
  */
 export function AppointmentActions({ appointment }: { appointment: AppointmentSummary }) {
@@ -31,7 +33,11 @@ export function AppointmentActions({ appointment }: { appointment: AppointmentSu
     RESCHEDULABLE.has(appointment.status) &&
     can('appointment.reschedule') &&
     can('doctor.availability.read')
-  if (!next && !canCancel && !canReschedule && !canMarkNoShow) return null
+  // A lab order hangs off a visit, so the visit is where one is placed. The
+  // order form lists the catalog, which needs its own permission.
+  const canOrderTests =
+    canOrderLabTestsFor(appointment.status) && can('lab.order.create') && can('lab.test.read')
+  if (!next && !canCancel && !canReschedule && !canMarkNoShow && !canOrderTests) return null
 
   async function run() {
     if (!next || busy.current) return
@@ -61,6 +67,21 @@ export function AppointmentActions({ appointment }: { appointment: AppointmentSu
           {transition.isPending ? <Loader2 className="size-4 animate-spin" /> : <Icon className="size-4" />}
           {transition.isPending ? next.pendingLabel : next.label}
         </Button>
+      )}
+      {canOrderTests && (
+        <OrderLabTestsDialog
+          visit={appointment}
+          trigger={
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={transition.isPending}
+              aria-label={`Order lab tests for ${appointment.patient_name}`}
+            >
+              <FlaskConical className="size-4" /> Lab tests
+            </Button>
+          }
+        />
       )}
       {canReschedule && (
         <RescheduleAppointmentDialog appointment={appointment} disabled={transition.isPending} />
