@@ -1,3 +1,6 @@
+import { AxiosError } from 'axios'
+import { ApiError } from '@/api/types'
+
 /**
  * The filename a `Content-Disposition` header names, or undefined if it names
  * none. Reads the plain `filename="…"` form and the RFC 5987 `filename*=`
@@ -33,4 +36,33 @@ export function saveBlob(blob: Blob, filename: string): void {
   link.click()
   link.remove()
   URL.revokeObjectURL(url)
+}
+
+/**
+ * The typed error for a failed file request.
+ *
+ * A download that fails is still answered with the API's JSON envelope, but
+ * the request asked for a blob, so that is what the envelope arrives in. This
+ * reads it back out so the caller sees the server's message, code, status and
+ * field errors exactly as it would for any other call.
+ */
+export async function blobApiError(err: unknown): Promise<ApiError> {
+  if (!(err instanceof AxiosError)) {
+    return new ApiError(err instanceof Error ? err.message : 'Unexpected error')
+  }
+  let body: unknown = err.response?.data
+  if (body instanceof Blob) {
+    try {
+      body = JSON.parse(await body.text())
+    } catch {
+      body = undefined
+    }
+  }
+  const envelope = (body ?? {}) as { message?: string; error_code?: string; errors?: unknown }
+  return new ApiError(
+    envelope.message ?? err.message,
+    envelope.error_code ?? 'network_error',
+    err.response?.status,
+    envelope.errors,
+  )
 }

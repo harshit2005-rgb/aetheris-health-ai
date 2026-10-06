@@ -147,7 +147,13 @@ PERMISSION_DEFINITIONS: list[tuple[str, str, str]] = [
     ("inventory.po.receive", "inventory", "Receive inventory purchase orders"),
     ("inventory.forecast.read", "inventory", "View AI reorder recommendations"),
     # Reports
-    ("report.read", "reports", "View reports and dashboards"),
+    # docs/modules/10-reports-dashboard.md §10. The earlier `report.read`
+    # placeholder is replaced by one read code per role dashboard: it was
+    # seeded before the module existed and no code ever checked it.
+    ("report.admin.read", "reports", "View the admin dashboard and hospital-wide reports"),
+    ("report.doctor.read", "reports", "View the doctor dashboard (own schedule and patients)"),
+    ("report.reception.read", "reports", "View the reception dashboard"),
+    ("report.billing.read", "reports", "View the billing dashboard and financial reports"),
     ("report.export", "reports", "Export data"),
     # Settings
     ("settings.read", "settings", "View hospital settings"),
@@ -268,7 +274,10 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "inventory.po.update",
             "inventory.po.receive",
             "inventory.forecast.read",
-            "report.read",
+            "report.admin.read",
+            "report.doctor.read",
+            "report.reception.read",
+            "report.billing.read",
             "report.export",
             "settings.read",
             "settings.update",
@@ -386,7 +395,10 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "inventory.po.update",
             "inventory.po.receive",
             "inventory.forecast.read",
-            "report.read",
+            "report.admin.read",
+            "report.doctor.read",
+            "report.reception.read",
+            "report.billing.read",
             "report.export",
             "settings.read",
             "settings.update",
@@ -430,7 +442,7 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "pharmacy.medicine.read",
             "pharmacy.prescription.read",
             "pharmacy.prescription.create",
-            "report.read",
+            "report.doctor.read",
             "department.read",
             "doctor.read",
             "doctor.availability.read",
@@ -480,6 +492,8 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "service.read",
             "invoice.read",
             "invoice.payment.record.cash",
+            # docs/modules/10-reports-dashboard.md §10: the reception dashboard.
+            "report.reception.read",
             "department.read",
             "doctor.read",
             "doctor.availability.read",
@@ -501,7 +515,10 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "invoice.update",
             "invoice.issue",
             "invoice.payment.record",
-            "report.read",
+            # docs/modules/10-reports-dashboard.md §10: the billing dashboard,
+            # the revenue and outstanding reports, and their export.
+            "report.billing.read",
+            "report.export",
             "department.read",
             "doctor.read",
         ],
@@ -861,6 +878,34 @@ async def seed_database(database_url: str | None = None) -> None:
         else:
             logger.info("demo_inventory_manager_exists", email=inventory_email)
 
+        # ── 6e. Create Demo Billing Staff User ───────────────────────────────
+        billing_email = "billing@demohospital.com"
+        billing_result = await session.execute(
+            select(User).where(User.email == billing_email, User.hospital_id == hospital.id)
+        )
+        billing_user = billing_result.unique().scalar_one_or_none()
+
+        if billing_user is None:
+            billing_user = User(
+                hospital_id=hospital.id,
+                email=billing_email,
+                password_hash=hash_password("Billing@1234567"),
+                first_name="Neha",
+                last_name="Joshi",
+                status=UserStatus.ACTIVE,
+                password_changed_at=datetime.now(UTC),
+            )
+            session.add(billing_user)
+            await session.flush()
+
+            billing_role = role_map.get("Billing Staff")
+            if billing_role:
+                session.add(UserRole(user_id=billing_user.id, role_id=billing_role.id))
+
+            logger.info("demo_billing_staff_created", email=billing_email)
+        else:
+            logger.info("demo_billing_staff_exists", email=billing_email)
+
         # ── 7. Demo Clinical Data ────────────────────────────────────────────
         # Departments, doctors, patients, appointments and billing, so the
         # frontend has real data to build against. Same transaction, same
@@ -878,6 +923,7 @@ async def seed_database(database_url: str | None = None) -> None:
             lab=lab_email,
             pharmacy=pharmacist_email,
             inventory=inventory_email,
+            billing=billing_email,
         )
 
 

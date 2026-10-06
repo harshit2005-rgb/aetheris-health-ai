@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { appointmentKeys } from '@/api/appointments'
 import { billingKeys } from '@/api/billing'
 import { http } from '@/api/http'
+import { dashboardKeys, reportKeys } from '@/api/reports'
 import { ApiError, type Paginated, type ListQueryOptions } from '@/api/types'
 
 /**
@@ -255,6 +256,9 @@ export function useCreatePatient() {
     mutationFn: createPatient,
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: patientKeys.all })
+      // A new patient moves the registration tile and the patients report.
+      qc.invalidateQueries({ queryKey: dashboardKeys.all })
+      qc.invalidateQueries({ queryKey: reportKeys.all })
     },
   })
 }

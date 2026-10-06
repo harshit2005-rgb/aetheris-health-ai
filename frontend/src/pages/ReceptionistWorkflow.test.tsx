@@ -11,6 +11,7 @@ import { formatMoney, todayISODate } from '@/lib/format'
 import { signIn, signOut } from '@/test/auth'
 import { issuedInvoice, draftInvoice, payment, summaryOf } from '@/test/billingFixtures'
 import { bodyOf, fail, installFakeApi, ok, type FakeApi, type Outcome } from '@/test/fakeApi'
+import { receptionDashboardFixture } from '@/test/reportFixtures'
 import DashboardPage from './DashboardPage'
 import PatientsPage from './patients/PatientsPage'
 import PatientDetailPage from './patients/PatientDetailPage'
@@ -46,6 +47,8 @@ const RECEPTIONIST = [
   'department.read',
   'doctor.read',
   'doctor.availability.read',
+  // The reception dashboard only; it opens no report.
+  'report.reception.read',
 ]
 
 const { toastSuccess, toastError } = vi.hoisted(() => ({
@@ -132,6 +135,13 @@ function read(config: InternalAxiosRequestConfig): Outcome {
     return page(!q || PATIENT.first_name.toLowerCase().startsWith(q) ? [PATIENT] : [])
   }
   if (url === '/patients/pat-1') return ok(PATIENT)
+  if (url === '/dashboards/reception') {
+    // The hospital's day is the day this server files today's appointments under.
+    return ok({
+      ...receptionDashboardFixture,
+      meta: { ...receptionDashboardFixture.meta, today: todayISODate() },
+    })
+  }
   if (url === '/doctors') return page([DOCTOR])
   if (url === '/doctors/doc-1/slots') {
     const taken = appointments.some((a) => a.scheduled_start === SLOT.start && a.status === 'booked')
@@ -303,7 +313,7 @@ function renderApp(path: string) {
           <Route
             path="/reports"
             element={
-              <RequirePermission permission="report.read">
+              <RequirePermission group="report.admin.read">
                 <p>Reports</p>
               </RequirePermission>
             }
@@ -341,6 +351,10 @@ describe('receptionist: dashboard', () => {
     const row = await screen.findByRole('row', { name: /Meera Nair/ })
     expect(within(row).getByRole('button', { name: 'Check in Meera Nair' })).toBeInTheDocument()
     expect(within(row).getByRole('button', { name: /Cancel appointment/ })).toBeInTheDocument()
+    // The front-desk tiles come from one read of the reception dashboard.
+    expect(await screen.findByRole('region', { name: 'Front desk' })).toBeInTheDocument()
+    expect(api.requests('get', '/dashboards/')).toHaveLength(1)
+    expect(api.requests('get', '/dashboards/')[0].url).toBe('/dashboards/reception')
     // The patient's name opens their record.
     expect(within(row).getByRole('link', { name: 'Meera Nair' })).toHaveAttribute('href', '/patients/pat-2')
   })
@@ -354,6 +368,8 @@ describe('receptionist: dashboard', () => {
 
     await waitFor(() => expect(toastSuccess).toHaveBeenCalledWith('Patient checked in'))
     expect(writes()[0].url).toBe('/appointments/a-today/check-in')
+    // A check-in moves the front-desk tiles, so they are read again.
+    await waitFor(() => expect(api.requests('get', '/dashboards/reception')).toHaveLength(2))
     const after = await screen.findByRole('row', { name: /Meera Nair/ })
     expect(within(after).getByText('Checked in')).toBeInTheDocument()
     // Starting and completing a consultation are not the receptionist's.

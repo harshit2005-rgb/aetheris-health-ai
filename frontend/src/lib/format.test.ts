@@ -1,5 +1,14 @@
 import { describe, it, expect } from 'vitest'
-import { formatDate, formatRelativeTime, formatDayIn, formatTimeIn, isoDateIn } from './format'
+import {
+  formatBucketLabel,
+  formatCount,
+  formatDate,
+  formatDayIn,
+  formatMoneyCompact,
+  formatRelativeTime,
+  formatTimeIn,
+  isoDateIn,
+} from './format'
 
 describe('formatRelativeTime', () => {
   const now = Date.parse('2026-10-05T12:00:00Z')
@@ -55,5 +64,67 @@ describe('hospital-clock helpers', () => {
   it('formatTimeIn uses the named zone, or the viewer without one', () => {
     expect(formatTimeIn(lateEvening, 'Asia/Kolkata')).toMatch(/1:30/)
     expect(formatTimeIn(lateEvening)).toBe(formatTimeIn(lateEvening, undefined))
+  })
+})
+
+describe('formatBucketLabel', () => {
+  const bucket = (bucket_start: string, bucket_end: string) => ({ bucket_start, bucket_end, partial: false })
+
+  it('labels a day by its date', () => {
+    expect(formatBucketLabel(bucket('2026-10-06', '2026-10-06'), 'day')).toBe('6 Oct')
+    expect(formatBucketLabel(bucket('2026-01-31', '2026-01-31'), 'day')).toBe('31 Jan')
+  })
+
+  it('labels a week by its Monday and Sunday', () => {
+    expect(formatBucketLabel(bucket('2026-10-05', '2026-10-11'), 'week')).toBe('5–11 Oct')
+  })
+
+  it('names both months, and both years, when a week crosses them', () => {
+    expect(formatBucketLabel(bucket('2026-09-28', '2026-10-04'), 'week')).toBe('28 Sep – 4 Oct')
+    expect(formatBucketLabel(bucket('2025-12-29', '2026-01-04'), 'week')).toBe('29 Dec 2025 – 4 Jan 2026')
+  })
+
+  it('labels a month by its name and year', () => {
+    expect(formatBucketLabel(bucket('2026-10-01', '2026-10-31'), 'month')).toBe('Oct 2026')
+    expect(formatBucketLabel(bucket('2025-12-01', '2025-12-31'), 'month')).toBe('Dec 2025')
+  })
+
+  it('reads the date text, so the first of a month is never shown as the day before', () => {
+    // Through a Date, midnight UTC on the 1st is 30 Sep anywhere west of Greenwich.
+    expect(formatBucketLabel(bucket('2026-10-01', '2026-10-01'), 'day')).toBe('1 Oct')
+  })
+
+  it('echoes a start it cannot read', () => {
+    expect(formatBucketLabel(bucket('not-a-date', '2026-10-06'), 'day')).toBe('not-a-date')
+    expect(formatBucketLabel(bucket('2026-13-01', '2026-13-31'), 'month')).toBe('2026-13-01')
+  })
+})
+
+describe('formatCount and formatMoneyCompact', () => {
+  it('formatCount groups digits the way Intl does and adds nothing', () => {
+    expect(formatCount(0)).toBe('0')
+    expect(formatCount(1204)).toBe(new Intl.NumberFormat().format(1204))
+  })
+
+  it('formatMoneyCompact shortens an amount in the given currency', () => {
+    const expected = new Intl.NumberFormat(undefined, {
+      notation: 'compact',
+      maximumFractionDigits: 1,
+      style: 'currency',
+      currency: 'INR',
+    }).format(4350)
+    expect(formatMoneyCompact('4350.00', 'INR')).toBe(expected)
+    expect(formatMoneyCompact(4350, 'INR')).toBe(expected)
+  })
+
+  it('formatMoneyCompact keeps the sign of a negative net', () => {
+    expect(formatMoneyCompact('-350.00', 'INR')).toMatch(/^[-−]/)
+  })
+
+  it('formatMoneyCompact survives an unknown currency and a non-number', () => {
+    expect(formatMoneyCompact('1200.00', 'NOT-A-CODE')).toBe(
+      new Intl.NumberFormat(undefined, { notation: 'compact', maximumFractionDigits: 1 }).format(1200),
+    )
+    expect(formatMoneyCompact('n/a', 'INR')).toBe('—')
   })
 })

@@ -15,6 +15,8 @@ const LABELS: Record<string, string> = {
   inventory: 'Inventory',
   'purchase-orders': 'Purchase orders',
   reports: 'Reports',
+  revenue: 'Revenue',
+  outstanding: 'Outstanding',
   settings: 'Settings',
 }
 
@@ -42,6 +44,10 @@ const PAGES = new Set([
   '/inventory/locations',
   '/inventory/purchase-orders',
   '/reports',
+  '/reports/patients',
+  '/reports/appointments',
+  '/reports/revenue',
+  '/reports/outstanding',
   '/users',
   '/settings',
 ])

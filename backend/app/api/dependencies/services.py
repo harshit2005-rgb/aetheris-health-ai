@@ -59,6 +59,7 @@ from app.api.dependencies.repositories import (  # noqa: F401
     get_prescription_repository,
     get_procurement_repository,
     get_refresh_token_repository,
+    get_report_repository,
     get_role_repository,
     get_service_catalog_repository,
     get_user_repository,
@@ -88,6 +89,7 @@ from app.repositories import (
     PrescriptionRepository,
     ProcurementRepository,
     RefreshTokenRepository,
+    ReportRepository,
     RoleRepository,
     ServiceCatalogRepository,
     UserRepository,
@@ -118,6 +120,7 @@ from app.services.notification_service import NotificationService
 from app.services.patient_service import PatientService
 from app.services.pharmacy_catalog_service import PharmacyCatalogService
 from app.services.procurement_service import ProcurementService
+from app.services.report_service import ReportService
 from app.services.role_service import RoleService
 from app.services.service_catalog_service import ServiceCatalogService
 from app.services.user_service import UserService
@@ -498,6 +501,22 @@ def get_inventory_po_service(
     return InventoryPurchaseOrderService(orders, inventory, vendors, hospitals, session, audit)
 
 
+# ── Reports module ──────────────────────────────────────────────────────────
+def get_report_service(
+    reports: ReportRepository = Depends(get_report_repository),
+    hospitals: HospitalRepository = Depends(get_hospital_repository),
+    doctors: DoctorRepository = Depends(get_doctor_repository),
+    session: AsyncSession = Depends(get_db_session),
+    audit: AuditSink = Depends(get_audit_sink),
+) -> ReportService:
+    """Provide a :class:`ReportService` bound to the request session.
+
+    The session and audit sink are there for one thing: an export records an
+    audit entry and commits it. Every other report method only reads.
+    """
+    return ReportService(reports, hospitals, doctors, session, audit)
+
+
 # ── Appointment module ──────────────────────────────────────────────────────
 def get_invoice_draft_sink(
     billing: BillingService = Depends(get_billing_service),
@@ -603,6 +622,8 @@ __all__ = [
     "get_pharmacy_catalog_service",
     "get_procurement_service",
     "get_service_catalog_service",
+    # Reports module
+    "get_report_service",
     # Appointment module
     "get_appointment_service",
     "get_invoice_draft_sink",

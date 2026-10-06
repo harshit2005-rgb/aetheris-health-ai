@@ -1,9 +1,7 @@
-import { AxiosError } from 'axios'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { http } from '@/api/http'
-import { ApiError } from '@/api/types'
 import { api } from '@/lib/api'
-import { filenameFromContentDisposition } from '@/lib/download'
+import { blobApiError, filenameFromContentDisposition } from '@/lib/download'
 
 /** One audit entry as returned by GET /api/v1/audit-logs. */
 export interface AuditLogEntry {
@@ -71,31 +69,6 @@ export interface AuditExportFile {
 }
 
 /**
- * An export that failed is still answered with the API's JSON envelope, but
- * the request asked for a blob, so that is what the envelope arrives in.
- */
-async function exportError(err: unknown): Promise<ApiError> {
-  if (!(err instanceof AxiosError)) {
-    return new ApiError(err instanceof Error ? err.message : 'Unexpected error')
-  }
-  let body: unknown = err.response?.data
-  if (body instanceof Blob) {
-    try {
-      body = JSON.parse(await body.text())
-    } catch {
-      body = undefined
-    }
-  }
-  const envelope = (body ?? {}) as { message?: string; error_code?: string; errors?: unknown }
-  return new ApiError(
-    envelope.message ?? err.message,
-    envelope.error_code ?? 'network_error',
-    err.response?.status,
-    envelope.errors,
-  )
-}
-
-/**
  * Fetch an export of the entries matching `filters` (requires `audit.export`).
  *
  * The response is the file itself, not an API envelope, so this uses the raw
@@ -129,7 +102,7 @@ export async function fetchAuditExport(
         `audit-logs-${stamp}.${format}`,
     }
   } catch (err) {
-    throw await exportError(err)
+    throw await blobApiError(err)
   }
 }
 

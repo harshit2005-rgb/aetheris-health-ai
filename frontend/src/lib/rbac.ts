@@ -159,8 +159,12 @@ export type Permission =
   | 'inventory.po.update'
   | 'inventory.po.receive'
   | 'inventory.forecast.read'
-  // Reports
-  | 'report.read'
+  // Reports (docs/modules/10-reports-dashboard.md §10): one read code per role
+  // dashboard; the admin and billing codes also open reports.
+  | 'report.admin.read'
+  | 'report.doctor.read'
+  | 'report.reception.read'
+  | 'report.billing.read'
   | 'report.export'
   // Settings & departments
   | 'settings.read'
@@ -216,7 +220,8 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'inventory.stock.read', 'inventory.consume', 'inventory.transfer', 'inventory.adjust',
     'inventory.po.read', 'inventory.po.create', 'inventory.po.update', 'inventory.po.receive',
     'inventory.forecast.read',
-    'report.read', 'report.export',
+    'report.admin.read', 'report.doctor.read', 'report.reception.read', 'report.billing.read',
+    'report.export',
     'settings.read', 'settings.update',
     'department.read', 'department.create', 'department.update', 'department.delete',
     'audit.read', 'audit.export',
@@ -254,7 +259,8 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'inventory.stock.read', 'inventory.consume', 'inventory.transfer', 'inventory.adjust',
     'inventory.po.read', 'inventory.po.create', 'inventory.po.update', 'inventory.po.receive',
     'inventory.forecast.read',
-    'report.read', 'report.export',
+    'report.admin.read', 'report.doctor.read', 'report.reception.read', 'report.billing.read',
+    'report.export',
     'settings.read', 'settings.update',
     'department.read', 'department.create', 'department.update', 'department.delete',
     'audit.read',
@@ -267,6 +273,8 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'appointment.check_in', 'appointment.recommend_slot',
     // Module spec 06 §3: a receptionist views invoices and records cash payments.
     'service.read', 'invoice.read', 'invoice.payment.record.cash',
+    // The reception dashboard only: no report and no money figure.
+    'report.reception.read',
     'department.read', 'doctor.read', 'doctor.availability.read',
   ],
   doctor: [
@@ -280,7 +288,8 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'invoice.read.own',
     'lab.test.read', 'lab.order.read', 'lab.order.create', 'lab.order.cancel',
     'pharmacy.medicine.read', 'pharmacy.prescription.read', 'pharmacy.prescription.create',
-    'report.read',
+    // The doctor's own dashboard only; it opens no report.
+    'report.doctor.read',
     'department.read', 'doctor.read', 'doctor.availability.read', 'doctor.availability.update',
     'doctor.leave.create', 'doctor.leave.delete',
   ],
@@ -301,7 +310,7 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     // No `invoice.void`: voiding is an admin action (module spec 06 §4, rule 4).
     'service.read', 'invoice.read', 'invoice.create', 'invoice.update', 'invoice.issue',
     'invoice.payment.record',
-    'report.read', 'department.read', 'doctor.read',
+    'report.billing.read', 'report.export', 'department.read', 'doctor.read',
   ],
   lab_technician: [
     'notification.read.own', 'notification.preference.update.own',
@@ -348,7 +357,7 @@ export type PermissionGroup =
   | 'lab.order.read'
   | 'pharmacy.medicine.read'
   | 'inventory.stock.read'
-  | 'report.read'
+  | 'report.admin.read'
   | 'user.read'
   | 'settings.read'
 
@@ -370,7 +379,7 @@ export const NAV: NavItem[] = [
   { to: '/laboratory', label: 'Laboratory', icon: FlaskConical, permission: 'lab.order.read' },
   { to: '/pharmacy', label: 'Pharmacy', icon: Pill, permission: 'pharmacy.medicine.read' },
   { to: '/inventory', label: 'Inventory', icon: Boxes, permission: 'inventory.stock.read' },
-  { to: '/reports', label: 'Reports', icon: BarChart3, permission: 'report.read' },
+  { to: '/reports', label: 'Reports', icon: BarChart3, permission: 'report.admin.read' },
   { to: '/users', label: 'Users & Roles', icon: UserCog, permission: 'user.read' },
   { to: '/settings', label: 'Settings', icon: SettingsIcon, permission: 'settings.read' },
 ]
@@ -406,7 +415,10 @@ const GROUP_ALIASES: Record<PermissionGroup, Permission[]> = {
     'inventory.location.read',
     'inventory.po.read',
   ],
-  'report.read': ['report.read'],
+  // Only these two codes open a report. Doctors and receptionists hold a
+  // dashboard code (`report.doctor.read`, `report.reception.read`) and have
+  // dashboards only, so neither code is an alias here.
+  'report.admin.read': ['report.admin.read', 'report.billing.read'],
   'user.read': ['user.read'],
   'settings.read': ['settings.read'],
 }

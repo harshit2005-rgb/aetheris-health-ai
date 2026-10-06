@@ -13,6 +13,12 @@ import { formatDateTime } from '@/lib/format'
 import { router } from '@/router'
 import { signIn, signOut } from '@/test/auth'
 import { installFakeApi, ok, paged, type FakeApi } from '@/test/fakeApi'
+import {
+  adminDashboardFixture,
+  billingDashboardFixture,
+  doctorDashboardFixture,
+  receptionDashboardFixture,
+} from '@/test/reportFixtures'
 import DashboardPage from './DashboardPage'
 import DoctorsPage from './doctors/DoctorsPage'
 import { labOrderColumns } from './laboratory/columns'
@@ -24,10 +30,20 @@ import SettingsPage from './settings/SettingsPage'
 
 let fake: FakeApi
 
+/** What each dashboard route answers, for the roles that now read one. */
+const DASHBOARDS: Record<string, unknown> = {
+  '/dashboards/admin': adminDashboardFixture,
+  '/dashboards/billing': billingDashboardFixture,
+  '/dashboards/reception': receptionDashboardFixture,
+  '/dashboards/doctor': doctorDashboardFixture,
+}
+
 beforeEach(() => {
-  fake = installFakeApi((config) =>
-    config.url === '/notifications/unread-count' ? ok({ unread: 0 }) : paged([]),
-  )
+  fake = installFakeApi((config) => {
+    if (config.url === '/notifications/unread-count') return ok({ unread: 0 })
+    const dashboard = DASHBOARDS[config.url ?? '']
+    return dashboard ? ok(dashboard) : paged([])
+  })
 })
 
 afterEach(() => {
@@ -340,6 +356,7 @@ describe('dashboard greeting', () => {
     'invoice.read',
     'invoice.payment.record.cash',
     'doctor.read',
+    'report.reception.read',
   ]
   const FRONT_DESK_WORDS = /register patients|book appointments|day's queue|awaiting payment/
 
@@ -369,6 +386,9 @@ describe('dashboard greeting', () => {
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Register Patient/ })).toBeInTheDocument()
     expect(await screen.findByRole('region', { name: 'Awaiting payment' })).toBeInTheDocument()
+    // Their own dashboard, and no other.
+    expect(await screen.findByRole('region', { name: 'Front desk' })).toBeInTheDocument()
+    expect(fake.requests('get', '/dashboards/').map((c) => c.url)).toEqual(['/dashboards/reception'])
   })
 
   it('names only the queue for a nurse, who can neither register nor book', async () => {
@@ -379,15 +399,24 @@ describe('dashboard greeting', () => {
   })
 
   it('names only invoices for billing staff, and requests no appointments', async () => {
-    renderIn(<DashboardPage />, ['patient.read', 'doctor.read', 'invoice.read', 'invoice.payment.record'])
+    renderIn(<DashboardPage />, [
+      'patient.read',
+      'doctor.read',
+      'invoice.read',
+      'invoice.payment.record',
+      'report.billing.read',
+      'report.export',
+    ])
 
     expect(
       await screen.findByText('Your operations hub — see invoices awaiting payment.'),
     ).toBeInTheDocument()
+    expect(await screen.findByRole('region', { name: 'Billing' })).toBeInTheDocument()
+    expect(fake.requests('get', '/dashboards/').map((c) => c.url)).toEqual(['/dashboards/billing'])
     expect(fake.sent.some((c) => (c.url ?? '').includes('appointment'))).toBe(false)
   })
 
-  it('shows only counts the API returned', async () => {
+  it('shows only counts the API returned, to a user with no report code', async () => {
     fake.restore()
     fake = installFakeApi((config) =>
       config.url === '/patients' ? paged([], 137) : config.url === '/doctors' ? paged([], 5) : paged([], 0),
@@ -398,7 +427,7 @@ describe('dashboard greeting', () => {
     expect(await screen.findByText('137')).toBeInTheDocument()
     expect(within(tile('Total patients')).getByText('137')).toBeInTheDocument()
     expect(within(tile('Doctors')).getByText('5')).toBeInTheDocument()
-    // Three reads, one per tile; the queue reuses the appointments read.
+    // Three reads, one per tile; the queue reuses the appointments read. No dashboard is asked for.
     expect(fake.sent.map((c) => c.url).sort()).toEqual(['/appointments', '/doctors', '/patients'])
   })
 })

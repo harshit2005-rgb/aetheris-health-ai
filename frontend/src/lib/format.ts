@@ -106,3 +106,60 @@ export function todayISODate(): string {
   const d = new Date()
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
 }
+
+/** A whole number with the viewer's digit grouping (e.g. "1,204"). Formatting only. */
+export function formatCount(n: number): string {
+  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 }).format(n)
+}
+
+/**
+ * A short amount for a chart axis or tooltip (e.g. "₹1.9K", "₹4.4M") — never
+ * for a figure a user reads off as exact; those use {@link formatMoney}. An
+ * unknown currency code falls back to the bare compact number.
+ */
+export function formatMoneyCompact(value: string | number, currency?: string): string {
+  const amount = typeof value === 'string' ? Number(value) : value
+  if (Number.isNaN(amount)) return '—'
+  const compact = { notation: 'compact', maximumFractionDigits: 1 } as const
+  if (currency) {
+    try {
+      return new Intl.NumberFormat(undefined, { ...compact, style: 'currency', currency }).format(amount)
+    } catch {
+      // Not a currency code Intl knows: show the number without a symbol.
+    }
+  }
+  return new Intl.NumberFormat(undefined, compact).format(amount)
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+
+/** The parts of a `YYYY-MM-DD` date, read from the text so no timezone can shift the day. */
+function dateParts(date: string): { year: string; month: string; day: number } | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date)
+  const month = m ? MONTHS[Number(m[2]) - 1] : undefined
+  return m && month ? { year: m[1], month, day: Number(m[3]) } : null
+}
+
+/**
+ * The label of one report period, from the hospital-local dates the server
+ * sent: a day is "6 Oct", a week "5–11 Oct" (or "28 Sep – 4 Oct" across
+ * months, with the years when it crosses one) and a month "Oct 2026". Built
+ * from the date text, never through a `Date`, so the viewer's timezone cannot
+ * move a bucket to the wrong day. Echoes `bucket_start` if it is not a date.
+ */
+export function formatBucketLabel(
+  bucket: { bucket_start: string; bucket_end: string },
+  granularity: 'day' | 'week' | 'month',
+): string {
+  const start = dateParts(bucket.bucket_start)
+  if (!start) return bucket.bucket_start
+  if (granularity === 'month') return `${start.month} ${start.year}`
+  if (granularity === 'day') return `${start.day} ${start.month}`
+  const end = dateParts(bucket.bucket_end)
+  if (!end) return `${start.day} ${start.month}`
+  if (start.year !== end.year) {
+    return `${start.day} ${start.month} ${start.year} – ${end.day} ${end.month} ${end.year}`
+  }
+  if (start.month !== end.month) return `${start.day} ${start.month} – ${end.day} ${end.month}`
+  return `${start.day}–${end.day} ${start.month}`
+}

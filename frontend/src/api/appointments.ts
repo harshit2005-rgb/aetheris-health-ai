@@ -1,8 +1,15 @@
 import { useRef } from 'react'
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from '@tanstack/react-query'
 import { http } from '@/api/http'
 import { doctorKeys } from '@/api/doctors'
 import { newIdempotencyKey } from '@/api/idempotency'
+import { dashboardKeys, reportKeys } from '@/api/reports'
 import { ApiError, type Paginated, type ListQueryOptions } from '@/api/types'
 
 /**
@@ -131,6 +138,15 @@ function isStaleAppointment(err: unknown): boolean {
 }
 
 /**
+ * Every appointment write moves a dashboard tile or a report figure, so those
+ * are refetched with the lists rather than left stale until they age out.
+ */
+function invalidateFigures(qc: QueryClient) {
+  qc.invalidateQueries({ queryKey: dashboardKeys.all })
+  qc.invalidateQueries({ queryKey: reportKeys.all })
+}
+
+/**
  * Check in, start or complete an appointment (docs/18-API_CONTRACTS.md §5.4).
  *
  * The state machine lives on the server: an illegal move is a 400. The mutation
@@ -142,7 +158,10 @@ export function useAppointmentTransition() {
   return useMutation({
     mutationFn: ({ id, action }: { id: string; action: AppointmentTransition }) =>
       http.post<Appointment>(`/appointments/${id}/${action}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: appointmentKeys.all }),
+    onSuccess: () => {
+      invalidateFigures(qc)
+      return qc.invalidateQueries({ queryKey: appointmentKeys.all })
+    },
     onError: (err) => {
       if (isStaleAppointment(err)) qc.invalidateQueries({ queryKey: appointmentKeys.all })
     },
@@ -158,6 +177,7 @@ export function useCancelAppointment() {
     onSuccess: () => {
       // A cancelled appointment gives its slot back.
       qc.invalidateQueries({ queryKey: doctorKeys.slots() })
+      invalidateFigures(qc)
       return qc.invalidateQueries({ queryKey: appointmentKeys.all })
     },
     onError: (err) => {
@@ -178,6 +198,7 @@ export function useMarkNoShow() {
     mutationFn: (id: string) => http.post<Appointment>(`/appointments/${id}/no-show`),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: doctorKeys.slots() })
+      invalidateFigures(qc)
       return qc.invalidateQueries({ queryKey: appointmentKeys.all })
     },
     onError: (err) => {
@@ -214,7 +235,10 @@ export function useRescheduleAppointment() {
   return useMutation({
     mutationFn: ({ id, ...input }: RescheduleAppointmentInput & { id: string }) =>
       http.patch<Appointment>(`/appointments/${id}`, input),
-    onSuccess: refresh,
+    onSuccess: () => {
+      invalidateFigures(qc)
+      return refresh()
+    },
     onError: (err) => {
       if (isStaleAppointment(err)) refresh()
     },
@@ -249,6 +273,7 @@ export function useBookAppointment() {
       attempt.current = null
       qc.invalidateQueries({ queryKey: appointmentKeys.all })
       qc.invalidateQueries({ queryKey: doctorKeys.slots() })
+      invalidateFigures(qc)
     },
     onError: (err) => {
       // 409: another desk took the slot. The slots on screen are out of date.

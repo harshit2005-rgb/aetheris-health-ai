@@ -2,6 +2,7 @@ import { useRef } from 'react'
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { http } from '@/api/http'
 import { newIdempotencyKey } from '@/api/idempotency'
+import { dashboardKeys, reportKeys } from '@/api/reports'
 import { ApiError, type ListQueryOptions, type Paginated } from '@/api/types'
 
 /**
@@ -233,7 +234,12 @@ function useInvoiceMutation<TInput, TResult>(mutationFn: (input: TInput) => Prom
   const qc = useQueryClient()
   return useMutation({
     mutationFn,
-    onSuccess: () => qc.invalidateQueries({ queryKey: billingKeys.all }),
+    onSuccess: () => {
+      // Every billing write also moves a dashboard tile or a report figure.
+      qc.invalidateQueries({ queryKey: dashboardKeys.all })
+      qc.invalidateQueries({ queryKey: reportKeys.all })
+      return qc.invalidateQueries({ queryKey: billingKeys.all })
+    },
     onError: (err) => {
       if (err instanceof ApiError && [400, 404, 409].includes(err.status ?? 0)) {
         qc.invalidateQueries({ queryKey: billingKeys.all })

@@ -12,13 +12,14 @@ const INCLUDED = [
   'Laboratory orders and results',
   'Pharmacy prescribing, dispensing, and medicine stock',
   'Inventory of supplies by location, with purchase orders',
+  'Reports and role dashboards, with CSV export',
   'In-app notifications',
   'Users, roles, and permission-based access',
   'Audit log with export',
 ]
 
-/** Planned modules. None is available yet. */
-const PLANNED = ['Reports', 'AI assistance']
+/** Planned, and not available yet. */
+const PLANNED = ['AI assistance']
 
 /**
  * Pricing. There are no published plans or prices — the product has no

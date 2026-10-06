@@ -22,6 +22,7 @@ from app.api.v1 import (
     appointment_router,
     audit_router,
     auth_router,
+    dashboard_router,
     department_router,
     doctor_router,
     health_router,
@@ -35,6 +36,7 @@ from app.api.v1 import (
     permission_router,
     prescription_router,
     purchase_order_router,
+    report_router,
     role_router,
     service_router,
     tests_catalog_router,
@@ -257,6 +259,10 @@ def _register_routers(app: FastAPI) -> None:
         inventory_router,
         prefix=API_V1_PREFIX,
     )
+
+    # Reports routes — role dashboards, reports and their CSV export
+    for reports_router in (dashboard_router, report_router):
+        app.include_router(reports_router, prefix=API_V1_PREFIX)
 
     # Notification routes — notification centre, preferences, broadcast
     app.include_router(

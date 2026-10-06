@@ -174,8 +174,8 @@ describe('landing page', () => {
     renderPublic(<LandingPage />)
 
     const roadmap = screen.getByRole('heading', { name: 'On the roadmap' }).parentElement as HTMLElement
-    expect(roadmap).toHaveTextContent(
-      'Reports and AI assistance are planned. Neither is part of the product today.',
+    expect(roadmap.textContent).toBe(
+      'On the roadmapAI assistance is planned. It is not part of the product today.',
     )
     for (const built of [
       'Patients',
@@ -282,10 +282,11 @@ describe('pricing page', () => {
     expect(within(planned).queryByText(/Pharmacy|Inventory|Laborator/)).not.toBeInTheDocument()
     expect(planned.textContent).not.toMatch(BUILT)
     expectBuiltModulesNotPlanned(passagesOnPage().filter((text) => text !== planned.textContent))
-    for (const module of ['Reports', 'AI assistance']) {
-      expect(within(planned).getByText(module)).toBeInTheDocument()
-      expect(within(included).queryByText(module)).not.toBeInTheDocument()
-    }
+    // Reports has real screens now, so it is listed as included, not planned.
+    expect(within(included).getByText('Reports and role dashboards, with CSV export')).toBeInTheDocument()
+    expect(within(planned).queryByText(/report/i)).not.toBeInTheDocument()
+    expect(within(planned).getByText('AI assistance')).toBeInTheDocument()
+    expect(within(included).queryByText('AI assistance')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Talk to us/ })).toHaveAttribute('href', '/contact')
   })
 })
@@ -452,13 +453,32 @@ describe('dead controls', () => {
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
   })
 
-  it('Reports says it is not available, and marks its contents as planned', () => {
-    renderApp(<ReportsPage />, ['report.read'])
+  const reportLinks = () =>
+    within(screen.getByRole('list', { name: 'Reports' }))
+      .getAllByRole('link')
+      .map((link) => [link.getAttribute('aria-label'), link.getAttribute('href')])
 
-    expect(screen.getByRole('heading', { name: 'Reports is not available yet' })).toBeInTheDocument()
-    expect(screen.getByText(/has no data behind it today/)).toBeInTheDocument()
-    expect(screen.getByText(/Operational and financial reporting — planned/)).toBeInTheDocument()
-    expect(pageText()).not.toMatch(/scaffolded|Spec Part/)
-    expect(screen.queryByRole('button')).not.toBeInTheDocument()
+  it('Reports lists all four reports for an administrator, and no longer says it is unavailable', () => {
+    renderApp(<ReportsPage />, ['report.admin.read'])
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Reports' })).toBeInTheDocument()
+    expect(reportLinks()).toEqual([
+      ['Patients report', '/reports/patients'],
+      ['Appointments report', '/reports/appointments'],
+      ['Revenue report', '/reports/revenue'],
+      ['Outstanding report', '/reports/outstanding'],
+    ])
+    expect(pageText()).not.toMatch(/not available yet|planned|scaffolded|Spec Part/i)
+  })
+
+  it('Reports lists only Revenue and Outstanding for billing staff', () => {
+    renderApp(<ReportsPage />, ['report.billing.read'])
+
+    expect(screen.getByRole('heading', { level: 1, name: 'Reports' })).toBeInTheDocument()
+    expect(reportLinks()).toEqual([
+      ['Revenue report', '/reports/revenue'],
+      ['Outstanding report', '/reports/outstanding'],
+    ])
+    expect(pageText()).not.toMatch(/not available yet|planned/i)
   })
 })

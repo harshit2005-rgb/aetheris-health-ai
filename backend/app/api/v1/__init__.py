@@ -19,6 +19,8 @@ from app.api.v1.notifications import router as notification_router
 from app.api.v1.patients import router as patient_router
 from app.api.v1.prescriptions import router as prescription_router
 from app.api.v1.purchase_orders import router as purchase_order_router
+from app.api.v1.reports import dashboard_router as dashboard_router
+from app.api.v1.reports import router as report_router
 from app.api.v1.roles import permission_router
 from app.api.v1.roles import router as role_router
 from app.api.v1.services import router as service_router
@@ -30,6 +32,7 @@ __all__ = [
     "appointment_router",
     "audit_router",
     "auth_router",
+    "dashboard_router",
     "department_router",
     "doctor_router",
     "health_router",
@@ -43,6 +46,7 @@ __all__ = [
     "permission_router",
     "prescription_router",
     "purchase_order_router",
+    "report_router",
     "role_router",
     "service_router",
     "tests_catalog_router",

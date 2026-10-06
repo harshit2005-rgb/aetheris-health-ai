@@ -66,7 +66,7 @@ const FAQ = [
   },
   {
     q: 'Which modules are available today?',
-    a: 'Patients, doctors and departments, appointments, billing, laboratory orders and results, pharmacy prescribing and dispensing with medicine stock, inventory of supplies by location, notifications, user and role management, hospital settings, and the audit log. Reports are planned and are not part of the product yet.',
+    a: 'Patients, doctors and departments, appointments, billing, laboratory orders and results, pharmacy prescribing and dispensing with medicine stock, inventory of supplies by location, reports and role dashboards, notifications, user and role management, hospital settings, and the audit log.',
   },
   {
     q: 'Does Aetheris include AI features today?',
@@ -238,7 +238,7 @@ export default function LandingPage() {
             dark
             icon={Hourglass}
             title="On the roadmap"
-            body="Reports and AI assistance are planned. Neither is part of the product today."
+            body="AI assistance is planned. It is not part of the product today."
             className="md:row-span-2"
           />
           <ModuleCard

@@ -26,6 +26,10 @@ const AppointmentsPage = lazy(() => import('@/pages/appointments/AppointmentsPag
 const BillingPage = lazy(() => import('@/pages/billing/BillingPage'))
 const InvoiceDetailPage = lazy(() => import('@/pages/billing/InvoiceDetailPage'))
 const ReportsPage = lazy(() => import('@/pages/reports/ReportsPage'))
+const PatientsReportPage = lazy(() => import('@/pages/reports/PatientsReportPage'))
+const AppointmentsReportPage = lazy(() => import('@/pages/reports/AppointmentsReportPage'))
+const RevenueReportPage = lazy(() => import('@/pages/reports/RevenueReportPage'))
+const OutstandingReportPage = lazy(() => import('@/pages/reports/OutstandingReportPage'))
 const LabOrdersPage = lazy(() => import('@/pages/laboratory/LabOrdersPage'))
 const LabOrderDetailPage = lazy(() => import('@/pages/laboratory/LabOrderDetailPage'))
 const LabCatalogPage = lazy(() => import('@/pages/laboratory/LabCatalogPage'))
@@ -295,10 +299,46 @@ export const router = createBrowserRouter([
             ),
           },
           {
+            // Either report code opens Reports: an administrator reads all four,
+            // billing staff the two financial ones
+            // (docs/modules/10-reports-dashboard.md §10). Doctors and receptionists hold a
+            // dashboard code only and are sent home.
             path: '/reports',
             element: (
-              <RequirePermission permission="report.read">
+              <RequirePermission group="report.admin.read">
                 <ReportsPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/reports/patients',
+            element: (
+              <RequirePermission permission="report.admin.read">
+                <PatientsReportPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/reports/appointments',
+            element: (
+              <RequirePermission permission="report.admin.read">
+                <AppointmentsReportPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/reports/revenue',
+            element: (
+              <RequirePermission group="report.admin.read">
+                <RevenueReportPage />
+              </RequirePermission>
+            ),
+          },
+          {
+            path: '/reports/outstanding',
+            element: (
+              <RequirePermission group="report.admin.read">
+                <OutstandingReportPage />
               </RequirePermission>
             ),
           },

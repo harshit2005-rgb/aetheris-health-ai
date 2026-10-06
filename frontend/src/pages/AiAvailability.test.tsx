@@ -159,13 +159,12 @@ describe('the public pages', () => {
 
     expectNoAiClaims()
     const roadmap = screen.getByRole('heading', { name: 'On the roadmap' }).parentElement as HTMLElement
-    expect(roadmap).toHaveTextContent(/AI assistance are planned/)
-    expect(roadmap).toHaveTextContent(/Neither is part of the product today/)
+    expect(roadmap).toHaveTextContent('AI assistance is planned. It is not part of the product today.')
     expect(screen.getByText('Does Aetheris include AI features today?')).toBeInTheDocument()
     expect(screen.queryByText(/intelligent platform/i)).not.toBeInTheDocument()
   })
 
-  it('landing: the AI answer says "not yet" and Reports is not offered either', async () => {
+  it('landing: the AI answer says "not yet", and the list of modules names reports but no AI', async () => {
     const user = userEvent.setup()
     renderPublic(<LandingPage />)
 
@@ -174,9 +173,11 @@ describe('the public pages', () => {
       await screen.findByText(/^Not yet\. AI assistance is planned and is not part of the current product\./),
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Which modules are available today?' }))
-    expect(
-      await screen.findByText(/Reports are planned and are not part of the product yet\./),
-    ).toBeInTheDocument()
+    const modules = await screen.findByText(/^Patients, doctors and departments, appointments, billing/)
+    expect(modules).toHaveTextContent(/reports and role dashboards/)
+    // Reports are built, so the answer no longer calls them planned — and it offers no AI.
+    expect(modules.textContent).not.toMatch(/planned|not part of the product/i)
+    expect(modules.textContent).not.toMatch(/\bAI\b|artificial intelligence|assistant|copilot/i)
   })
 
   it('pricing: sells no AI features', () => {
@@ -188,8 +189,9 @@ describe('the public pages', () => {
     expect(within(planned).getByText('AI assistance')).toBeInTheDocument()
     const included = screen.getByRole('region', { name: 'Included today' })
     expect(included.textContent).not.toMatch(/\bAI\b/)
-    expect(included.textContent).not.toMatch(/report|analytics/i)
-    expect(within(planned).getByText('Reports')).toBeInTheDocument()
+    expect(included.textContent).not.toMatch(/analytics/i)
+    // Planned is exactly AI assistance: Reports has left the roadmap.
+    expect(within(planned).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['AI assistance'])
     expect(within(planned).getByText('Planned, and not available yet.')).toBeInTheDocument()
   })
 })
