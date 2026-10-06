@@ -4,6 +4,10 @@ The exact request/response contracts for the endpoints the frontend consumes tod
 **Patients, Departments, Doctors, Appointments, Billing, Notifications, Laboratory, Pharmacy, Inventory, Reports and dashboards**. Written so a frontend module
 can be built without reading backend code or guessing a shape.
 
+One AI feature is wired: an optional, advisory slot suggestion in the booking dialog
+(§5.6), with the capability read that says whether to offer it (§5.7). Every other AI
+endpoint named in this document is listed as not built.
+
 **Source of truth.** Every contract below was read out of the implementation, not the
 design docs — routers in `backend/app/api/v1/`, DTOs in `backend/app/schemas/`, and the
 assertions in `backend/app/tests/`. Where a design doc and the code disagreed, the code
@@ -89,7 +93,16 @@ From `backend/app/core/error_codes.py`:
 | `RESOURCE_NOT_FOUND` | 404 | Wrong id, or the row belongs to another hospital |
 | `RESOURCE_CONFLICT` | 409 | Duplicate MRN/code/licence, or a double-booked slot |
 | `BUSINESS_RULE_VIOLATION` | 400 | Illegal state transition, already-deactivated record |
-| `RATE_LIMITED` | 429 | 300 req/min per user, 1000/min per hospital |
+| `RATE_LIMITED` | 429 | 300 req/min per user, 1000/min per hospital; 30/min per user on `recommend-slot` (§5.6) |
+| `FEATURE_DISABLED` | 403 | The hospital has not been given a gated feature (§5.6) |
+| `AI_NOT_CONFIGURED` | 503 | AI is switched off or has no key on this server (§5.6) |
+| `AI_PROVIDER_UNAVAILABLE` | 503 | The AI provider could not be used (§5.6) |
+| `AI_PROVIDER_TIMEOUT` | 503 | The AI provider did not answer within the deadline (§5.6) |
+| `AI_RESPONSE_INVALID` | 503 | The AI answer was rejected by the server's checks (§5.6) |
+
+`FEATURE_DISABLED` and the four `AI_*` codes are returned only by
+`POST /appointments/recommend-slot`. All four `AI_*` codes are `503` — branch on
+`error_code`, not on the status.
 
 A 404 is deliberately returned for a record in another tenant. Do not treat it as a bug.
 
@@ -174,6 +187,10 @@ Which seeded role can call what. Relevant subset only:
 | `appointment.start` / `.complete` | ✅ | ✅ | — | — |
 | `appointment.recommend_slot` | ✅ | — | — | ✅ |
 | `appointment.book_override` | ✅ | — | — | — |
+
+`POST /appointments/recommend-slot` needs **both** `appointment.recommend_slot` and
+`doctor.availability.read`, so of these roles only Hospital Admin and Receptionist can
+call it (§5.6).
 
 Two gotchas worth designing around: a **Receptionist cannot edit or deactivate a patient**,
 and a **Doctor cannot book or cancel** — hide those controls per permission rather than
@@ -468,7 +485,14 @@ in `timezone`.
 | POST | `/api/v1/appointments/{id}/cancel` | `appointment.cancel` | Body: `{ "reason": "…" }` |
 | POST | `/api/v1/appointments/{id}/no-show` | `appointment.cancel` | |
 | GET | `/api/v1/appointments/{id}/status-history` | `appointment.read` | |
-| POST | `/api/v1/appointments/recommend-slot` | `appointment.recommend_slot` | AI ranking |
+| POST | `/api/v1/appointments/recommend-slot` | `appointment.recommend_slot` **and** `doctor.availability.read` | Optional AI suggestion of one free slot; books nothing (§5.6) |
+
+One route outside this router belongs to the same flow. It is documented here because
+hospitals have no section of their own:
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/api/v1/hospitals/current/feature-flags` | Any authenticated user | Whether the AI suggestion can be offered (§5.7) |
 
 ### 5.2 Booking
 
@@ -574,10 +598,235 @@ index in this response. Do not display a "token number" as if the backend issued
 
 ### 5.6 AI slot recommendation
 
-`POST /api/v1/appointments/recommend-slot` with `{ patient_id, doctor_id?, urgency?,
-preferred_window_start?, preferred_window_end?, limit? }` returns
-`{ recommendations: [{ slot_start, slot_end, doctor_id, score, reason }], model }`.
-`score` is 0–1. `limit` is 1–10, default 3.
+```
+POST /api/v1/appointments/recommend-slot
+```
+
+An **optional** helper in the booking dialog: it suggests **one** free slot in one
+doctor's day. It is advice. It books nothing, reserves nothing and writes nothing — no
+appointment and no audit row. A member of staff reviews the suggestion and books through
+the ordinary `POST /appointments` (§5.2), which validates everything again. Booking by
+hand works exactly the same whether this endpoint is available or not.
+
+There is no ranked list, no score and no confidence value, and the response never names a
+provider or a model.
+
+**Who can call it.** The route requires two permissions, and the hospital must have the
+feature:
+
+| Requirement | Detail |
+|---|---|
+| `appointment.recommend_slot` | Seeded on Hospital Admin and Receptionist (and Super Admin) |
+| `doctor.availability.read` | Seeded on Hospital Admin, Doctor, Nurse and Receptionist (and Super Admin) |
+| Hospital flag `feature.ai.slot_recommendation` | Must be stored as exactly `true` in the hospital's `settings`. Any other value — `false`, `"true"`, `1`, absent — is off |
+| AI configured on the server | A provider key is set and the AI kill switch is not off |
+
+So of the seeded hospital roles, **Hospital Admin and Receptionist** can ask; Doctor,
+Nurse, Billing Staff, Lab Technician, Pharmacist and Inventory Manager get `403
+PERMISSION_DENIED`. A Super Admin holds both codes but has no hospital, so gets the usual
+`400` (§1.5). The demo seed switches the flag on for the demo hospital unless it was
+already set to something explicitly; the server still needs a key before anything is
+suggested.
+
+Ask §5.7 before showing the control — do not probe this endpoint to find out.
+
+**Request.** Exactly three fields, all required:
+
+```json
+{
+  "patient_id": "3f1c6c1e-2c3d-4a5b-8c7d-9e0f1a2b3c4d",
+  "doctor_id": "8a7b6c5d-4e3f-2a1b-0c9d-8e7f6a5b4c3d",
+  "date": "2026-10-12"
+}
+```
+
+| Field | Type | Rules |
+|---|---|---|
+| `patient_id` | UUID | Must be a patient of the caller's hospital |
+| `doctor_id` | UUID | Must be a doctor of the caller's hospital |
+| `date` | `YYYY-MM-DD` | The calendar day **in the hospital's timezone** — the day the slot picker shows. Must lie between `2000-01-01` and `2100-12-31` inclusive |
+
+Any other key is a `422`: the body is `extra="forbid"`. That includes the fields of the
+older design — `urgency`, `preferred_window_start`, `preferred_window_end`, `limit` — and
+`slots`, `hospital_id` and any free-text field. A past date inside the range is valid; it
+simply has no free slots.
+
+**The client cannot supply slots.** The server computes the candidates itself, from the
+same generator that backs `GET /doctors/{id}/slots` (§4.6): availability, leaves and
+existing appointments for that doctor and day. A slot is a candidate when that read model
+calls it `available` **and** it has not started yet. That is slightly stricter than the
+picker, which still lists a free slot that has already begun. At most 144 slots of one
+day are considered.
+
+**Response — a suggestion.** `200`, message `"Slot recommendation completed."`:
+
+```json
+{
+  "success": true,
+  "message": "Slot recommendation completed.",
+  "data": {
+    "status": "recommended",
+    "recommendation": {
+      "slot_start": "2026-10-12T09:30:00+05:30",
+      "slot_end": "2026-10-12T10:00:00+05:30",
+      "doctor_id": "8a7b6c5d-4e3f-2a1b-0c9d-8e7f6a5b4c3d",
+      "reason": "09:30 sits directly after a booked slot, keeping the morning compact."
+    },
+    "date": "2026-10-12",
+    "timezone": "Asia/Kolkata",
+    "candidate_count": 4
+  },
+  "metadata": null
+}
+```
+
+**Response — nothing to suggest.** Also `200`. No model call is made:
+
+```json
+{
+  "success": true,
+  "message": "Slot recommendation completed.",
+  "data": {
+    "status": "no_free_slots",
+    "recommendation": null,
+    "date": "2026-10-13",
+    "timezone": "Asia/Kolkata",
+    "candidate_count": 0
+  },
+  "metadata": null
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `status` | `recommended \| no_free_slots` | The only two success outcomes |
+| `recommendation` | object or `null` | Non-null exactly when `status` is `recommended` |
+| `recommendation.slot_start`, `.slot_end` | datetime with the hospital's UTC offset | The server's own values for a slot it computed — the same instants as a `start`/`end` in §4.6. Send them as `scheduled_start`/`scheduled_end` to book |
+| `recommendation.doctor_id` | UUID | The requested doctor, echoed |
+| `recommendation.reason` | string or `null` | The only model-written field. Plain text, at most 200 characters. **Untrusted** — render as text, never as markup or a link. `null` when the model's text was empty after cleaning or mentioned an internal slot id |
+| `date` | `YYYY-MM-DD` | The requested day, echoed |
+| `timezone` | IANA name | The hospital's timezone |
+| `candidate_count` | integer ≥ 0 | How many free slots the server offered the model; `0` with `no_free_slots` |
+
+`no_free_slots` covers a day with no availability, a fully booked day, a day on leave and
+a day whose slots have all started.
+
+**Errors.** Every failure is explicit; none is turned into an empty success.
+
+| HTTP | `error_code` | `message` | When |
+|---|---|---|---|
+| 401 | `AUTHENTICATION_REQUIRED` | — | No token, or an invalid or expired one |
+| 403 | `PERMISSION_DENIED` | `Permission denied. Required: appointment.recommend_slot.` (or `…doctor.availability.read.`) | A required permission is missing. With neither, `appointment.recommend_slot` is the one named |
+| 422 | `VALIDATION_ERROR` | `Validation failed.` | Missing field, bad UUID, bad or out-of-range date, any extra key. `errors` is a list (§1.2) |
+| 400 | `BUSINESS_RULE_VIOLATION` | `This account is not scoped to a hospital, so appointments cannot be accessed.` | Super Admin (§1.5) |
+| 403 | `FEATURE_DISABLED` | `AI slot suggestions are not enabled for this hospital.` | The hospital's flag is not exactly `true`. `errors` is `{ "feature": "feature.ai.slot_recommendation" }` |
+| 503 | `AI_NOT_CONFIGURED` | `AI suggestions are not configured on this server.` | No AI key on the server, or the AI kill switch is off. No provider call is made |
+| 422 | `VALIDATION_ERROR` | `Patient not found in this hospital.` | Unknown patient, or one of another hospital. `errors` is the object shape (§14) |
+| 422 | `VALIDATION_ERROR` | `Doctor not found in this hospital.` | Unknown or deleted doctor, or one of another hospital — the same answer for all three |
+| 422 | `VALIDATION_ERROR` | `Hospital timezone '<zone>' is not a valid IANA timezone.` | The hospital's own stored timezone is unusable — a data problem, not a client error |
+| 503 | `AI_PROVIDER_UNAVAILABLE` | `The AI service is unavailable right now. Choose a slot manually.` | The provider could not be reached, answered with an error (bad key, its own rate limit, a retired or unknown model, a 4xx/5xx), or this server is already at its cap of concurrent AI calls |
+| 503 | `AI_PROVIDER_TIMEOUT` | `The AI service took too long to respond. Choose a slot manually.` | The provider did not answer within the server's deadline (8 seconds by default) |
+| 503 | `AI_RESPONSE_INVALID` | `The AI suggestion could not be used. Choose a slot manually or try again.` | The answer was truncated, not JSON, the wrong shape, or named a slot the server never offered — or the chosen slot was no longer free when re-checked |
+| 429 | `RATE_LIMITED` | `Rate limit exceeded. Try again later.` | More than 30 calls a minute by one user on this path; the hospital-wide limit also applies. `Retry-After` is set |
+
+On the four `AI_*` failures `errors` is `null` and the message is fixed text: nothing
+from the provider, the prompt or the model's answer is ever returned. A `503` here is not
+an outage of the API — let the user carry on and pick a slot by hand.
+
+**Order of checks.** Authentication and the two permissions are route dependencies and
+the body is validated before the service runs, so a malformed body is a `422` even in a
+hospital without the feature. The service then checks, in this order:
+
+1. the hospital flag → `403 FEATURE_DISABLED`. First on purpose: a hospital without the
+   feature gets the same answer whatever ids it sent;
+2. AI configured on the server → `503 AI_NOT_CONFIGURED`;
+3. the patient, then the doctor → `422`;
+4. the candidates are computed; none → `200 no_free_slots`, and no model call;
+5. **one** model call — no retry and no fallback provider — → `503` on a provider failure
+   or timeout;
+6. the answer is parsed strictly and must name one of the ids the server offered →
+   otherwise `503 AI_RESPONSE_INVALID`. Nothing is repaired;
+7. the chosen slot is re-checked against the database — still in the future, no
+   overlapping appointment, no leave, inside published availability → otherwise `503
+   AI_RESPONSE_INVALID`;
+8. `200 recommended`.
+
+**What the model is sent.** The date and its weekday, the number of free slots, and the
+doctor's day as clock times in hospital-local time: each free slot under a throwaway id
+(`S1`, `S2`, …) and every other slot marked unavailable. Nothing else. No patient, doctor,
+hospital or user identifier, no name, no MRN, no appointment reason or notes, no timezone
+name and no free text from anyone. `patient_id` is used only to check that the patient
+belongs to the hospital; nothing about the patient reaches the model, so the suggestion
+is about the shape of the doctor's day and not about the patient. The ids exist only
+inside one request and never appear in the response.
+
+**Then a person books.** In the shipped UI (`frontend/src/components/appointments/SlotSuggestion.tsx`)
+the control appears only when the user holds both permissions, §5.7 reports the feature
+available, a patient is chosen and the loaded day has at least one slot that can be
+suggested. The suggestion is shown as "AI suggested", with the reason labelled as coming
+from the AI. **Use this slot** only selects that slot in the existing picker; the form's
+own **Book** button is still the only thing that sends `POST /appointments`. That booking
+is the normal one — same `Idempotency-Key`, same `409` on a race (§5.2) — and is audited
+as `appointment.booked` by the member of staff who pressed it.
+
+Client notes:
+
+- Match the suggestion to the slot feed by comparing instants, not strings, and offer it
+  only if the feed still shows that slot as free.
+- A `no_free_slots` answer, or a suggestion the feed does not show as free, means the
+  slots on screen are out of date — refetch them.
+- After `FEATURE_DISABLED`, `AI_NOT_CONFIGURED` or `PERMISSION_DENIED`, stop asking and
+  re-read §5.7: asking again cannot change the answer. The other failures can be retried
+  by the user; do not retry automatically.
+- The frontend waits up to 15 seconds for this call, longer than the server's own model
+  deadline, so the server's typed answer arrives first.
+
+### 5.7 Feature availability
+
+```
+GET /api/v1/hospitals/current/feature-flags
+```
+
+`backend/app/api/v1/hospitals.py` · `backend/app/schemas/hospital.py`
+
+Tells the interface whether a gated feature can be offered. **Any authenticated user**
+of a hospital may call it — there is no permission code. `200`, message
+`"Feature flags retrieved."`:
+
+```json
+{
+  "success": true,
+  "message": "Feature flags retrieved.",
+  "data": {
+    "flags": {
+      "feature.ai.slot_recommendation": { "available": true }
+    }
+  },
+  "metadata": null
+}
+```
+
+`flags` holds only the flag keys the server knows — today that is the one above — and
+never any other hospital setting. Each entry is a single boolean.
+
+`available` is `true` only when **both** hold: the hospital's stored flag is exactly
+`true`, **and** AI is configured on this server. Otherwise it is `false`, and the
+response deliberately does not say which of the two is missing.
+
+- **Configured is not reachable.** This read contacts no AI provider. `available: true`
+  does not promise that a suggestion will succeed — `recommend-slot` can still answer any
+  of the `503`s in §5.6.
+- It says nothing about the caller's permissions. A Doctor sees `available: true` and is
+  still refused by §5.6. Check the two permission codes as well.
+- It is per hospital: another hospital's flag has no effect on yours.
+
+Errors: `401 AUTHENTICATION_REQUIRED` without a valid token; `400
+BUSINESS_RULE_VIOLATION` for a Super Admin (§1.5); `404 RESOURCE_NOT_FOUND` if the
+caller's hospital does not exist or is inactive.
+
+A flag cannot be changed through this API. `PATCH /hospitals/current` refuses any
+`feature.*` key in `settings` with a `422`, and there is no platform endpoint for it yet
+(§14).
 
 ---
 
@@ -2587,6 +2836,20 @@ Things the frontend will ask for that do not exist yet. Do not build against the
   seeded before this module still lists the retired `report.read` permission (§11.2).
   The export `GET` writes an audit entry, which `06-API_STANDARDS.md` says a `GET` never
   does.
+- **AI slot recommendation (§5.6):** this is the only AI feature. It suggests one slot
+  from the doctor's free slots on one day and knows nothing about the patient — no visit
+  history, no preferences, no urgency or preferred-window input, no ranked list, no score.
+  One provider is wired and each request makes one model call: no retry and no fallback
+  provider, so a provider failure is a `503` and the user picks a slot by hand. There is
+  no per-hospital AI budget or usage quota — only the per-user rate limit and a
+  per-process cap on concurrent calls. Calls are written to the application log; there is
+  no table of AI interactions and no API to read them. The suggestion
+  is not a reservation: the slot can be taken before the user books.
+- **Feature flags (§5.7):** `feature.ai.slot_recommendation` is the only flag. It can be
+  set only in the database (the demo seed defaults it on for the demo hospital) — there
+  is no platform or admin endpoint to toggle it, and `PATCH /hospitals/current` refuses
+  `feature.*` keys. The capability read cannot tell a client *why* a feature is
+  unavailable.
 - No `sort` parameter on any of these endpoints (§1.8).
 - No patient documents, timeline, or AI summary endpoints — they need object storage.
 - No appointment token/queue-number field (§5.5).
@@ -2601,7 +2864,14 @@ Things the frontend will ask for that do not exist yet. Do not build against the
 
 ---
 
-_Last updated: 2026-10-06. §11 (Reports and dashboards) added with the module; the then
+_Last updated: 2026-10-06. §5.6 (AI slot recommendation) rewritten against the
+implementation: one suggestion from server-computed free slots, a second required
+permission, the hospital flag, and explicit `FEATURE_DISABLED` / `AI_*` failures. The
+earlier text described a ranked list with a score and a `model` field, which is not
+what the code does. §5.7 (`GET /hospitals/current/feature-flags`) added; §1.3 gains the five
+new error codes. No section was renumbered._
+
+_Earlier on 2026-10-06: §11 (Reports and dashboards) added with the module; the then
 §11–13 are now §12–14. The `report.read` placeholder code is replaced by four per-role
 read codes. A Billing Staff demo login is seeded._
 
