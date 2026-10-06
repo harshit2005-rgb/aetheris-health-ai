@@ -23,6 +23,8 @@ from app.main import create_app
 from app.models.appointment import AppointmentStatus
 from app.models.billing import Invoice
 from app.models.pharmacy import MedicineBatch, StockMovement
+from app.repositories.hospital_repository import HospitalRepository
+from app.services.pharmacy_common import hospital_today
 from app.tests.billing_helpers import (
     auth_headers,
     insert_appointment,
@@ -628,9 +630,14 @@ class TestDispense:
         appointment: Appointment,
         para: Medicine,
         audit: RecordingAuditSink,
+        hospital_id: uuid.UUID,
     ) -> None:
-        late = await insert_batch(db_session, para, "LATE", 500, days=365)
-        soon = await insert_batch(db_session, para, "SOON", 6, days=20)
+        # Days are counted from today where the hospital is, as the service
+        # counts them. Counted from today in UTC, this test was a day out for
+        # the hours each night when the two dates differ.
+        today = await hospital_today(HospitalRepository(db_session), hospital_id)
+        late = await insert_batch(db_session, para, "LATE", 500, days=365, today=today)
+        soon = await insert_batch(db_session, para, "SOON", 6, days=20, today=today)
         rx = await _prescribe(api, admin, appointment, (para, 10))
         audit.events.clear()
 
