@@ -14,9 +14,11 @@ Usage::
 
 from __future__ import annotations
 
+import re
 from enum import StrEnum
+from urllib.parse import urlsplit
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -35,6 +37,13 @@ class LogFormat(StrEnum):
     CONSOLE = "console"
 
 
+#: Shape of a model identifier accepted from configuration or echoed by a provider.
+MODEL_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,99}$")
+
+#: Hosts a plain-``http`` AI base URL may point at (a local stub only).
+_LOCAL_HTTP_HOSTS = frozenset({"localhost", "127.0.0.1", "::1"})
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables.
 
@@ -50,6 +59,10 @@ class Settings(BaseSettings):
         case_sensitive=False,
         extra="ignore",
         validate_default=True,
+        # A validation error must not print the rejected value: it can be a
+        # credential (a key, or a password inside a URL) and the error lands in
+        # the startup traceback. The error still names the setting.
+        hide_input_in_errors=True,
     )
 
     # ── App ────────────────────────────────────────────────────────────────
@@ -198,6 +211,113 @@ class Settings(BaseSettings):
         default=False,
         description="Trust X-Forwarded-For for the client IP. Enable ONLY behind a proxy that overwrites the header, otherwise clients can spoof it and evade the anonymous limit.",
     )
+
+    # ── AI runtime ─────────────────────────────────────────────────────────
+    # AI is OFF unless GROQ_API_KEY is set (and AI_ENABLED is not false). With
+    # no key the application starts normally and every non-AI module works.
+    GROQ_API_KEY: SecretStr | None = Field(
+        default=None,
+        description="Groq API key. Unset, empty or whitespace-only means AI is not configured.",
+    )
+    AI_ENABLED: bool | None = Field(
+        default=None,
+        description="AI kill switch. Unset = on when a key is present; false = off even with a key.",
+    )
+    GROQ_BASE_URL: str = Field(
+        default="https://api.groq.com/openai/v1",
+        description="Base URL of Groq's OpenAI-compatible API.",
+    )
+    AI_FAST_MODEL: str | None = Field(
+        default=None,
+        description="Model the 'fast' hint resolves to. Unset = the repository mapping.",
+    )
+    AI_REQUEST_TIMEOUT_SECONDS: float = Field(
+        default=8.0, gt=0, le=30, description="Total deadline for one model call, in seconds."
+    )
+    GROQ_STRICT_JSON_SCHEMA: bool = Field(
+        default=True,
+        description=(
+            "Send a strict JSON Schema as response_format so the model is structurally "
+            "limited to the offered values. Turn off for a model that rejects it; the "
+            "server validates the reply either way."
+        ),
+    )
+    AI_MAX_CONCURRENT_CALLS: int = Field(
+        default=4, ge=1, le=64, description="Provider calls this process may have in flight."
+    )
+
+    @field_validator("GROQ_API_KEY", mode="before")
+    @classmethod
+    def _blank_api_key_is_unset(cls, value: object) -> object:
+        """Treat an empty or whitespace-only key as "not configured".
+
+        Must never raise: a pydantic validation error prints its input value,
+        which would put the key in the startup traceback. The key's characters
+        are checked by the AI runtime, where a bad key disables AI instead.
+        """
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
+
+    @field_validator("AI_ENABLED", mode="before")
+    @classmethod
+    def _blank_ai_enabled_is_unset(cls, value: object) -> object:
+        """Read an empty ``AI_ENABLED=`` as unset rather than a boolean parse error."""
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("AI_FAST_MODEL", mode="before")
+    @classmethod
+    def _validate_fast_model(cls, value: object) -> object:
+        """Strip the model id, treat blank as unset, and reject an odd shape."""
+        if not isinstance(value, str):
+            return value
+        stripped = value.strip()
+        if not stripped:
+            return None
+        if MODEL_ID_PATTERN.fullmatch(stripped) is None:
+            msg = "AI_FAST_MODEL is not a valid model identifier."
+            raise ValueError(msg)
+        return stripped
+
+    @field_validator("GROQ_BASE_URL", mode="before")
+    @classmethod
+    def _validate_groq_base_url(cls, value: object) -> object:
+        """Validate the base URL on its parsed form, never by string prefix.
+
+        A prefix test would accept ``http://localhost.attacker.tld`` and
+        ``http://localhost@attacker.tld``. The bearer key is therefore never
+        sent over plain HTTP to a remote host, to a URL carrying credentials,
+        or to one with a query or fragment.
+        """
+        if not isinstance(value, str):
+            return value
+        cleaned = value.strip().rstrip("/")
+        message = (
+            "GROQ_BASE_URL must be an https URL (or http to localhost) with a host and "
+            "no credentials, query or fragment."
+        )
+        try:
+            parts = urlsplit(cleaned)
+            hostname = parts.hostname
+            has_userinfo = parts.username is not None or parts.password is not None
+        except ValueError:
+            raise ValueError(message) from None
+        valid = (
+            parts.scheme in {"https", "http"}
+            and bool(hostname)
+            and not has_userinfo
+            and parts.query == ""
+            and parts.fragment == ""
+            and "?" not in cleaned
+            and "#" not in cleaned
+            and (parts.scheme == "https" or hostname in _LOCAL_HTTP_HOSTS)
+        )
+        if not valid:
+            raise ValueError(message)
+        return cleaned
 
     @property
     def is_development(self) -> bool:

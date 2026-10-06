@@ -40,6 +40,7 @@ from app.repositories.permission_repository import PermissionRepository
 from app.repositories.prescription_repository import PrescriptionRepository
 from app.repositories.procurement_repository import ProcurementRepository
 from app.repositories.refresh_token_repository import RefreshTokenRepository
+from app.repositories.report_repository import ReportRepository
 from app.repositories.role_repository import RoleRepository
 from app.repositories.service_catalog_repository import ServiceCatalogRepository
 from app.repositories.user_repository import UserRepository
@@ -66,6 +67,7 @@ __all__ = [
     "PrescriptionRepository",
     "ProcurementRepository",
     "RefreshTokenRepository",
+    "ReportRepository",
     "RoleRepository",
     "ServiceCatalogRepository",
     "UserRepository",

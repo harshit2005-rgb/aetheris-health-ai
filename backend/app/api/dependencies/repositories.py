@@ -50,6 +50,7 @@ from app.repositories import (
     PrescriptionRepository,
     ProcurementRepository,
     RefreshTokenRepository,
+    ReportRepository,
     RoleRepository,
     ServiceCatalogRepository,
     UserRepository,
@@ -169,6 +170,11 @@ def get_inventory_repository(session: DbSession) -> InventoryRepository:
 def get_inventory_po_repository(session: DbSession) -> InventoryPurchaseOrderRepository:
     """Provide an :class:`InventoryPurchaseOrderRepository` bound to the request session."""
     return InventoryPurchaseOrderRepository(session)
+
+
+def get_report_repository(session: DbSession) -> ReportRepository:
+    """Provide a :class:`ReportRepository` bound to the request session."""
+    return ReportRepository(session)
 
 
 def get_notification_repository(session: DbSession) -> NotificationRepository:

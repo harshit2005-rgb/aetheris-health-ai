@@ -1,8 +1,12 @@
 # 18 — Frontend API Contract Reference
 
 The exact request/response contracts for the endpoints the frontend consumes today:
-**Patients, Departments, Doctors, Appointments, Billing, Notifications, Laboratory, Pharmacy, Inventory**. Written so a frontend module
+**Patients, Departments, Doctors, Appointments, Billing, Notifications, Laboratory, Pharmacy, Inventory, Reports and dashboards**. Written so a frontend module
 can be built without reading backend code or guessing a shape.
+
+One AI feature is wired: an optional, advisory slot suggestion in the booking dialog
+(§5.6), with the capability read that says whether to offer it (§5.7). Every other AI
+endpoint named in this document is listed as not built.
 
 **Source of truth.** Every contract below was read out of the implementation, not the
 design docs — routers in `backend/app/api/v1/`, DTOs in `backend/app/schemas/`, and the
@@ -89,7 +93,16 @@ From `backend/app/core/error_codes.py`:
 | `RESOURCE_NOT_FOUND` | 404 | Wrong id, or the row belongs to another hospital |
 | `RESOURCE_CONFLICT` | 409 | Duplicate MRN/code/licence, or a double-booked slot |
 | `BUSINESS_RULE_VIOLATION` | 400 | Illegal state transition, already-deactivated record |
-| `RATE_LIMITED` | 429 | 300 req/min per user, 1000/min per hospital |
+| `RATE_LIMITED` | 429 | 300 req/min per user, 1000/min per hospital; 30/min per user on `recommend-slot` (§5.6) |
+| `FEATURE_DISABLED` | 403 | The hospital has not been given a gated feature (§5.6) |
+| `AI_NOT_CONFIGURED` | 503 | AI is switched off or has no key on this server (§5.6) |
+| `AI_PROVIDER_UNAVAILABLE` | 503 | The AI provider could not be used (§5.6) |
+| `AI_PROVIDER_TIMEOUT` | 503 | The AI provider did not answer within the deadline (§5.6) |
+| `AI_RESPONSE_INVALID` | 503 | The AI answer was rejected by the server's checks (§5.6) |
+
+`FEATURE_DISABLED` and the four `AI_*` codes are returned only by
+`POST /appointments/recommend-slot`. All four `AI_*` codes are `503` — branch on
+`error_code`, not on the status.
 
 A 404 is deliberately returned for a record in another tenant. Do not treat it as a bug.
 
@@ -119,7 +132,7 @@ refresh itself fails the session is cleared and route guards send the user to `/
 Keep that shape if you touch it, and give any second client the same single-flight guard.
 
 > **Diverges from `CLAUDE.md`,** which specifies the refresh token as an HTTP-only cookie.
-> That is the intended design; what ships is the body-based flow above. See §13.
+> That is the intended design; what ships is the body-based flow above. See §14.
 
 ### 1.5 Tenancy
 
@@ -174,6 +187,10 @@ Which seeded role can call what. Relevant subset only:
 | `appointment.start` / `.complete` | ✅ | ✅ | — | — |
 | `appointment.recommend_slot` | ✅ | — | — | ✅ |
 | `appointment.book_override` | ✅ | — | — | — |
+
+`POST /appointments/recommend-slot` needs **both** `appointment.recommend_slot` and
+`doctor.availability.read`, so of these roles only Hospital Admin and Receptionist can
+call it (§5.6).
 
 Two gotchas worth designing around: a **Receptionist cannot edit or deactivate a patient**,
 and a **Doctor cannot book or cancel** — hide those controls per permission rather than
@@ -468,7 +485,14 @@ in `timezone`.
 | POST | `/api/v1/appointments/{id}/cancel` | `appointment.cancel` | Body: `{ "reason": "…" }` |
 | POST | `/api/v1/appointments/{id}/no-show` | `appointment.cancel` | |
 | GET | `/api/v1/appointments/{id}/status-history` | `appointment.read` | |
-| POST | `/api/v1/appointments/recommend-slot` | `appointment.recommend_slot` | AI ranking |
+| POST | `/api/v1/appointments/recommend-slot` | `appointment.recommend_slot` **and** `doctor.availability.read` | Optional AI suggestion of one free slot; books nothing (§5.6) |
+
+One route outside this router belongs to the same flow. It is documented here because
+hospitals have no section of their own:
+
+| Method | Path | Permission | Notes |
+|---|---|---|---|
+| GET | `/api/v1/hospitals/current/feature-flags` | Any authenticated user | Whether the AI suggestion can be offered (§5.7) |
 
 ### 5.2 Booking
 
@@ -574,10 +598,235 @@ index in this response. Do not display a "token number" as if the backend issued
 
 ### 5.6 AI slot recommendation
 
-`POST /api/v1/appointments/recommend-slot` with `{ patient_id, doctor_id?, urgency?,
-preferred_window_start?, preferred_window_end?, limit? }` returns
-`{ recommendations: [{ slot_start, slot_end, doctor_id, score, reason }], model }`.
-`score` is 0–1. `limit` is 1–10, default 3.
+```
+POST /api/v1/appointments/recommend-slot
+```
+
+An **optional** helper in the booking dialog: it suggests **one** free slot in one
+doctor's day. It is advice. It books nothing, reserves nothing and writes nothing — no
+appointment and no audit row. A member of staff reviews the suggestion and books through
+the ordinary `POST /appointments` (§5.2), which validates everything again. Booking by
+hand works exactly the same whether this endpoint is available or not.
+
+There is no ranked list, no score and no confidence value, and the response never names a
+provider or a model.
+
+**Who can call it.** The route requires two permissions, and the hospital must have the
+feature:
+
+| Requirement | Detail |
+|---|---|
+| `appointment.recommend_slot` | Seeded on Hospital Admin and Receptionist (and Super Admin) |
+| `doctor.availability.read` | Seeded on Hospital Admin, Doctor, Nurse and Receptionist (and Super Admin) |
+| Hospital flag `feature.ai.slot_recommendation` | Must be stored as exactly `true` in the hospital's `settings`. Any other value — `false`, `"true"`, `1`, absent — is off |
+| AI configured on the server | A provider key is set and the AI kill switch is not off |
+
+So of the seeded hospital roles, **Hospital Admin and Receptionist** can ask; Doctor,
+Nurse, Billing Staff, Lab Technician, Pharmacist and Inventory Manager get `403
+PERMISSION_DENIED`. A Super Admin holds both codes but has no hospital, so gets the usual
+`400` (§1.5). The demo seed switches the flag on for the demo hospital unless it was
+already set to something explicitly; the server still needs a key before anything is
+suggested.
+
+Ask §5.7 before showing the control — do not probe this endpoint to find out.
+
+**Request.** Exactly three fields, all required:
+
+```json
+{
+  "patient_id": "3f1c6c1e-2c3d-4a5b-8c7d-9e0f1a2b3c4d",
+  "doctor_id": "8a7b6c5d-4e3f-2a1b-0c9d-8e7f6a5b4c3d",
+  "date": "2026-10-12"
+}
+```
+
+| Field | Type | Rules |
+|---|---|---|
+| `patient_id` | UUID | Must be a patient of the caller's hospital |
+| `doctor_id` | UUID | Must be a doctor of the caller's hospital |
+| `date` | `YYYY-MM-DD` | The calendar day **in the hospital's timezone** — the day the slot picker shows. Must lie between `2000-01-01` and `2100-12-31` inclusive |
+
+Any other key is a `422`: the body is `extra="forbid"`. That includes the fields of the
+older design — `urgency`, `preferred_window_start`, `preferred_window_end`, `limit` — and
+`slots`, `hospital_id` and any free-text field. A past date inside the range is valid; it
+simply has no free slots.
+
+**The client cannot supply slots.** The server computes the candidates itself, from the
+same generator that backs `GET /doctors/{id}/slots` (§4.6): availability, leaves and
+existing appointments for that doctor and day. A slot is a candidate when that read model
+calls it `available` **and** it has not started yet. That is slightly stricter than the
+picker, which still lists a free slot that has already begun. At most 144 slots of one
+day are considered.
+
+**Response — a suggestion.** `200`, message `"Slot recommendation completed."`:
+
+```json
+{
+  "success": true,
+  "message": "Slot recommendation completed.",
+  "data": {
+    "status": "recommended",
+    "recommendation": {
+      "slot_start": "2026-10-12T09:30:00+05:30",
+      "slot_end": "2026-10-12T10:00:00+05:30",
+      "doctor_id": "8a7b6c5d-4e3f-2a1b-0c9d-8e7f6a5b4c3d",
+      "reason": "09:30 sits directly after a booked slot, keeping the morning compact."
+    },
+    "date": "2026-10-12",
+    "timezone": "Asia/Kolkata",
+    "candidate_count": 4
+  },
+  "metadata": null
+}
+```
+
+**Response — nothing to suggest.** Also `200`. No model call is made:
+
+```json
+{
+  "success": true,
+  "message": "Slot recommendation completed.",
+  "data": {
+    "status": "no_free_slots",
+    "recommendation": null,
+    "date": "2026-10-13",
+    "timezone": "Asia/Kolkata",
+    "candidate_count": 0
+  },
+  "metadata": null
+}
+```
+
+| Field | Type | Notes |
+|---|---|---|
+| `status` | `recommended \| no_free_slots` | The only two success outcomes |
+| `recommendation` | object or `null` | Non-null exactly when `status` is `recommended` |
+| `recommendation.slot_start`, `.slot_end` | datetime with the hospital's UTC offset | The server's own values for a slot it computed — the same instants as a `start`/`end` in §4.6. Send them as `scheduled_start`/`scheduled_end` to book |
+| `recommendation.doctor_id` | UUID | The requested doctor, echoed |
+| `recommendation.reason` | string or `null` | The only model-written field. Plain text, at most 200 characters. **Untrusted** — render as text, never as markup or a link. `null` when the model's text was empty after cleaning or mentioned an internal slot id |
+| `date` | `YYYY-MM-DD` | The requested day, echoed |
+| `timezone` | IANA name | The hospital's timezone |
+| `candidate_count` | integer ≥ 0 | How many free slots the server offered the model; `0` with `no_free_slots` |
+
+`no_free_slots` covers a day with no availability, a fully booked day, a day on leave and
+a day whose slots have all started.
+
+**Errors.** Every failure is explicit; none is turned into an empty success.
+
+| HTTP | `error_code` | `message` | When |
+|---|---|---|---|
+| 401 | `AUTHENTICATION_REQUIRED` | — | No token, or an invalid or expired one |
+| 403 | `PERMISSION_DENIED` | `Permission denied. Required: appointment.recommend_slot.` (or `…doctor.availability.read.`) | A required permission is missing. With neither, `appointment.recommend_slot` is the one named |
+| 422 | `VALIDATION_ERROR` | `Validation failed.` | Missing field, bad UUID, bad or out-of-range date, any extra key. `errors` is a list (§1.2) |
+| 400 | `BUSINESS_RULE_VIOLATION` | `This account is not scoped to a hospital, so appointments cannot be accessed.` | Super Admin (§1.5) |
+| 403 | `FEATURE_DISABLED` | `AI slot suggestions are not enabled for this hospital.` | The hospital's flag is not exactly `true`. `errors` is `{ "feature": "feature.ai.slot_recommendation" }` |
+| 503 | `AI_NOT_CONFIGURED` | `AI suggestions are not configured on this server.` | No AI key on the server, or the AI kill switch is off. No provider call is made |
+| 422 | `VALIDATION_ERROR` | `Patient not found in this hospital.` | Unknown patient, or one of another hospital. `errors` is the object shape (§14) |
+| 422 | `VALIDATION_ERROR` | `Doctor not found in this hospital.` | Unknown or deleted doctor, or one of another hospital — the same answer for all three |
+| 422 | `VALIDATION_ERROR` | `Hospital timezone '<zone>' is not a valid IANA timezone.` | The hospital's own stored timezone is unusable — a data problem, not a client error |
+| 503 | `AI_PROVIDER_UNAVAILABLE` | `The AI service is unavailable right now. Choose a slot manually.` | The provider could not be reached, answered with an error (bad key, its own rate limit, a retired or unknown model, a 4xx/5xx), or this server is already at its cap of concurrent AI calls |
+| 503 | `AI_PROVIDER_TIMEOUT` | `The AI service took too long to respond. Choose a slot manually.` | The provider did not answer within the server's deadline (8 seconds by default) |
+| 503 | `AI_RESPONSE_INVALID` | `The AI suggestion could not be used. Choose a slot manually or try again.` | The answer was truncated, not JSON, the wrong shape, or named a slot the server never offered — or the chosen slot was no longer free when re-checked |
+| 429 | `RATE_LIMITED` | `Rate limit exceeded. Try again later.` | More than 30 calls a minute by one user on this path; the hospital-wide limit also applies. `Retry-After` is set |
+
+On the four `AI_*` failures `errors` is `null` and the message is fixed text: nothing
+from the provider, the prompt or the model's answer is ever returned. A `503` here is not
+an outage of the API — let the user carry on and pick a slot by hand.
+
+**Order of checks.** Authentication and the two permissions are route dependencies and
+the body is validated before the service runs, so a malformed body is a `422` even in a
+hospital without the feature. The service then checks, in this order:
+
+1. the hospital flag → `403 FEATURE_DISABLED`. First on purpose: a hospital without the
+   feature gets the same answer whatever ids it sent;
+2. AI configured on the server → `503 AI_NOT_CONFIGURED`;
+3. the patient, then the doctor → `422`;
+4. the candidates are computed; none → `200 no_free_slots`, and no model call;
+5. **one** model call — no retry and no fallback provider — → `503` on a provider failure
+   or timeout;
+6. the answer is parsed strictly and must name one of the ids the server offered →
+   otherwise `503 AI_RESPONSE_INVALID`. Nothing is repaired;
+7. the chosen slot is re-checked against the database — still in the future, no
+   overlapping appointment, no leave, inside published availability → otherwise `503
+   AI_RESPONSE_INVALID`;
+8. `200 recommended`.
+
+**What the model is sent.** The date and its weekday, the number of free slots, and the
+doctor's day as clock times in hospital-local time: each free slot under a throwaway id
+(`S1`, `S2`, …) and every other slot marked unavailable. Nothing else. No patient, doctor,
+hospital or user identifier, no name, no MRN, no appointment reason or notes, no timezone
+name and no free text from anyone. `patient_id` is used only to check that the patient
+belongs to the hospital; nothing about the patient reaches the model, so the suggestion
+is about the shape of the doctor's day and not about the patient. The ids exist only
+inside one request and never appear in the response.
+
+**Then a person books.** In the shipped UI (`frontend/src/components/appointments/SlotSuggestion.tsx`)
+the control appears only when the user holds both permissions, §5.7 reports the feature
+available, a patient is chosen and the loaded day has at least one slot that can be
+suggested. The suggestion is shown as "AI suggested", with the reason labelled as coming
+from the AI. **Use this slot** only selects that slot in the existing picker; the form's
+own **Book** button is still the only thing that sends `POST /appointments`. That booking
+is the normal one — same `Idempotency-Key`, same `409` on a race (§5.2) — and is audited
+as `appointment.booked` by the member of staff who pressed it.
+
+Client notes:
+
+- Match the suggestion to the slot feed by comparing instants, not strings, and offer it
+  only if the feed still shows that slot as free.
+- A `no_free_slots` answer, or a suggestion the feed does not show as free, means the
+  slots on screen are out of date — refetch them.
+- After `FEATURE_DISABLED`, `AI_NOT_CONFIGURED` or `PERMISSION_DENIED`, stop asking and
+  re-read §5.7: asking again cannot change the answer. The other failures can be retried
+  by the user; do not retry automatically.
+- The frontend waits up to 15 seconds for this call, longer than the server's own model
+  deadline, so the server's typed answer arrives first.
+
+### 5.7 Feature availability
+
+```
+GET /api/v1/hospitals/current/feature-flags
+```
+
+`backend/app/api/v1/hospitals.py` · `backend/app/schemas/hospital.py`
+
+Tells the interface whether a gated feature can be offered. **Any authenticated user**
+of a hospital may call it — there is no permission code. `200`, message
+`"Feature flags retrieved."`:
+
+```json
+{
+  "success": true,
+  "message": "Feature flags retrieved.",
+  "data": {
+    "flags": {
+      "feature.ai.slot_recommendation": { "available": true }
+    }
+  },
+  "metadata": null
+}
+```
+
+`flags` holds only the flag keys the server knows — today that is the one above — and
+never any other hospital setting. Each entry is a single boolean.
+
+`available` is `true` only when **both** hold: the hospital's stored flag is exactly
+`true`, **and** AI is configured on this server. Otherwise it is `false`, and the
+response deliberately does not say which of the two is missing.
+
+- **Configured is not reachable.** This read contacts no AI provider. `available: true`
+  does not promise that a suggestion will succeed — `recommend-slot` can still answer any
+  of the `503`s in §5.6.
+- It says nothing about the caller's permissions. A Doctor sees `available: true` and is
+  still refused by §5.6. Check the two permission codes as well.
+- It is per hospital: another hospital's flag has no effect on yours.
+
+Errors: `401 AUTHENTICATION_REQUIRED` without a valid token; `400
+BUSINESS_RULE_VIOLATION` for a Super Admin (§1.5); `404 RESOURCE_NOT_FOUND` if the
+caller's hospital does not exist or is inactive.
+
+A flag cannot be changed through this API. `PATCH /hospitals/current` refuses any
+`feature.*` key in `settings` with a `422`, and there is no platform endpoint for it yet
+(§14).
 
 ---
 
@@ -1940,7 +2189,492 @@ This path from the module spec returns `404`. Do not build against it:
 
 ---
 
-## 11. Frontend ↔ backend mapping (mismatch resolution)
+## 11. Reports and dashboards
+
+`backend/app/api/v1/reports.py` · `backend/app/schemas/report.py`
+
+The core of [modules/10-reports-dashboard.md](modules/10-reports-dashboard.md): one
+dashboard per role, four reports, and a CSV export of each report. Every figure is
+aggregated by the database for the caller's hospital, in the hospital's timezone; nothing
+is added up in the browser. **AI summaries, PDF export and scheduled delivery are not
+built** — see §11.11.
+
+### 11.1 Endpoints
+
+All `GET`. Dashboards are under `/api/v1/dashboards`, reports under `/api/v1/reports`.
+
+| Path | Permission | Success |
+|---|---|---|
+| `/dashboards/admin` | `report.admin.read` | 200 |
+| `/dashboards/doctor` | `report.doctor.read` | 200 |
+| `/dashboards/reception` | `report.reception.read` | 200 |
+| `/dashboards/billing` | `report.billing.read` | 200 |
+| `/reports/patients` | `report.admin.read` | 200 |
+| `/reports/appointments` | `report.admin.read` | 200 |
+| `/reports/revenue` | `report.admin.read` **or** `report.billing.read` | 200 |
+| `/reports/outstanding` | `report.admin.read` **or** `report.billing.read` | 200 |
+| `/reports/{report_id}/export` | `report.export` **and** that report's read permission | 200 (file) |
+
+`report_id` is `patients`, `appointments`, `revenue` or `outstanding`.
+
+**Money is a decimal string with two places** (`"1850.00"`, `"-350.00"`); counts are
+integers. **Dates** (`from`, `to`, `today`, `bucket_start`, `issued_date`) are calendar
+dates in the hospital's timezone; **datetimes** are UTC with a `Z`.
+
+**Unknown query parameters are refused** with a `422` naming the parameter
+(``Unknown query parameter: `foo`.``), on every route. **A parameter given twice is
+refused** the same way (``Query parameter `from` must be given only once.``); the first
+unknown or repeated key in request order is the one named. The dashboards and
+`/reports/outstanding` take no parameters at all.
+
+### 11.2 Roles → permissions
+
+| Permission | Hospital Admin | Doctor | Receptionist | Billing Staff | Nurse, Lab Technician, Pharmacist, Inventory Manager |
+|---|:--:|:--:|:--:|:--:|:--:|
+| `report.admin.read` | ✅ | — | — | — | — |
+| `report.doctor.read` | ✅ | ✅ | — | — | — |
+| `report.reception.read` | ✅ | — | ✅ | — | — |
+| `report.billing.read` | ✅ | — | — | ✅ | — |
+| `report.export` | ✅ | — | — | ✅ | — |
+
+**Super Admin** holds all five codes, like every other permission in the catalog. An
+account that belongs to no hospital gets `400` on every route here, whatever it holds
+(§11.9).
+
+These replace the earlier `report.read` placeholder, which no route ever checked. A
+database seeded before this change still lists `report.read` in the permissions catalog
+and on four roles: the seed only adds rows. Treat permission codes from the server as
+plain strings. `report.ai_summary` from the module spec is not seeded.
+
+A Hospital Admin holds `report.doctor.read` only so that they can assign the Doctor role;
+without a doctor profile the doctor dashboard answers `404` for them (§11.6).
+
+`403` messages: `Permission denied. Required: report.admin.read.` for a single code,
+`Permission denied. Required one of: report.admin.read, report.billing.read.` for the two
+financial reports. An export by someone holding `report.export` but not the report's read
+permission is a `403` with the report's message.
+
+### 11.3 What every response carries
+
+```json
+"meta": {
+  "hospital_name": "Demo Hospital",
+  "timezone": "Asia/Kolkata",
+  "currency": "INR",
+  "today": "2026-10-06",
+  "generated_at": "2026-10-06T08:32:11Z"
+}
+```
+
+`timezone` is the zone every figure in the response was cut in — the hospital's, or `UTC`
+if the stored value is not a known zone. `today` is today in that zone. `generated_at` has
+whole seconds. `currency` applies to every money value; it is present on the doctor and
+reception dashboards too, which contain no money.
+
+How time is applied, everywhere:
+
+- A date range `from`..`to` is inclusive and means local days: local midnight at the start
+  of `from` up to local midnight after `to`.
+- **Weeks start on Monday.** "This week" on a dashboard is Monday to today; "this month" is
+  the 1st to today. The doctor's `this_week` is the whole week, Monday to Sunday.
+- Deactivated (soft-deleted) appointments, invoices, payments and refunds are left out.
+  A deactivated *patient* is not counted as a registration, but their appointments and
+  invoices still count; a deactivated *doctor* still appears in the breakdowns.
+
+### 11.4 Period parameters
+
+`/reports/patients`, `/reports/appointments`, `/reports/revenue` and their exports.
+
+| Param | Default | Rule | `422` (field: message) |
+|---|---|---|---|
+| `to` | today | `YYYY-MM-DD` | malformed → `query.to` |
+| `from`, `to` | | between `1900-01-01` and `2999-12-31`; checked first, `from` before `to` | `from`: ``` `from` must be between 1900-01-01 and 2999-12-31. ``` (or the same for `to`) |
+| `from` | `to` minus 29 days | `YYYY-MM-DD`; not after `to` | `to`: ``` `to` must not be before `from`. ``` |
+| | | at most 12 calendar months (`2026-01-01`..`2026-12-31` passes, `..2027-01-01` fails) | `to`: `Date range must not exceed 12 months.` |
+| `granularity` | `day` | `day`, `week` or `month` | `granularity`: ``` `granularity` must be one of: day, week, month. ``` |
+
+Future dates are allowed. The resolved values are echoed in `data.filters`. A date is
+parsed leniently: `2026-10-01T00:00:00` is read as `2026-10-01`; a non-zero time is a
+type error.
+
+**Buckets are zero-filled.** `buckets` lists every calendar bucket that touches the range,
+ascending, with zeros where nothing happened:
+
+```json
+{ "bucket_start": "2026-09-28", "bucket_end": "2026-10-04", "partial": true, "…": "…" }
+```
+
+`bucket_start` is the day, the Monday, or the 1st; `bucket_end` the day, the Sunday, or the
+last day of the month. Either may fall outside `from`..`to`; `partial: true` says so, and
+the bucket's figures then cover only the part inside the range.
+
+### 11.5 Reports
+
+#### `GET /reports/patients` — `Patients report generated.`
+
+Params: `from`, `to`, `granularity`.
+
+```json
+{
+  "meta": { "…": "…" },
+  "filters": { "from": "2026-10-04", "to": "2026-10-06", "granularity": "day" },
+  "summary": {
+    "registered": 11,
+    "active_total": 11,
+    "by_gender": { "male": 6, "female": 5, "other": 0, "unspecified": 0 }
+  },
+  "buckets": [
+    { "bucket_start": "2026-10-04", "bucket_end": "2026-10-04", "partial": false, "registered": 0 },
+    { "bucket_start": "2026-10-05", "bucket_end": "2026-10-05", "partial": false, "registered": 0 },
+    { "bucket_start": "2026-10-06", "bucket_end": "2026-10-06", "partial": false, "registered": 11 }
+  ]
+}
+```
+
+`registered` counts active patients registered in the range, so a past period's figure
+drops when a patient is later deactivated. `active_total` is all active patients as of now,
+whatever the range.
+
+#### `GET /reports/appointments` — `Appointments report generated.`
+
+Params: `from`, `to`, `granularity`, `doctor_id`, `department_id` (both optional UUIDs, and
+they combine: a doctor outside the department gives zeros, not an error). An id that is not
+one of this hospital's is a `422` — `doctor_id`: `Doctor not found.`, `department_id`:
+`Department not found.` Deactivated doctors and departments are accepted.
+
+```json
+{
+  "meta": { "…": "…" },
+  "filters": { "from": "2026-10-05", "to": "2026-10-08", "granularity": "day",
+               "doctor": null, "department": null },
+  "summary": {
+    "total": 14, "booked": 5, "checked_in": 3, "in_progress": 1,
+    "completed": 3, "cancelled": 1, "no_show": 1,
+    "no_show_rate_percent": "25.0"
+  },
+  "buckets": [
+    { "bucket_start": "2026-10-05", "bucket_end": "2026-10-05", "partial": false,
+      "total": 5, "booked": 0, "checked_in": 0, "in_progress": 0,
+      "completed": 3, "cancelled": 1, "no_show": 1 }
+  ],
+  "by_doctor": [
+    { "doctor_id": "…", "doctor_name": "Priya Sharma",
+      "department_id": "…", "department_name": "Cardiology",
+      "total": 6, "completed": 2, "cancelled": 0, "no_show": 0 }
+  ],
+  "by_department": [
+    { "department_id": "…", "department_name": "Cardiology",
+      "total": 6, "completed": 2, "cancelled": 0, "no_show": 0 },
+    { "department_id": null, "department_name": null,
+      "total": 1, "completed": 0, "cancelled": 1, "no_show": 0 }
+  ]
+}
+```
+
+- Appointments are dated by `scheduled_start`. There is no "cancelled at" column, so a
+  cancellation or no-show counts on the day of the appointment, not the day it was marked.
+- `filters.doctor` / `filters.department` are `{ "id", "name" }` when set.
+- `no_show_rate_percent` is `no_show / (completed + no_show) × 100`, rounded half-up to
+  one decimal, as a string; `null` when nothing has reached an outcome. Open and cancelled
+  appointments are in neither number, so booking a future visit does not move the rate.
+- `by_doctor` lists only doctors with at least one appointment, busiest first, then by
+  name. `by_department` uses the doctor's **current** department; doctors with none share
+  one row with `null` ids — render it as "Unassigned".
+- `no_show` is the status. The background sweeper also closes stale `checked_in`
+  appointments as no-shows, so someone who arrived and was never seen is counted here.
+
+#### `GET /reports/revenue` — `Revenue report generated.`
+
+Params: `from`, `to`, `granularity`.
+
+```json
+{
+  "meta": { "…": "…" },
+  "filters": { "from": "2026-10-05", "to": "2026-10-06", "granularity": "day" },
+  "summary": {
+    "invoice_count": 5, "invoiced_amount": "4350.00",
+    "payment_count": 5, "collected_amount": "2800.00",
+    "refund_count": 2, "refunded_amount": "950.00",
+    "net_collected_amount": "1850.00"
+  },
+  "by_method": [
+    { "method": "cash", "payment_count": 1, "collected_amount": "500.00",
+      "refund_count": 0, "refunded_amount": "0.00", "net_collected_amount": "500.00" }
+  ],
+  "buckets": [
+    { "bucket_start": "2026-10-05", "bucket_end": "2026-10-05", "partial": false,
+      "invoice_count": 3, "invoiced_amount": "2950.00",
+      "payment_count": 3, "collected_amount": "1400.00",
+      "refund_count": 0, "refunded_amount": "0.00", "net_collected_amount": "1400.00" }
+  ]
+}
+```
+
+- **Billed** (`invoice_count`, `invoiced_amount`) is invoices by **issue date**: status
+  `issued`, `partially_paid`, `paid` or `refunded`. Drafts and void invoices are out; a
+  refunded invoice stays in, and its refund shows under refunded.
+- **Collected** and **refunded** are payments and refunds by the date **the money moved**,
+  whichever invoice they belong to.
+- `net_collected_amount` is collected minus refunded and **can be negative**.
+- `by_method` always has five rows, in the order `cash`, `card`, `upi`, `bank_transfer`,
+  `insurance`.
+- The buckets add up to the summary, field by field; so do the method rows.
+- Billed and collected are on different time bases, so collected ÷ billed is not a
+  collection rate for those invoices. Voiding an invoice later removes it from the period
+  it was issued in.
+
+#### `GET /reports/outstanding` — `Outstanding report generated.`
+
+No parameters: it is the position as of now.
+
+```json
+{
+  "meta": { "…": "…" },
+  "filters": { "as_of_date": "2026-10-06" },
+  "summary": { "invoice_count": 2, "outstanding_amount": "1550.00",
+               "issued_count": 1, "partially_paid_count": 1 },
+  "ageing": [
+    { "bucket": "0_30", "min_days": 0, "max_days": 30, "invoice_count": 2, "outstanding_amount": "1550.00" },
+    { "bucket": "31_60", "min_days": 31, "max_days": 60, "invoice_count": 0, "outstanding_amount": "0.00" },
+    { "bucket": "61_90", "min_days": 61, "max_days": 90, "invoice_count": 0, "outstanding_amount": "0.00" },
+    { "bucket": "over_90", "min_days": 91, "max_days": null, "invoice_count": 0, "outstanding_amount": "0.00" }
+  ],
+  "invoices": [
+    { "invoice_id": "…", "invoice_number": "INV-2026-000003",
+      "issued_at": "2026-10-05T05:10:00Z", "issued_date": "2026-10-05", "age_days": 1,
+      "patient_id": "…", "patient_name": "Thomas George", "patient_mrn": "MRN-000002",
+      "status": "partially_paid", "total": "750.00", "amount_paid": "300.00", "balance_due": "450.00" }
+  ],
+  "invoices_total": 2,
+  "invoices_truncated": false
+}
+```
+
+- Outstanding means status `issued` or `partially_paid`; the amount is `total − amount_paid`.
+- `ageing` always has these four rows. `age_days` counts from the local issue date to
+  `as_of_date`.
+- `invoices` is oldest first and holds **at most 100**; `invoices_total` is how many there
+  are and `invoices_truncated` says whether the list was cut. The summary and ageing always
+  cover all of them. Show `invoices.length`, not a hard-coded 100.
+
+### 11.6 Dashboards
+
+No parameters. Each returns `meta` and its own tiles only.
+
+#### `GET /dashboards/admin` — `Admin dashboard loaded.`
+
+```json
+{
+  "meta": { "…": "…" },
+  "appointments_today": { "date": "2026-10-06", "total": 5, "booked": 1, "checked_in": 3,
+                          "in_progress": 1, "completed": 0, "cancelled": 0, "no_show": 0,
+                          "in_clinic": 4 },
+  "revenue_this_week": { "from": "2026-10-05", "to": "2026-10-06",
+                         "invoice_count": 5, "invoiced_amount": "4350.00",
+                         "payment_count": 5, "collected_amount": "2800.00",
+                         "refund_count": 2, "refunded_amount": "950.00",
+                         "net_collected_amount": "1850.00" },
+  "patient_registrations_this_month": { "from": "2026-10-01", "to": "2026-10-06",
+                                        "registered": 11, "active_total": 11 }
+}
+```
+
+`in_clinic` is checked-in plus in-progress. The revenue fields are those of §11.5.
+
+#### `GET /dashboards/doctor` — `Doctor dashboard loaded.`
+
+The caller's own schedule. **A caller with no active doctor profile gets `404`**,
+`No active doctor profile is linked to this account.` — never a hospital-wide view.
+
+```json
+{
+  "meta": { "…": "…" },
+  "doctor": { "id": "…", "name": "Priya Sharma" },
+  "schedule_today": {
+    "date": "2026-10-06", "total": 2, "booked": 0, "checked_in": 1, "in_progress": 1,
+    "completed": 0, "cancelled": 0, "no_show": 0, "to_see": 1,
+    "appointments": [
+      { "appointment_id": "…", "scheduled_start": "2026-10-06T08:00:00Z",
+        "scheduled_end": "2026-10-06T08:30:00Z", "status": "in_progress", "type": "new",
+        "patient_id": "…", "patient_name": "Ananya Rao", "patient_mrn": "MRN-000006",
+        "checked_in_at": "2026-10-06T07:50:00Z" }
+    ]
+  },
+  "my_patients": { "count": 5 },
+  "this_week": { "from": "2026-10-05", "to": "2026-10-11", "total": 6, "booked": 2,
+                 "checked_in": 1, "in_progress": 1, "completed": 2, "cancelled": 0, "no_show": 0 }
+}
+```
+
+`to_see` is booked plus checked-in. `appointments` is the whole day in start order.
+`my_patients.count` is distinct active patients with an appointment with this doctor that
+was not cancelled or missed, all time, upcoming bookings included. No money.
+
+#### `GET /dashboards/reception` — `Reception dashboard loaded.`
+
+```json
+{
+  "meta": { "…": "…" },
+  "schedule_today": { "date": "2026-10-06", "total": 5, "booked": 1, "checked_in": 3,
+                      "in_progress": 1, "completed": 0, "cancelled": 0, "no_show": 0,
+                      "in_clinic": 4 },
+  "walk_in_queue": { "waiting": 2, "not_arrived": 0, "in_consultation": 0,
+                     "longest_wait_minutes": 42 },
+  "no_show_alerts": {
+    "marked_today": 0,
+    "at_risk": 1,
+    "at_risk_appointments": [
+      { "appointment_id": "…", "scheduled_start": "2026-10-06T08:15:00Z", "minutes_late": 17,
+        "patient_id": "…", "patient_name": "Sunita Verma", "patient_mrn": "MRN-000010",
+        "doctor_id": "…", "doctor_name": "Arjun Nair" }
+    ]
+  }
+}
+```
+
+- `walk_in_queue` is today's `walk_in` appointments: `waiting` = checked-in,
+  `not_arrived` = booked, `in_consultation` = in-progress. `longest_wait_minutes` is whole
+  minutes since the earliest waiting check-in, `null` when nobody waits. It will not equal
+  the length of `GET /appointments/queue` (§5.5), which has no date filter.
+- `at_risk` is today's appointments still `booked` after their start time. The list holds
+  at most 20, longest overdue first; the count is not capped. `marked_today` is today's
+  appointments with status `no_show`.
+- No money.
+
+#### `GET /dashboards/billing` — `Billing dashboard loaded.`
+
+```json
+{
+  "meta": { "…": "…" },
+  "unpaid_invoices": { "invoice_count": 2, "outstanding_amount": "1550.00",
+                       "issued_count": 1, "partially_paid_count": 1 },
+  "revenue": {
+    "today": { "from": "2026-10-06", "to": "2026-10-06", "invoice_count": 2, "…": "…" },
+    "this_week": { "from": "2026-10-05", "to": "2026-10-06", "…": "…" },
+    "this_month": { "from": "2026-10-01", "to": "2026-10-06", "…": "…" }
+  },
+  "discounts_pending_approval": { "invoice_count": 1, "discount_amount": "300.00" }
+}
+```
+
+Each `revenue` entry has the seven revenue fields of §11.5. `discounts_pending_approval`
+equals the list `GET /invoices?discount_pending=true` returns (§6.7).
+
+### 11.7 Who sees patient names
+
+Three payloads carry patient name and MRN behind a report permission alone: the
+outstanding report and its export, the reception dashboard's at-risk list (with a doctor
+name), and the doctor dashboard's schedule. Every seeded role holding one of those
+permissions also holds `patient.read`; a custom role given only the report permission
+would still receive the names.
+
+### 11.8 CSV export
+
+`GET /reports/{report_id}/export?format=csv` — takes exactly the report's own parameters
+plus `format` (default `csv`, the only format).
+
+- `200`, **not enveloped**: the body is the file. `Content-Type: text/csv; charset=utf-8`.
+  UTF-8 with a byte-order mark, lines ending `\r\n`.
+- `Content-Disposition: attachment; filename="…"`:
+  `revenue-report-2026-10-05_to_2026-10-06-20261006-083211.csv` for a period report,
+  `outstanding-report-as-of-2026-10-06-20261006-083211.csv` for outstanding. The trailing
+  stamp is the generation time in UTC. The header is not exposed through CORS; a
+  cross-origin client builds the same name itself.
+- The file is rendered from the same call that serves the JSON report, so its figures are
+  the report's for the same parameters.
+
+Layout: a header block of `label,value` rows, an empty row, the column row, one row per
+bucket (or per invoice), and a `Total` row.
+
+```
+Hospital,Demo Hospital
+Report,Revenue
+Period,2026-10-05 to 2026-10-06
+Granularity,day
+Timezone,Asia/Kolkata
+Currency,INR
+Generated at,2026-10-06T14:02:11+05:30
+
+bucket_start,bucket_end,invoice_count,invoiced_amount,payment_count,collected_amount,refund_count,refunded_amount,net_collected_amount
+2026-10-05,2026-10-05,3,2950.00,3,1400.00,0,0.00,1400.00
+2026-10-06,2026-10-06,2,1400.00,2,1400.00,2,950.00,450.00
+Total,,5,4350.00,5,2800.00,2,950.00,1850.00
+```
+
+| Report | `Report` line | Extra header rows | Columns |
+|---|---|---|---|
+| patients | `Patients registered` | `Period`, `Granularity` | `bucket_start,bucket_end,registered` |
+| appointments | `Appointments` | `Period`, `Granularity`, `Doctor`, `Department` (`All` when unset) | `bucket_start,bucket_end,total,booked,checked_in,in_progress,completed,cancelled,no_show` |
+| revenue | `Revenue` | `Period`, `Granularity`, `Currency` | as above |
+| outstanding | `Outstanding invoices` | `As of`, `Rows`, `Currency` | `invoice_number,issued_date,age_days,patient_mrn,patient_name,status,total,amount_paid,balance_due` |
+
+Every file has `Hospital`, `Report`, `Timezone` and `Generated at` (hospital-local, with
+offset). Columns are the JSON field names.
+
+- **One table per file.** The breakdowns the page shows beside it (by method, doctor,
+  department, gender) and the no-show rate are not in the export.
+- The outstanding export lists up to **10,000** invoices (the JSON report lists 100). Past
+  that the `Rows` line reads `10000 of <n> (truncated)`; the `Total` row is always what is
+  owed on all of them.
+- Text a user typed (hospital, doctor, department and patient names, MRN, invoice number)
+  is prefixed with `'` when it starts with `=`, `+`, `-`, `@`, tab or carriage return, so a
+  spreadsheet does not run it as a formula. Numbers are written as they are: a negative net
+  stays `-350.00`.
+- **Each successful export writes an audit entry** — action `report.exported`, target type
+  `report`, with the report id, format, row count and filters in its context. A refused export writes nothing. This is a `GET` with a side effect, by decision:
+  an export of patient names is an auditable event.
+
+### 11.9 Errors
+
+The first failing row is the response.
+
+| Status | `error_code` | When | `message` |
+|---|---|---|---|
+| 401 | `AUTHENTICATION_REQUIRED` | No or invalid token | — |
+| 403 | `PERMISSION_DENIED` | Lacks the route's permission (on export: `report.export`) | §11.2 |
+| 422 | `VALIDATION_ERROR` | Malformed `from`, `to`, `doctor_id` or `department_id` | `Validation failed.` — field `query.from` etc. |
+| 400 | `BUSINESS_RULE_VIOLATION` | The account belongs to no hospital | `This account is not scoped to a hospital, so reports cannot be read.` |
+| 404 | `RESOURCE_NOT_FOUND` | Export of an unknown `report_id` | ``Unknown report: `inventory`.`` |
+| 403 | `PERMISSION_DENIED` | Export without the report's read permission | §11.2 |
+| 422 | `VALIDATION_ERROR` | A query parameter the route does not take | ``Unknown query parameter: `foo`.`` |
+| 422 | `VALIDATION_ERROR` | A query parameter given more than once | ``Query parameter `from` must be given only once.`` |
+| 422 | `VALIDATION_ERROR` | `format=pdf` (any case) | `PDF export is not available yet. Use format=csv.` |
+| 422 | `VALIDATION_ERROR` | Any other `format` | ``Unsupported export format `xlsx`. Use format=csv.`` |
+| 404 | `RESOURCE_NOT_FOUND` | The hospital no longer exists | `Hospital not found.` |
+| 422 | `VALIDATION_ERROR` | Period rule, unknown doctor or department | §11.4, §11.5 |
+| 404 | `RESOURCE_NOT_FOUND` | Doctor dashboard, no active doctor profile | §11.6 |
+
+Consequences of that order worth knowing: `?foo=1&from=garbage` answers
+`Validation failed.` on `query.from`, not the unknown-parameter message; and a caller
+without the permission gets `403` whatever else is wrong with the request.
+
+Both `422` shapes occur (§14): a malformed value puts a list in `errors`; every other row
+above puts `{ "errors": [{ "field", "message" }] }` there, with `message` repeated at the
+top level. **Display `message`, unless it is exactly `Validation failed.` — then display
+`errors[0].message`.**
+
+### 11.10 Re-seed after deploying
+
+The permissions come only from the seed. Until `make -C backend seed` is re-run, every
+route here answers `403` to hospital users. A signed-in user sees the change after their
+next login or token refresh.
+
+### 11.11 Not built yet
+
+Do not build against these:
+
+- `POST /ai/dashboard-summary`, and any AI summary on a dashboard. `report.ai_summary` is
+  not seeded.
+- PDF export — `format=pdf` is a `422`.
+- Scheduled email delivery of reports.
+- Dispensing-volume and lab-turnaround reports; a low-stock tile on the admin dashboard;
+  "pending consult notes" and "critical alerts" tiles.
+- `GET /api/v1/reports/dashboard`, which `06-API_STANDARDS.md` lists: it does not exist.
+  Use the four `/dashboards/*` routes.
+
+---
+
+## 12. Frontend ↔ backend mapping (mismatch resolution)
 
 The audit flagged the patient contract as mismatched. It was investigated against
 `API_CONTRACTS`/`05-DATABASE_DESIGN.md`, the module spec, the schemas and 944 passing
@@ -1965,7 +2699,7 @@ faked.
 
 ---
 
-## 12. Demo data
+## 13. Demo data
 
 `make -C backend seed` — idempotent, safe to re-run; see
 [10-DEVELOPMENT_GUIDE.md](10-DEVELOPMENT_GUIDE.md).
@@ -2029,12 +2763,13 @@ Demo logins (development only):
 | `lab@demohospital.com` | `LabTech@1234567` | Lab Technician |
 | `pharmacy@demohospital.com` | `Pharmacy@1234567` | Pharmacist |
 | `inventory@demohospital.com` | `Inventory@1234567` | Inventory Manager |
+| `billing@demohospital.com` | `Billing@1234567` | Billing Staff |
 
 All seeded people are fictional. No real patient data exists in this repository.
 
 ---
 
-## 13. Known gaps
+## 14. Known gaps
 
 Things the frontend will ask for that do not exist yet. Do not build against them:
 
@@ -2091,6 +2826,30 @@ Things the frontend will ask for that do not exist yet. Do not build against the
   `GET /inventory/stock/summary`, `GET /inventory/movements`, `GET /inventory/items/{id}`,
   `PATCH /inventory/locations/{id}` and the purchase-order send/cancel routes are not in
   the module spec's endpoint list.
+- **Reports and dashboards:** no AI summary, no PDF export, no scheduled delivery
+  (§11.11). Nothing is cached: every request runs its aggregates. The export holds the
+  period table only, not the breakdowns (§11.8). "Revenue" on a dashboard tile is what was
+  billed; collected and refunded are returned beside it, on a different time base
+  (§11.5). A no-show figure includes patients who checked in and were never seen. Demo
+  dates are anchored to the first seed run, so "today" tiles are empty on a database
+  seeded days ago, and all demo patients were registered on the seed day. A database
+  seeded before this module still lists the retired `report.read` permission (§11.2).
+  The export `GET` writes an audit entry, which `06-API_STANDARDS.md` says a `GET` never
+  does.
+- **AI slot recommendation (§5.6):** this is the only AI feature. It suggests one slot
+  from the doctor's free slots on one day and knows nothing about the patient — no visit
+  history, no preferences, no urgency or preferred-window input, no ranked list, no score.
+  One provider is wired and each request makes one model call: no retry and no fallback
+  provider, so a provider failure is a `503` and the user picks a slot by hand. There is
+  no per-hospital AI budget or usage quota — only the per-user rate limit and a
+  per-process cap on concurrent calls. Calls are written to the application log; there is
+  no table of AI interactions and no API to read them. The suggestion
+  is not a reservation: the slot can be taken before the user books.
+- **Feature flags (§5.7):** `feature.ai.slot_recommendation` is the only flag. It can be
+  set only in the database (the demo seed defaults it on for the demo hospital) — there
+  is no platform or admin endpoint to toggle it, and `PATCH /hospitals/current` refuses
+  `feature.*` keys. The capability read cannot tell a client *why* a feature is
+  unavailable.
 - No `sort` parameter on any of these endpoints (§1.8).
 - No patient documents, timeline, or AI summary endpoints — they need object storage.
 - No appointment token/queue-number field (§5.5).
@@ -2105,7 +2864,18 @@ Things the frontend will ask for that do not exist yet. Do not build against the
 
 ---
 
-_Last updated: 2026-10-05. §10 (Inventory) added with the module; the then §10–12 are now
+_Last updated: 2026-10-06. §5.6 (AI slot recommendation) rewritten against the
+implementation: one suggestion from server-computed free slots, a second required
+permission, the hospital flag, and explicit `FEATURE_DISABLED` / `AI_*` failures. The
+earlier text described a ranked list with a score and a `model` field, which is not
+what the code does. §5.7 (`GET /hospitals/current/feature-flags`) added; §1.3 gains the five
+new error codes. No section was renumbered._
+
+_Earlier on 2026-10-06: §11 (Reports and dashboards) added with the module; the then
+§11–13 are now §12–14. The `report.read` placeholder code is replaced by four per-role
+read codes. A Billing Staff demo login is seeded._
+
+_Earlier, 2026-10-05: §10 (Inventory) added with the module; the then §10–12 became
 §11–13. The `inventory.read` / `.create` / `.update` placeholder codes are gone._
 
 _Earlier on 2026-10-05: §9 (Pharmacy) added; the then §9–11 became §10–12. The `pharmacy.read` /

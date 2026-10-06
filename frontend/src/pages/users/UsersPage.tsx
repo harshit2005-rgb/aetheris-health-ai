@@ -100,7 +100,7 @@ export default function UsersPage() {
           serverPagination={{ page, totalPages: pageCount, onPageChange: setPage }}
           toolbarRight={
             <Select value={statusFilter} onValueChange={changeStatus}>
-              <SelectTrigger className="w-44">
+              <SelectTrigger className="w-44" aria-label="Filter by status">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

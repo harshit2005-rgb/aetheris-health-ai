@@ -1581,11 +1581,50 @@ class TestHospitalToday:
         hospitals.get_by_id.return_value = hospital if timezone is not None else None
         return await hospital_today(hospitals, HOSPITAL_ID)
 
-    async def test_uses_the_hospitals_timezone(self) -> None:
-        east = await self._today("Pacific/Kiritimati")  # UTC+14
-        west = await self._today("Pacific/Pago_Pago")  # UTC-11
+    @staticmethod
+    def _freeze(monkeypatch: pytest.MonkeyPatch, instant: datetime) -> None:
+        """Pin the clock ``hospital_today`` reads to one instant.
 
-        assert (east - west).days == 1
+        Without this the test depends on the hour it runs at: two zones that
+        are 25 hours apart are one calendar day apart for most of the day and
+        two days apart for the rest.
+        """
+
+        class FrozenClock:
+            """Stands in for ``datetime`` in the module: only ``now`` is read there."""
+
+            @staticmethod
+            def now(tz: Any = None) -> datetime:
+                return instant.astimezone(tz)
+
+        monkeypatch.setattr(pharmacy_common, "datetime", FrozenClock)
+
+    @pytest.mark.parametrize(
+        ("instant", "timezone", "expected"),
+        [
+            # 10:30 UTC: already tomorrow at UTC+14, still yesterday at UTC-11.
+            (datetime(2026, 3, 10, 10, 30, tzinfo=UTC), "Pacific/Kiritimati", date(2026, 3, 11)),
+            (datetime(2026, 3, 10, 10, 30, tzinfo=UTC), "Pacific/Pago_Pago", date(2026, 3, 9)),
+            (datetime(2026, 3, 10, 10, 30, tzinfo=UTC), "UTC", date(2026, 3, 10)),
+            # 12:00 UTC: the same two zones are now one day apart, not two.
+            (datetime(2026, 3, 10, 12, 0, tzinfo=UTC), "Pacific/Kiritimati", date(2026, 3, 11)),
+            (datetime(2026, 3, 10, 12, 0, tzinfo=UTC), "Pacific/Pago_Pago", date(2026, 3, 10)),
+            # 20:00 UTC is 01:30 the next morning in India: a day ahead of UTC.
+            (datetime(2026, 3, 10, 20, 0, tzinfo=UTC), "Asia/Kolkata", date(2026, 3, 11)),
+            (datetime(2026, 3, 10, 18, 29, tzinfo=UTC), "Asia/Kolkata", date(2026, 3, 10)),
+            (datetime(2026, 3, 10, 18, 30, tzinfo=UTC), "Asia/Kolkata", date(2026, 3, 11)),
+        ],
+    )
+    async def test_uses_the_hospitals_timezone(
+        self,
+        monkeypatch: pytest.MonkeyPatch,
+        instant: datetime,
+        timezone: str,
+        expected: date,
+    ) -> None:
+        self._freeze(monkeypatch, instant)
+
+        assert await self._today(timezone) == expected
 
     async def test_falls_back_to_utc(self) -> None:
         utc = datetime.now(UTC).date()

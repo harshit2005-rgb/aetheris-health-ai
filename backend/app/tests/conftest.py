@@ -48,7 +48,29 @@ if TYPE_CHECKING:
     from app.core.audit import AuditEvent
     from app.database.unit_of_work import UnitOfWork
 
-__all__ = ["FakeSession", "RecordingAuditSink", "grant_permissions"]
+__all__ = ["REAL_NETWORK_ATTEMPTS", "FakeSession", "RecordingAuditSink", "grant_permissions"]
+
+# The developer's real Groq key lives in ``backend/.env`` and pytest runs from
+# ``backend/``. An environment variable outranks the dotenv file, so blanking
+# it here — before anything imports ``app.core.config`` — keeps the real key
+# out of the settings singleton for the whole run. The autouse fixtures below
+# then hold every individual test to "AI off, no network".
+os.environ["GROQ_API_KEY"] = ""
+
+#: Names of every AI setting, removed from the environment for each test.
+_AI_ENV_NAMES = (
+    "GROQ_API_KEY",
+    "AI_ENABLED",
+    "AI_FAST_MODEL",
+    "GROQ_BASE_URL",
+    "AI_REQUEST_TIMEOUT_SECONDS",
+    "GROQ_STRICT_JSON_SCHEMA",
+    "AI_MAX_CONCURRENT_CALLS",
+)
+
+#: Hosts a test tried to reach over a real transport. Filled by
+#: :func:`no_real_network`; a test that leaves an entry here fails in teardown.
+REAL_NETWORK_ATTEMPTS: list[str] = []
 
 
 def pytest_configure(config: pytest.Config) -> None:
@@ -101,6 +123,73 @@ def override_settings() -> Generator[None]:
         for key, value in original_values.items():
             if value is not None:
                 setattr(settings, key, value)
+
+
+@pytest.fixture(autouse=True)
+def ai_off_by_default(monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
+    """No test sees the developer's real Groq key; each test starts with AI off.
+
+    Three layers, because the real key is on disk next to the test run:
+
+    - the AI variables are removed from the environment, so a key exported in
+      the developer's shell reaches no ``Settings`` built in a test;
+    - ``Settings`` stops reading ``.env`` for the duration of the test, so
+      even a bare ``Settings()`` cannot pick the key up from ``backend/.env``;
+    - the imported singleton is pinned to the AI defaults with no key, and the
+      cached AI runtime is dropped before and after.
+
+    A test that wants AI on installs a runtime built on a fake transport with
+    ``app.tests.ai_fakes.make_runtime``.
+    """
+    from app.ai import runtime
+    from app.core.config import Settings, settings
+
+    for name in _AI_ENV_NAMES:
+        monkeypatch.delenv(name, raising=False)
+    monkeypatch.setitem(Settings.model_config, "env_file", None)
+    monkeypatch.setattr(settings, "GROQ_API_KEY", None)
+    monkeypatch.setattr(settings, "AI_ENABLED", None)
+    monkeypatch.setattr(settings, "AI_FAST_MODEL", None)
+    monkeypatch.setattr(settings, "GROQ_BASE_URL", "https://api.groq.com/openai/v1")
+    monkeypatch.setattr(settings, "AI_REQUEST_TIMEOUT_SECONDS", 8.0)
+    monkeypatch.setattr(settings, "GROQ_STRICT_JSON_SCHEMA", True)
+    monkeypatch.setattr(settings, "AI_MAX_CONCURRENT_CALLS", 4)
+    runtime.reset_ai_runtime()
+    yield
+    runtime.reset_ai_runtime()
+
+
+@pytest.fixture(autouse=True)
+def no_real_network(monkeypatch: pytest.MonkeyPatch) -> Generator[None]:
+    """A test that reaches the real network fails instead of calling a provider.
+
+    The guard records *and* raises, and the fixture fails the test in
+    teardown. Raising alone is not enough on the one path the guard exists
+    for: the Groq adapter turns any exception from the HTTP call into an
+    ordinary "provider unavailable" error, which several tests expect.
+
+    ``ASGITransport`` and ``MockTransport`` are different classes and are
+    unaffected. Only the host is recorded — never a header.
+    """
+    import httpx
+
+    async def _refuse_async(self: object, request: httpx.Request) -> httpx.Response:
+        REAL_NETWORK_ATTEMPTS.append(request.url.host)
+        msg = "A test tried to open a real network connection."
+        raise AssertionError(msg)
+
+    def _refuse_sync(self: object, request: httpx.Request) -> httpx.Response:
+        REAL_NETWORK_ATTEMPTS.append(request.url.host)
+        msg = "A test tried to open a real network connection."
+        raise AssertionError(msg)
+
+    REAL_NETWORK_ATTEMPTS.clear()
+    monkeypatch.setattr(httpx.AsyncHTTPTransport, "handle_async_request", _refuse_async)
+    monkeypatch.setattr(httpx.HTTPTransport, "handle_request", _refuse_sync)
+    yield
+    attempts = len(REAL_NETWORK_ATTEMPTS)
+    REAL_NETWORK_ATTEMPTS.clear()
+    assert attempts == 0, "A test tried to open a real network connection."
 
 
 @pytest.fixture(autouse=True)

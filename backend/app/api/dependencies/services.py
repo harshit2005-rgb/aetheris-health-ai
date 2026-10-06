@@ -32,6 +32,8 @@ from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.ai.runtime import AIRuntime
+from app.api.dependencies.ai import provide_ai_runtime
 from app.api.dependencies.db import get_db_session
 
 # ── Repository DI ────────────────────────────────────────────────────────────
@@ -59,6 +61,7 @@ from app.api.dependencies.repositories import (  # noqa: F401
     get_prescription_repository,
     get_procurement_repository,
     get_refresh_token_repository,
+    get_report_repository,
     get_role_repository,
     get_service_catalog_repository,
     get_user_repository,
@@ -88,6 +91,7 @@ from app.repositories import (
     PrescriptionRepository,
     ProcurementRepository,
     RefreshTokenRepository,
+    ReportRepository,
     RoleRepository,
     ServiceCatalogRepository,
     UserRepository,
@@ -118,8 +122,10 @@ from app.services.notification_service import NotificationService
 from app.services.patient_service import PatientService
 from app.services.pharmacy_catalog_service import PharmacyCatalogService
 from app.services.procurement_service import ProcurementService
+from app.services.report_service import ReportService
 from app.services.role_service import RoleService
 from app.services.service_catalog_service import ServiceCatalogService
+from app.services.slot_ranker import AISlotRanker
 from app.services.user_service import UserService
 
 # ── Dependency type aliases ──────────────────────────────────────────────────
@@ -193,9 +199,12 @@ def get_hospital_service(
     hospitals: HospitalRepository = Depends(get_hospital_repository),
     uow: UnitOfWork = Depends(get_unit_of_work),
     audit: AuditSink = Depends(get_audit_sink),
+    runtime: AIRuntime = Depends(provide_ai_runtime),
 ) -> HospitalService:
     """Provide a :class:`HospitalService` composed with its dependencies."""
-    return HospitalService(hospitals=hospitals, uow=uow, audit=audit)
+    return HospitalService(
+        hospitals=hospitals, uow=uow, audit=audit, ai_configured=runtime.status.configured
+    )
 
 
 def get_auth_service(
@@ -498,6 +507,22 @@ def get_inventory_po_service(
     return InventoryPurchaseOrderService(orders, inventory, vendors, hospitals, session, audit)
 
 
+# ── Reports module ──────────────────────────────────────────────────────────
+def get_report_service(
+    reports: ReportRepository = Depends(get_report_repository),
+    hospitals: HospitalRepository = Depends(get_hospital_repository),
+    doctors: DoctorRepository = Depends(get_doctor_repository),
+    session: AsyncSession = Depends(get_db_session),
+    audit: AuditSink = Depends(get_audit_sink),
+) -> ReportService:
+    """Provide a :class:`ReportService` bound to the request session.
+
+    The session and audit sink are there for one thing: an export records an
+    audit entry and commits it. Every other report method only reads.
+    """
+    return ReportService(reports, hospitals, doctors, session, audit)
+
+
 # ── Appointment module ──────────────────────────────────────────────────────
 def get_invoice_draft_sink(
     billing: BillingService = Depends(get_billing_service),
@@ -512,27 +537,18 @@ def get_invoice_draft_sink(
     return BillingInvoiceDraftSink(billing)
 
 
-def get_slot_ranker() -> SlotRanker | None:
-    """Provide the AI slot ranker, when the AI stack is configured.
+def get_slot_ranker(
+    runtime: AIRuntime = Depends(provide_ai_runtime),
+) -> SlotRanker | None:
+    """Provide the AI slot ranker, or ``None`` when AI is not configured on this server.
 
-    Returns ``None`` when the AI platform is unavailable, which makes
-    ``POST /appointments/recommend-slot`` return an empty list instead of
-    failing. Booking by hand must never depend on the AI stack being up
-    (module spec §18 gates the feature behind a flag for the same reason).
+    With ``None``, ``POST /appointments/recommend-slot`` answers
+    ``AI_NOT_CONFIGURED`` and booking by hand is unaffected. Building the
+    ranker is two attribute assignments: no I/O happens per request.
     """
-    try:
-        from app.ai.prompts.registry import PromptRegistry
-        from app.ai.providers import registry as provider_registry
-        from app.ai.services.ai_service import AIService
-        from app.services.slot_ranker import AISlotRanker
-
-        prompts = PromptRegistry()
-        prompts.load_all("app/ai/prompts/templates")
-        return AISlotRanker(AIService(provider_registry, prompts), prompts)
-    except Exception:  # noqa: BLE001 — an unconfigured AI stack is not an error here
-        # No provider credentials, no templates on disk, or the AI package is
-        # mid-refactor: none of that should stop a receptionist booking.
+    if not runtime.status.configured:
         return None
+    return AISlotRanker(runtime.service, runtime.prompts)
 
 
 def get_appointment_service(
@@ -603,6 +619,8 @@ __all__ = [
     "get_pharmacy_catalog_service",
     "get_procurement_service",
     "get_service_catalog_service",
+    # Reports module
+    "get_report_service",
     # Appointment module
     "get_appointment_service",
     "get_invoice_draft_sink",
