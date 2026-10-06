@@ -45,6 +45,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
+from app.core.client_ip import client_ip, source_of
 from app.core.config import settings
 from app.core.envelope import error_envelope
 from app.core.error_codes import ErrorCode
@@ -185,24 +186,21 @@ def reset_limiter_state() -> None:
 def _client_ip(request: Request) -> str:
     """Resolve the caller's IP, honouring proxy headers only when configured.
 
-    ``X-Forwarded-For`` is attacker-controlled unless a trusted proxy overwrites
-    it, so it is consulted only when ``RATE_LIMIT_TRUST_PROXY_HEADER`` is on.
-    Without that flag, every user behind a load balancer shares the balancer's
-    address and therefore a single anonymous bucket; with it wrongly enabled,
-    any client can forge a fresh identity per request. Both failure modes are
-    silent, which is why this is explicit configuration rather than a guess.
+    The decision is made in :mod:`app.core.client_ip`, shared with the
+    authentication throttle, so the two can never disagree about who a caller
+    is. ``X-Forwarded-For`` is consulted only when
+    ``RATE_LIMIT_TRUST_PROXY_HEADER`` is on, and then only the entries our own
+    proxies appended. Without that flag, every user behind a load balancer
+    shares the balancer's address and therefore a single anonymous bucket.
+
+    An IPv6 caller is counted by its /64, the unit such addresses are handed
+    out in; counting single addresses would give one machine a limit per
+    address it cares to use.
 
     :param request: The incoming request.
-    :returns: The client IP, or ``"unknown"`` when it cannot be determined.
+    :returns: The source to count under, or ``"unknown"`` when there is none.
     """
-    if settings.RATE_LIMIT_TRUST_PROXY_HEADER:
-        forwarded = request.headers.get("X-Forwarded-For")
-        if forwarded:
-            # Left-most entry is the original client; the rest are proxy hops.
-            client = forwarded.split(",")[0].strip()
-            if client:
-                return client
-    return request.client.host if request.client else "unknown"
+    return source_of(client_ip(request))
 
 
 def _is_ai_path(path: str) -> bool:

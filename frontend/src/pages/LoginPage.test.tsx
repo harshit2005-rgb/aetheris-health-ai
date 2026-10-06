@@ -96,7 +96,11 @@ describe('LoginPage', () => {
     await submitPassword(user, 'Wrong!Passw0rd99')
 
     await waitFor(() =>
-      expect(toastError).toHaveBeenCalledWith('Invalid credentials, or the server is unavailable.'),
+      expect(toastError).toHaveBeenCalledWith(
+        'Invalid credentials, or the server is unavailable.',
+        // The same hint for every failure, so it says nothing about the account.
+        { description: expect.stringContaining('Forgot password?') },
+      ),
     )
     expect(screen.getByRole('button', { name: 'Sign in' })).toBeInTheDocument()
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
@@ -156,7 +160,7 @@ describe('LoginPage', () => {
     await submitPassword(user)
     await submitCode(user, '000000')
 
-    expect(await screen.findByRole('alert')).toHaveTextContent('That code is not right')
+    expect(await screen.findByRole('alert')).toHaveTextContent('That code was not accepted')
     const code = screen.getByLabelText('Authentication code')
     expect(code).toHaveAttribute('aria-invalid', 'true')
     expect(useAuthStore.getState().isAuthenticated).toBe(false)

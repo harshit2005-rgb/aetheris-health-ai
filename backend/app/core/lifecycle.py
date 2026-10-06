@@ -15,6 +15,7 @@ import structlog
 
 from app.ai.runtime import close_ai_runtime, get_ai_runtime
 from app.core.config import settings
+from app.core.email import email_delivery_configured
 from app.core.redis import close_redis_client
 from app.database import create_session_factory, dispose_engine, initialize_database
 
@@ -82,6 +83,28 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:  # noqa: ARG001
     # network call and never raises: AI being off or misconfigured must not
     # stop the application from starting.
     get_ai_runtime()
+
+    if settings.secret_key_is_ephemeral:
+        # Development only — staging and production cannot reach this line.
+        logger.warning(
+            "app_secret_key_ephemeral",
+            detail=(
+                "No private APP_SECRET_KEY is configured, so a random signing key was "
+                "generated for this process. Sessions end when it restarts."
+            ),
+        )
+
+    if not email_delivery_configured():
+        # Invitations and password resets travel by email and by no other
+        # route. Without a transport, nobody can be invited or recover an
+        # account; say so once, loudly, rather than let it be discovered.
+        logger.warning(
+            "email_delivery_not_configured",
+            detail=(
+                "SMTP_HOST is not set. Invitation and password-reset links "
+                "cannot be delivered, and none will be issued."
+            ),
+        )
 
     logger.info(
         "application_started",

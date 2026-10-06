@@ -1,9 +1,9 @@
-import { type ReactNode, useRef, useState } from 'react'
+import { type ReactNode, useId, useRef, useState } from 'react'
 import { Controller, useFieldArray, useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { toast } from 'sonner'
-import { Copy, Loader2, Plus, Trash2 } from 'lucide-react'
+import { Loader2, Plus, Trash2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -18,7 +18,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { Alert } from '@/components/ui/alert'
-import { useInviteUser, useRoles, type RoleSummary } from '@/api/users'
+import { useInviteUser, useRoles, type InvitationDelivery, type RoleSummary } from '@/api/users'
 import { apiErrorMessage, splitFieldErrors } from '@/lib/apiErrors'
 import { MOCK_PERMISSIONS_BY_ROLE, ROLE_KEY_BY_NAME } from '@/lib/rbac'
 import { useAuthStore } from '@/store/auth-store'
@@ -64,20 +64,20 @@ function canGrant(role: RoleSummary, held: string[]): boolean {
   return MOCK_PERMISSIONS_BY_ROLE[key].every((p) => p === 'dashboard.view' || held.includes(p))
 }
 
-/** The invite just created: who it is for and the link that activates it. */
+/** The invite just created: who it is for and whether an email went out. */
 interface CreatedInvite {
   email: string
-  link: string
+  delivery: InvitationDelivery
 }
 
 /**
  * Invite modal (module spec §12): email, name, phone, one-or-more roles.
  *
- * `POST /users` creates the account as Invited and returns a single-use
- * `invite_token` exactly once. The invited user sets a password — which
- * activates the account — at `/reset-password?token=…`. The API also emails
- * that link, but only where outbound email is configured, so the link is
- * shown here for the admin to pass on.
+ * `POST /users` creates the account as Invited. The one-time link that lets
+ * the user set a password is delivered by email only and is never returned to,
+ * shown by or held in this app. The response says only whether an invitation
+ * email was queued; if it was not, the invite stays pending until one is sent
+ * with Resend invitation on the Users page.
  */
 export function InviteUserDialog({ trigger }: { trigger: ReactNode }) {
   const [open, setOpen] = useState(false)
@@ -85,7 +85,9 @@ export function InviteUserDialog({ trigger }: { trigger: ReactNode }) {
   const [created, setCreated] = useState<CreatedInvite | null>(null)
   // `isPending` only disables the button after a re-render; this also stops a
   // second submit fired before that happens.
+  const attempt = useRef(0)
   const submitting = useRef(false)
+  const warningId = useId()
   const inviteUser = useInviteUser()
   const { data: rolesData } = useRoles()
   const held = useAuthStore((s) => s.user?.permissions)
@@ -106,10 +108,12 @@ export function InviteUserDialog({ trigger }: { trigger: ReactNode }) {
   const { fields, append, remove } = useFieldArray({ control, name: 'roles' })
 
   function close() {
+    // An invite still in flight must not write its result into a dialog that
+    // has been closed (or reopened for someone else).
+    attempt.current += 1
     setOpen(false)
     setNotice(null)
     setCreated(null)
-    // Drop the response too: it holds the single-use token.
     inviteUser.reset()
     reset()
   }
@@ -117,6 +121,7 @@ export function InviteUserDialog({ trigger }: { trigger: ReactNode }) {
   async function onSubmit(values: FormValues) {
     if (submitting.current) return
     submitting.current = true
+    const mine = attempt.current
     setNotice(null)
     try {
       const invited = await inviteUser.mutateAsync({
@@ -126,15 +131,20 @@ export function InviteUserDialog({ trigger }: { trigger: ReactNode }) {
         phone: values.phone || undefined,
         role_ids: values.roles.map((r) => r.role_id),
       })
-      toast.success(`Invite created for ${values.email}`)
-      if (invited.invite_token) {
-        setCreated({
-          email: values.email,
-          link: `${window.location.origin}/reset-password?token=${encodeURIComponent(invited.invite_token)}`,
-        })
-      } else {
-        close()
+      if (invited.invitation.delivery === 'queued') {
+        toast.success(`Invite created for ${values.email}`)
       }
+      if (mine !== attempt.current) {
+        // The dialog was closed meanwhile. "No email was sent" must still be
+        // said somewhere.
+        if (invited.invitation.delivery !== 'queued') {
+          toast.error(`${values.email} was added, but no invitation email was sent.`, {
+            description: 'Use Resend invitation on the Users page once email delivery is working.',
+          })
+        }
+        return
+      }
+      setCreated({ email: values.email, delivery: invited.invitation.delivery })
     } catch (err) {
       // A 422 names the fields it rejects: each goes under its input, and one
       // this form does not show goes above the form rather than being lost.
@@ -161,65 +171,38 @@ export function InviteUserDialog({ trigger }: { trigger: ReactNode }) {
     }
   }
 
-  async function copyLink() {
-    if (!created) return
-    try {
-      await navigator.clipboard.writeText(created.link)
-      toast.success('Invite link copied')
-    } catch {
-      toast.error("Couldn't copy the link. Select it and copy it manually.")
-    }
-  }
-
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? setOpen(true) : close())}>
       <DialogTrigger asChild>{trigger}</DialogTrigger>
       <DialogContent
         className="max-w-xl"
-        onInteractOutside={(event) => {
-          // The link is shown once; a stray click outside must not discard it.
-          if (created) event.preventDefault()
-        }}
-        onEscapeKeyDown={(event) => {
-          // Nor must Escape: only Done or the close button leaves this view.
-          if (created) event.preventDefault()
-        }}
+        // The warning is this view's description; the other views bring their own.
+        {...(created?.delivery === 'unavailable' ? { 'aria-describedby': warningId } : {})}
       >
         {created ? (
           <>
-            <DialogHeader>
-              <DialogTitle>Invite created</DialogTitle>
-              <DialogDescription>
-                {created.email} has been added with Invited status.
-              </DialogDescription>
-            </DialogHeader>
-
-            <div className="space-y-4">
-              <Field
-                label="One-time invite link"
-                hint="The user opens this link to set a password, which activates the account."
-              >
-                {(p) => (
-                  <div className="flex gap-2">
-                    <Input
-                      {...p}
-                      readOnly
-                      value={created.link}
-                      className="flex-1"
-                      onFocus={(e) => e.currentTarget.select()}
-                    />
-                    <Button type="button" variant="outline" onClick={copyLink}>
-                      <Copy className="size-4" /> Copy link
-                    </Button>
-                  </div>
-                )}
-              </Field>
-              <Alert variant="warning" title="This link is shown only once">
-                Copy it now and pass it to the user through a secure channel. It works a single
-                time and expires. The same link is emailed to the user only if email delivery is
-                configured for this hospital.
-              </Alert>
-            </div>
+            {created.delivery === 'queued' ? (
+              <DialogHeader>
+                <DialogTitle>Invite created</DialogTitle>
+                <DialogDescription>
+                  {created.email} has been added with Invited status. An invitation email has been
+                  queued for this address. Delivery is not confirmed. If it does not arrive, use
+                  Resend invitation on the Users page.
+                </DialogDescription>
+              </DialogHeader>
+            ) : (
+              <>
+                <DialogHeader>
+                  <DialogTitle>Invite created, email not sent</DialogTitle>
+                </DialogHeader>
+                <Alert variant="warning" id={warningId}>
+                  {created.email} has been added with Invited status, but no invitation email was
+                  sent because email delivery is not available. The user cannot set a password
+                  until an invitation is sent. Use Resend invitation on the Users page once email
+                  delivery is working.
+                </Alert>
+              </>
+            )}
 
             <DialogFooter>
               <Button type="button" onClick={close}>
@@ -233,8 +216,7 @@ export function InviteUserDialog({ trigger }: { trigger: ReactNode }) {
               <DialogTitle>Invite user</DialogTitle>
               <DialogDescription>
                 Creates the account with Invited status. The user sets a password from a one-time
-                invite link, which is shown to you once the invite is created and emailed to them
-                if email delivery is configured.
+                link sent to their email address. The link is not shown here.
               </DialogDescription>
             </DialogHeader>
 

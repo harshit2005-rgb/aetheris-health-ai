@@ -16,6 +16,7 @@ from app.models.appointment import (
     AppointmentType,
 )
 from app.models.audit_log import AuditLog
+from app.models.auth_throttle import AuthThrottleBucket, TrustedDevice
 from app.models.base import (
     Base,
     CommonColumnsMixin,
@@ -93,6 +94,8 @@ from app.models.role import Role, RolePermission
 from app.models.user import User, UserRole, UserStatus
 
 __all__ = [
+    "AuthThrottleBucket",
+    "TrustedDevice",
     # Audit
     "AuditLog",
     # Base + mixins

@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useLocation } from 'react-router-dom'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -41,16 +41,30 @@ function resetErrorMessage(err: unknown): string {
   return RESET_FALLBACK
 }
 
+/** The one-time token from `#token=...`, or from `?token=...` in an older link. */
+function tokenFromLocation(hash: string, search: string): string | null {
+  const fromFragment = new URLSearchParams(hash.replace(/^#/, '')).get('token')
+  return fromFragment || new URLSearchParams(search).get('token') || null
+}
+
 /**
  * Reset Password page (task 5).
  *
- * Receives the reset token from the URL query string (?token=...).
+ * Receives the one-time token from the URL fragment (#token=...). A fragment
+ * is never sent to a server, so the token stays out of access logs and
+ * Referer headers; it is also removed from the address bar and from history
+ * as soon as it has been read. Links sent before the fragment form existed
+ * carry it as ?token=... and are still accepted.
  * Validates the new password (min 12 chars per backend schema),
  * submits to POST /auth/password/reset, and shows a success state.
  */
 export default function ResetPasswordPage() {
-  const [searchParams] = useSearchParams()
-  const token = searchParams.get('token')
+  const location = useLocation()
+  // Read once, on first render: the effect below removes it from the URL.
+  const [token] = useState(() => tokenFromLocation(location.hash, location.search))
+  useEffect(() => {
+    if (token) window.history.replaceState(window.history.state, '', window.location.pathname)
+  }, [token])
   const [success, setSuccess] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirm, setShowConfirm] = useState(false)

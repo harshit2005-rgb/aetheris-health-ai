@@ -21,7 +21,13 @@ import aiosmtplib
 
 from app.core.config import settings
 
-__all__ = ["EmailMessage", "EmailSender", "SmtpEmailSender", "get_email_sender"]
+__all__ = [
+    "EmailMessage",
+    "EmailSender",
+    "SmtpEmailSender",
+    "email_delivery_configured",
+    "get_email_sender",
+]
 
 #: Seconds to wait on the mail server before giving up on one attempt. A slow
 #: server is retried later by the queue; it must not stall the worker.
@@ -106,12 +112,27 @@ class SmtpEmailSender:
         )
 
 
+def email_delivery_configured() -> bool:
+    """Whether this deployment has a mail transport at all.
+
+    A credential that can only be delivered by email — an invitation, a
+    password reset — must not be minted when this is false: there would be
+    nowhere to send it, and nothing else is allowed to carry it.
+
+    It says the transport is *configured*, not that a given message will
+    arrive.
+
+    :returns: ``True`` when ``SMTP_HOST`` is set.
+    """
+    return bool(settings.SMTP_HOST and settings.SMTP_HOST.strip())
+
+
 def get_email_sender() -> EmailSender | None:
     """Return the configured email transport, or ``None`` if email is off.
 
     :returns: An SMTP sender when ``SMTP_HOST`` is set, otherwise ``None``.
     """
-    if not settings.SMTP_HOST:
+    if not email_delivery_configured() or settings.SMTP_HOST is None:
         return None
     return SmtpEmailSender(
         host=settings.SMTP_HOST,

@@ -21,6 +21,7 @@ import jwt as pyjwt
 import pyotp
 from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from passlib.context import CryptContext
+from passlib.exc import PasswordSizeError, UnknownHashError
 
 from app.core.config import settings
 
@@ -59,11 +60,43 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     If the hash uses a deprecated scheme, it will be rehashed with Argon2id
     on next login (caller should check :func:`password_needs_rehash`).
 
+    Never raises on bad input. A password the hasher refuses to process
+    (oversized) or a stored value it cannot parse is simply not a match: an
+    exception here would turn into a 500 for real accounts only, which tells
+    a caller that the account exists.
+
     :param plain_password: The plaintext password to verify.
     :param hashed_password: The stored password hash.
-    :returns: ``True`` if the password matches.
+    :returns: ``True`` if the password matches; ``False`` otherwise, including
+        when the input cannot be verified at all.
     """
-    return bool(_pwd_context.verify(plain_password, hashed_password))
+    try:
+        return bool(_pwd_context.verify(plain_password, hashed_password))
+    except (PasswordSizeError, UnknownHashError, ValueError, TypeError):
+        return False
+
+
+#: A real Argon2id hash of a random value nobody knows, made once per process.
+#: It is what a rejected login is checked against when there is no account
+#: whose hash can be checked — see :func:`burn_password_verification`.
+_DUMMY_PASSWORD_HASH: str = str(_pwd_context.hash(secrets.token_urlsafe(32)))
+
+
+def burn_password_verification(password: str) -> None:
+    """Spend the time a real password check takes, and discard the result.
+
+    Login refuses some attempts before it reaches the password — the email is
+    unknown, or the account is suspended, locked, or in an inactive hospital.
+    Answering those at once while a wrong password takes a full Argon2id
+    verification lets a caller tell the cases apart with a stopwatch, even
+    though the response body is identical. Calling this on every early
+    rejection makes each of them do the same work as a wrong password.
+
+    Nothing can pass: the hash is of a random value that is never stored.
+
+    :param password: The password that was submitted. Hashed, never logged.
+    """
+    verify_password(password, _DUMMY_PASSWORD_HASH)
 
 
 def password_needs_rehash(hashed_password: str) -> bool:
@@ -95,7 +128,7 @@ def _get_jwt_signing_key() -> str:
     """
     if settings.JWT_PRIVATE_KEY:
         return settings.JWT_PRIVATE_KEY
-    return settings.APP_SECRET_KEY
+    return settings.APP_SECRET_KEY.get_secret_value()
 
 
 def _get_jwt_verification_key() -> str:
@@ -105,7 +138,7 @@ def _get_jwt_verification_key() -> str:
     """
     if settings.JWT_PUBLIC_KEY:
         return settings.JWT_PUBLIC_KEY
-    return settings.APP_SECRET_KEY
+    return settings.APP_SECRET_KEY.get_secret_value()
 
 
 def create_access_token(

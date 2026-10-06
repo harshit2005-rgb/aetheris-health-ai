@@ -83,6 +83,22 @@ class Notifier(Protocol):
         """
         ...
 
+    async def deliver_credential(self, request: NotificationRequest) -> bool:
+        """Queue the email that carries a one-time credential, and say whether it was queued.
+
+        For an invitation or a password-reset link, where the email is the
+        only way the credential may travel. Unlike :meth:`notify`, the caller
+        needs the answer: a credential whose email was never queued must not
+        be left alive, and nobody may be told it was sent.
+
+        Must not raise, and must not log the request's ``secret_variables`` or
+        anything rendered from them.
+
+        :param request: The request; its ``secret_variables`` carry the link.
+        :returns: ``True`` only if an email to the recipient was queued.
+        """
+        ...
+
 
 class NullNotifier:
     """A :class:`Notifier` that does nothing.
@@ -93,3 +109,7 @@ class NullNotifier:
 
     async def notify(self, request: NotificationRequest) -> None:
         """Discard the request."""
+
+    async def deliver_credential(self, request: NotificationRequest) -> bool:
+        """Queue nothing, and say so."""
+        return False

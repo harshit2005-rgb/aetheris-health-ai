@@ -32,6 +32,7 @@ from app.api.dependencies.db import get_db_session
 from app.repositories import (
     AppointmentRepository,
     AuditLogRepository,
+    AuthThrottleRepository,
     DepartmentRepository,
     DoctorRepository,
     HospitalRepository,
@@ -53,6 +54,7 @@ from app.repositories import (
     ReportRepository,
     RoleRepository,
     ServiceCatalogRepository,
+    TrustedDeviceRepository,
     UserRepository,
 )
 
@@ -83,6 +85,16 @@ def get_role_repository(session: DbSession) -> RoleRepository:
 def get_permission_repository(session: DbSession) -> PermissionRepository:
     """Provide a :class:`PermissionRepository` bound to the request session."""
     return PermissionRepository(session)
+
+
+def get_auth_throttle_repository(session: DbSession) -> AuthThrottleRepository:
+    """Provide an :class:`AuthThrottleRepository` bound to the request session."""
+    return AuthThrottleRepository(session)
+
+
+def get_trusted_device_repository(session: DbSession) -> TrustedDeviceRepository:
+    """Provide a :class:`TrustedDeviceRepository` bound to the request session."""
+    return TrustedDeviceRepository(session)
 
 
 def get_refresh_token_repository(session: DbSession) -> RefreshTokenRepository:

@@ -613,13 +613,19 @@ class TestFeatureFlags:
         assert mine == {SLOT_FLAG: {"available": False}}
         assert theirs == {SLOT_FLAG: {"available": True}}
 
-    async def test_inactive_hospital_is_404(
+    async def test_inactive_hospital_is_refused_at_authentication(
         self,
         api: AsyncClient,
         db_session: AsyncSession,
         hospital_id: uuid.UUID,
         no_settings: dict[str, str],
     ) -> None:
+        """Staff of a deactivated hospital no longer authenticate at all.
+
+        This used to reach the endpoint and get its 404. The request is now
+        stopped earlier, in ``get_current_user``, exactly as for a deactivated
+        account — so a switched-off hospital cannot use any endpoint.
+        """
         from app.models.hospital import Hospital
 
         hospital = await db_session.get(Hospital, hospital_id)
@@ -629,4 +635,5 @@ class TestFeatureFlags:
 
         response = await api.get(FLAGS_URL, headers=no_settings)
 
-        assert response.status_code == 404
+        assert response.status_code == 403
+        assert response.json()["message"] == "Account is not active."

@@ -129,7 +129,11 @@ async def get_current_user(
             },
         )
 
-    if user.status != UserStatus.ACTIVE:
+    # A deactivated hospital is treated exactly like a deactivated account:
+    # its staff stop authenticating on their very next request, without
+    # waiting for the access token to expire. `hospital_is_active` fails
+    # closed and costs no query (the hospital is loaded with the user).
+    if user.status != UserStatus.ACTIVE or not user.hospital_is_active:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={

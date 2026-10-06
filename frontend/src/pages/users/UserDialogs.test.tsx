@@ -11,6 +11,17 @@ import { InviteUserDialog } from './InviteUserDialog'
 import { ManageRolesDialog } from './ManageRolesDialog'
 
 /**
+ * A token an older API build would still send with a new invite. Nothing the
+ * dialog renders, copies or keeps may contain it.
+ */
+const LEGACY_TOKEN = 'tok-abc123-never-shown'
+
+const QUEUED_TEXT =
+  'new.nurse@hospital.test has been added with Invited status. An invitation email has been queued for this address. Delivery is not confirmed. If it does not arrive, use Resend invitation on the Users page.'
+const UNAVAILABLE_TEXT =
+  'new.nurse@hospital.test has been added with Invited status, but no invitation email was sent because email delivery is not available. The user cannot set a password until an invitation is sent. Use Resend invitation on the Users page once email delivery is working.'
+
+/**
  * Role assignment and invites against `POST /users`, `POST /users/{id}/roles`
  * and `DELETE /users/{id}/roles/{role_id}` (`backend/app/api/v1/users.py`).
  * The real hooks, permission store and Axios instance run; only the network
@@ -50,6 +61,9 @@ const target: ManagedUser = {
   updated_at: null,
 }
 
+/** The account `POST /users` creates. */
+const invited: ManagedUser = { ...target, id: 'u9', email: 'new.nurse@hospital.test', status: 'invited' }
+
 const ESCALATION = 'You cannot grant a role that includes permissions you do not hold.'
 
 let fake: FakeApi
@@ -62,7 +76,7 @@ beforeEach(() => {
   toastError.mockReset()
   onAssign = () => ok(null)
   onRemove = () => ok(null)
-  onInvite = () => ok({ ...target, id: 'u9', status: 'invited', invite_token: 'tok-abc123' }, 201)
+  onInvite = () => ok({ ...invited, invitation: { delivery: 'queued' } }, 201)
   fake = installFakeApi((config) => {
     if (config.method === 'get' && config.url === '/roles') return paged([SUPER, HOSPITAL, NURSE, CUSTOM])
     if (config.method === 'get' && config.url === '/users/u2') return ok(target)
@@ -213,55 +227,130 @@ describe('InviteUserDialog', () => {
   const submit = (user: ReturnType<typeof userEvent.setup>) =>
     user.click(screen.getByRole('button', { name: 'Create invite' }))
 
-  it('says how the invited user gets in, without promising an email', async () => {
+  /** Every place a link could be put in front of the admin. */
+  function expectNoActivationLink() {
+    expect(screen.queryByRole('textbox', { name: /link/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /copy/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link')).not.toBeInTheDocument()
+    const page = document.documentElement.outerHTML
+    expect(page).not.toContain('token=')
+    expect(page).not.toContain('/reset-password')
+  }
+
+  it('says the link goes to the user by email and is not shown to the admin', async () => {
     signIn(MOCK_PERMISSIONS_BY_ROLE.hospital_admin)
     const dialog = await openDialog(userEvent.setup())
 
-    expect(within(dialog).getByText(/one-time\s+invite link/)).toBeInTheDocument()
-    expect(within(dialog).getByText(/if email delivery is configured/)).toBeInTheDocument()
-    expect(within(dialog).queryByText(/first login/)).not.toBeInTheDocument()
+    expect(
+      within(dialog).getByText(
+        'Creates the account with Invited status. The user sets a password from a one-time link sent to their email address. The link is not shown here.',
+      ),
+    ).toBeInTheDocument()
   })
 
-  it('shows the one-time link the API returned, to copy and pass on', async () => {
+  it('reports a queued invitation email without claiming it was delivered', async () => {
     signIn(MOCK_PERMISSIONS_BY_ROLE.hospital_admin)
     const user = userEvent.setup()
-    await openDialog(user)
+    const dialog = await openDialog(user)
     await fill(user)
     await submit(user)
 
-    const link = await screen.findByLabelText('One-time invite link')
-    const expected = `${window.location.origin}/reset-password?token=tok-abc123`
-    expect(link).toHaveValue(expected)
-    expect(link).toHaveAttribute('readonly')
-    expect(screen.getByText('This link is shown only once')).toBeInTheDocument()
-    expect(screen.getByText(/only if email delivery is\s+configured/)).toBeInTheDocument()
-    // The toast names no token the admin cannot see.
+    expect(await within(dialog).findByRole('heading', { name: 'Invite created' })).toBeInTheDocument()
+    expect(within(dialog).getByText(QUEUED_TEXT)).toBeInTheDocument()
+    expect(dialog).toHaveAccessibleDescription(QUEUED_TEXT)
+    expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument()
     expect(toastSuccess).toHaveBeenCalledWith('Invite created for new.nurse@hospital.test')
-
-    await user.click(screen.getByRole('button', { name: /Copy link/ }))
-    expect(await navigator.clipboard.readText()).toBe(expected)
+    expectNoActivationLink()
 
     await user.click(screen.getByRole('button', { name: 'Done' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
-  it('keeps the one-time link on screen when Escape is pressed', async () => {
+  it('warns that no email was sent when email delivery is unavailable', async () => {
+    signIn(MOCK_PERMISSIONS_BY_ROLE.hospital_admin)
+    onInvite = () => ok({ ...invited, invitation: { delivery: 'unavailable' } }, 201)
+    const user = userEvent.setup()
+    const dialog = await openDialog(user)
+    await fill(user)
+    await submit(user)
+
+    expect(
+      await within(dialog).findByRole('heading', { name: 'Invite created, email not sent' }),
+    ).toBeInTheDocument()
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(UNAVAILABLE_TEXT)
+    expect(dialog).toHaveAccessibleDescription(UNAVAILABLE_TEXT)
+    expect(within(dialog).queryByText(/has been queued/)).not.toBeInTheDocument()
+    // Nothing was sent, so nothing announces success.
+    expect(toastSuccess).not.toHaveBeenCalled()
+    expectNoActivationLink()
+
+    await user.click(screen.getByRole('button', { name: 'Done' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+  })
+
+  it.each([
+    ['is missing', {}],
+    ['is null', { invitation: null }],
+    ['has no delivery', { invitation: {} }],
+    ['names a delivery this build does not know', { invitation: { delivery: 'sent' } }],
+  ])('treats the invite as not emailed when the invitation result %s', async (_case, extra) => {
+    signIn(MOCK_PERMISSIONS_BY_ROLE.hospital_admin)
+    onInvite = () => ok({ ...invited, ...extra }, 201)
+    const user = userEvent.setup()
+    const dialog = await openDialog(user)
+    await fill(user)
+    await submit(user)
+
+    expect(
+      await within(dialog).findByRole('heading', { name: 'Invite created, email not sent' }),
+    ).toBeInTheDocument()
+    expect(within(dialog).getByRole('alert')).toHaveTextContent(UNAVAILABLE_TEXT)
+    expect(toastSuccess).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['queued', { delivery: 'queued' }],
+    ['unavailable', { delivery: 'unavailable' }],
+    ['missing', undefined],
+  ])(
+    'never shows, copies or keeps a token an older API still sends (invitation %s)',
+    async (_case, invitation) => {
+      signIn(MOCK_PERMISSIONS_BY_ROLE.hospital_admin)
+      onInvite = () => ok({ ...invited, invitation, invite_token: LEGACY_TOKEN }, 201)
+      const user = userEvent.setup()
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+      render(
+        <QueryClientProvider client={client}>
+          <InviteUserDialog trigger={<button type="button">Invite user</button>} />
+        </QueryClientProvider>,
+      )
+      await user.click(screen.getByRole('button', { name: 'Invite user' }))
+      await fill(user)
+      await submit(user)
+      await screen.findByRole('button', { name: 'Done' })
+
+      expect(document.documentElement.outerHTML).not.toContain(LEGACY_TOKEN)
+      expect(document.documentElement.outerHTML).not.toContain('tok-')
+      expectNoActivationLink()
+      // Not in what a toast said, on the clipboard, or in the mutation cache.
+      expect(JSON.stringify([toastSuccess.mock.calls, toastError.mock.calls])).not.toContain('tok-')
+      expect(await navigator.clipboard.readText()).toBe('')
+      const held = client.getMutationCache().getAll().map((m) => m.state.data)
+      expect(held).toHaveLength(1)
+      expect(JSON.stringify(held)).not.toContain('tok-')
+      expect(JSON.stringify(held)).not.toContain('invite_token')
+    },
+  )
+
+  it('closes the result on Escape: there is nothing on it to lose', async () => {
     signIn(MOCK_PERMISSIONS_BY_ROLE.hospital_admin)
     const user = userEvent.setup()
     await openDialog(user)
     await fill(user)
     await submit(user)
+    await screen.findByRole('heading', { name: 'Invite created' })
 
-    const link = await screen.findByLabelText('One-time invite link')
-    link.focus()
     await user.keyboard('{Escape}')
-
-    expect(screen.getByRole('dialog')).toBeInTheDocument()
-    expect(screen.getByLabelText('One-time invite link')).toHaveValue(
-      `${window.location.origin}/reset-password?token=tok-abc123`,
-    )
-
-    await user.click(screen.getByRole('button', { name: 'Done' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
@@ -287,8 +376,8 @@ describe('InviteUserDialog', () => {
     fireEvent.submit(form)
 
     await waitFor(() => expect(invites()).toHaveLength(1))
-    finish(ok({ ...target, id: 'u9', invite_token: 'tok-abc123' }, 201))
-    await screen.findByLabelText('One-time invite link')
+    finish(ok({ ...invited, invitation: { delivery: 'queued' } }, 201))
+    await screen.findByRole('heading', { name: 'Invite created' })
     expect(invites()).toHaveLength(1)
   })
 

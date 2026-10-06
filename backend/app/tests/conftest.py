@@ -27,6 +27,8 @@ teardown, so tests never see each other's rows and ordering never matters
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import logging
 import os
 import uuid
 from typing import TYPE_CHECKING, Any, Self
@@ -49,7 +51,15 @@ if TYPE_CHECKING:
     from app.core.audit import AuditEvent
     from app.database.unit_of_work import UnitOfWork
 
-__all__ = ["REAL_NETWORK_ATTEMPTS", "FakeSession", "RecordingAuditSink", "grant_permissions"]
+__all__ = [
+    "REAL_NETWORK_ATTEMPTS",
+    "AdmitAllThrottle",
+    "FakeSession",
+    "every_log_line_reaches_the_root",
+    "RecordingAuditSink",
+    "grant_permissions",
+    "real_throttle",
+]
 
 # The developer's real Groq key lives in ``backend/.env`` and pytest runs from
 # ``backend/``. An environment variable outranks the dotenv file, so blanking
@@ -65,6 +75,12 @@ os.environ["GROQ_API_KEY"] = ""
 # ``backend/.env`` — a test must never encrypt or decrypt with a real key.
 os.environ["MFA_ENCRYPTION_KEY"] = Fernet.generate_key().decode()
 os.environ["MFA_ENCRYPTION_PREVIOUS_KEYS"] = ""
+
+# Failed logins are padded to a minimum duration in production so that their
+# timing reveals nothing (``AUTH_FAILURE_MIN_SECONDS``). The suite makes
+# hundreds of them, so the padding is off here; the tests that are about the
+# padding switch it on for themselves.
+os.environ["AUTH_FAILURE_MIN_SECONDS"] = "0"
 
 #: Names of every AI setting, removed from the environment for each test.
 _AI_ENV_NAMES = (
@@ -118,7 +134,7 @@ def override_settings() -> Generator[None]:
     original_values: dict[str, Any] = {}
 
     # Store original values.
-    for key in ("APP_ENV", "APP_DEBUG", "LOG_LEVEL"):
+    for key in ("APP_ENV", "APP_DEBUG", "LOG_LEVEL", "AUTH_DEVICE_COOKIE_SECURE"):
         original_values[key] = getattr(settings, key, None)
 
     try:
@@ -126,6 +142,12 @@ def override_settings() -> Generator[None]:
         settings.APP_ENV = "development"  # type: ignore[assignment]
         settings.APP_DEBUG = True
         settings.LOG_LEVEL = "CRITICAL"
+        # The suite's HTTP clients talk to ``http://test``, and a ``Secure``
+        # cookie is not sent over plain HTTP, so the trusted-device cookie is
+        # sent without ``Secure`` here (allowed in development only, which is
+        # what the suite runs as). Tests about the cookie's production
+        # attributes switch it back on and use an ``https://`` client.
+        settings.AUTH_DEVICE_COOKIE_SECURE = False
         yield
     finally:
         # Restore original values.
@@ -291,6 +313,89 @@ class FakeSession:
     async def rollback(self) -> None:
         """Record a rollback."""
         self.rollbacks += 1
+
+
+@contextlib.contextmanager
+def every_log_line_reaches_the_root() -> Generator[None]:
+    """Undo, for a while, everything that can keep a log line from the root logger.
+
+    Tests that assert "this secret is in no log line" attach a handler to the
+    root logger. That proves nothing if lines never get there — and across a
+    whole run they may not: the suite logs at ``CRITICAL``, and any earlier
+    test may have set a level on a named logger, switched propagation off or
+    called ``logging.disable``. All of that is lifted here and put back after.
+    """
+    manager = logging.root.manager
+    disabled = manager.disable
+    saved: dict[logging.Logger, tuple[int, bool, bool]] = {}
+    logging.disable(logging.NOTSET)
+    for candidate in list(manager.loggerDict.values()):
+        if isinstance(candidate, logging.Logger):
+            saved[candidate] = (candidate.level, candidate.propagate, candidate.disabled)
+            candidate.setLevel(logging.NOTSET)
+            candidate.propagate = True
+            candidate.disabled = False
+    previous_root = logging.root.level
+    logging.root.setLevel(logging.DEBUG)
+    try:
+        yield
+    finally:
+        logging.root.setLevel(previous_root)
+        for candidate, (level, propagate, was_disabled) in saved.items():
+            candidate.setLevel(level)
+            candidate.propagate = propagate
+            candidate.disabled = was_disabled
+        logging.disable(disabled)
+
+
+class AdmitAllThrottle:
+    """An authentication throttle that lets everything through and remembers it.
+
+    For unit tests of ``AuthService`` that are about something else. It is a
+    test double only: ``AuthService`` cannot be built without a throttle, and
+    the application always gives it the real one.
+    """
+
+    def __init__(self) -> None:
+        self.admitted: list[list[Any]] = []
+        self.settled: list[tuple[Any, list[Any]]] = []
+        self.refuse = False
+
+    async def now(self) -> Any:
+        """The current time."""
+        from datetime import UTC, datetime
+
+        return datetime.now(UTC)
+
+    async def admit(self, targets: Any) -> Any:
+        """Admit (or, with ``refuse`` set, refuse) and record the buckets asked for."""
+        from app.services.auth_throttle import Admission
+
+        self.admitted.append(list(targets))
+        if self.refuse:
+            return Admission(admitted=False, refused_by=targets[0].kind)
+        return Admission(admitted=True)
+
+    async def settle(self, admission: Any, *, clear: Any = ()) -> None:
+        """Record a settlement."""
+        self.settled.append((admission, list(clear)))
+
+
+def real_throttle(session: AsyncSession, uow: UnitOfWork) -> dict[str, Any]:
+    """The real throttle and trusted-device store on a test session.
+
+    :returns: Keyword arguments for ``AuthService(...)``.
+    """
+    from app.repositories.auth_throttle_repository import (
+        AuthThrottleRepository,
+        TrustedDeviceRepository,
+    )
+    from app.services.auth_throttle import AuthThrottle
+
+    return {
+        "throttle": AuthThrottle(AuthThrottleRepository(session), uow),
+        "trusted_devices": TrustedDeviceRepository(session),
+    }
 
 
 class RecordingAuditSink:

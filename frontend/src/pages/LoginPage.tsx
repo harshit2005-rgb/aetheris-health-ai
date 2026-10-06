@@ -30,9 +30,10 @@ const mfaSchema = z.object({
 
 type MfaValues = z.infer<typeof mfaSchema>
 
-// POST /auth/mfa/verify answers 401 for a wrong code and for a ticket that is
-// no longer good; only the message tells them apart. This is the wrong-code
-// one (`AuthService.verify_mfa`) — any other 401 means the ticket is spent.
+// POST /auth/mfa/verify gives this one answer for every refusal of a
+// well-formed ticket: a wrong code, too many attempts, a password changed
+// since, an account no longer active. The server does not say which. Any
+// other 401 means the ticket itself has expired or is malformed.
 const WRONG_MFA_CODE = 'Invalid MFA code.'
 
 /** Why the user is back on this page without having asked to sign out. */
@@ -115,7 +116,8 @@ export default function LoginPage() {
         const message = (err.response.data as { message?: string } | undefined)?.message
         if (message === WRONG_MFA_CODE) {
           mfaForm.setError('code', {
-            message: 'That code is not right. Check the app and try again.',
+            message:
+              'That code was not accepted. Check the app and try again. If it keeps failing, sign in again.',
           })
           return
         }
@@ -165,7 +167,13 @@ export default function LoginPage() {
       }
     } catch {
       // Never reveal whether the email exists (spec 2B §12).
-      toast.error('Invalid credentials, or the server is unavailable.')
+      // One wording for every failure, whatever the cause. It always points
+      // at the emailed link, because a correct password can be refused too
+      // while sign-in attempts on an account are being slowed down.
+      toast.error('Invalid credentials, or the server is unavailable.', {
+        description:
+          'If you are sure of your password, use "Forgot password?" to get a sign-in link by email.',
+      })
     }
   }
 

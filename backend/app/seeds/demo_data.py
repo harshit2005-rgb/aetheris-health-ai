@@ -584,6 +584,28 @@ async def _seed_departments(session: AsyncSession, hospital: Hospital) -> dict[s
     return departments
 
 
+#: The hospital whose demo accounts use the documented addresses unchanged.
+_DEMO_HOSPITAL_SLUG = "demo-hospital"
+
+
+def _login_email_for(hospital: Hospital, email: str) -> str:
+    """Return the login address a demo account gets in ``hospital``.
+
+    A staff email names one account across the whole platform (migration
+    0018), so the same address cannot be seeded into two hospitals. The demo
+    hospital keeps the documented addresses; any other hospital gets the
+    address tagged with its own slug, e.g. ``asha+city-clinic@example.com``.
+
+    :param hospital: The tenant being seeded.
+    :param email: The address from the seed table.
+    :returns: An address that is unique to this hospital.
+    """
+    if hospital.slug == _DEMO_HOSPITAL_SLUG:
+        return email
+    local, _, domain = email.partition("@")
+    return f"{local}+{hospital.slug}@{domain}"
+
+
 async def _seed_doctor_user(
     session: AsyncSession,
     hospital: Hospital,
@@ -597,7 +619,8 @@ async def _seed_doctor_user(
     """Find or create the user record a doctor profile hangs off.
 
     A doctor is a profile attached to a user (module spec §5.1), so the user has
-    to exist first. Idempotent on ``(hospital_id, email)``.
+    to exist first. Idempotent on ``(hospital_id, email)``, where the email is
+    the hospital's own address for that account (:func:`_login_email_for`).
 
     :param session: The open session.
     :param hospital: The tenant.
@@ -608,6 +631,7 @@ async def _seed_doctor_user(
     :param phone: Contact number in E.164 form.
     :returns: The existing or newly created user.
     """
+    email = _login_email_for(hospital, email)
     stmt = select(User).where(User.hospital_id == hospital.id, User.email == email)
     result = await session.execute(stmt)
     user = result.unique().scalar_one_or_none()
@@ -631,7 +655,7 @@ async def _seed_doctor_user(
     if doctor_role is not None:
         session.add(UserRole(user_id=user.id, role_id=doctor_role.id))
 
-    logger.debug("demo_doctor_user_created", email=email)
+    logger.debug("demo_doctor_user_created", user_id=str(user.id))
     return user
 
 

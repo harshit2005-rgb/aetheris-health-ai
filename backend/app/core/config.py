@@ -14,14 +14,39 @@ Usage::
 
 from __future__ import annotations
 
+import hmac
+import ipaddress
+import json
 import re
+import secrets
 from enum import StrEnum
-from typing import Self
+from typing import Final, Self
 from urllib.parse import urlsplit
 
 from cryptography.fernet import Fernet
-from pydantic import Field, SecretStr, field_validator, model_validator
+from pydantic import Field, PrivateAttr, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+#: Signing keys that were once published in this repository and are therefore
+#: known to everyone: the former built-in default, which
+#: ``backend/.env.example`` used to ship. A token signed with one of these can
+#: be forged by anyone, so none of them is ever used to sign — see
+#: ``Settings._resolve_secret_key``. This is a denylist, not a default: the
+#: value stays here, for good, precisely so that it keeps being refused.
+#: ``.env.example`` ships no key at all, and a test holds it to that.
+PUBLISHED_SECRET_KEYS: Final[frozenset[str]] = frozenset(
+    {
+        "change-me-to-a-long-random-string-in-production",  # noqa: S105 — public by definition
+    }
+)
+
+#: Shortest acceptable signing key, in characters.
+MIN_SECRET_KEY_LENGTH: Final = 32
+
+#: Smallest failure-duration floor accepted outside development, in seconds.
+#: It has to exceed the slowest genuine failure, which includes one password
+#: hash.
+MIN_AUTH_FAILURE_SECONDS: Final = 0.25
 
 
 class AppEnv(StrEnum):
@@ -67,6 +92,9 @@ class Settings(BaseSettings):
         hide_input_in_errors=True,
     )
 
+    #: Set when development generated a per-process signing key.
+    _secret_key_is_ephemeral: bool = PrivateAttr(default=False)
+
     # ── App ────────────────────────────────────────────────────────────────
     APP_NAME: str = Field(
         default="Aetheris Health AI", description="Human-readable application name"
@@ -78,10 +106,17 @@ class Settings(BaseSettings):
     APP_BASE_URL: str = Field(
         default="http://localhost:8000", description="Public base URL of the API"
     )
-    APP_SECRET_KEY: str = Field(
-        default="change-me-to-a-long-random-string-in-production",
-        description="Secret key for signing internal tokens and encryption",
-        min_length=32,
+    # Signs every access token and MFA ticket. There is NO built-in key: a
+    # default in the repository would let anyone forge a token for any staff
+    # account. Staging and production refuse to start without a private key.
+    # Development with no key (or with a published one) gets a random key for
+    # the life of the process — see `_resolve_secret_key`.
+    APP_SECRET_KEY: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "Private key that signs access tokens and MFA tickets. Required outside "
+            "development. At least 32 characters; never a value from this repository."
+        ),
     )
 
     # ── Database ───────────────────────────────────────────────────────────
@@ -161,17 +196,37 @@ class Settings(BaseSettings):
     PASSWORD_MIN_LENGTH: int = Field(
         default=12, ge=8, le=128, description="Minimum password length"
     )
-    MAX_FAILED_LOGIN_ATTEMPTS: int = Field(
-        default=5, ge=1, le=20, description="Max failed attempts before lockout"
-    )
-    ACCOUNT_LOCKOUT_MINUTES: int = Field(
-        default=30, ge=1, le=1440, description="Account lockout duration in minutes"
-    )
+    # There are no lockout settings. Wrong passwords and codes are throttled
+    # by app/services/auth_throttle.py, whose numbers are constants in code so
+    # that configuration cannot weaken or disable them.
     PASSWORD_RESET_TOKEN_TTL_MINUTES: int = Field(
         default=30, ge=5, le=1440, description="Password reset token lifetime in minutes"
     )
     INVITE_TOKEN_TTL_HOURS: int = Field(
         default=72, ge=1, le=720, description="Invitation token lifetime in hours (B6 invite seam)"
+    )
+
+    # A rejected login, a rejected MFA code and every forgot-password request
+    # take at least this long. Without it the response time says whether an
+    # email belongs to a staff account: an unknown address is answered after
+    # one lookup, a real one after several writes. The work is done first and
+    # the remainder is waited out, with no database connection or row lock
+    # held. Set it above the slowest genuine failure; 0 disables it (tests).
+    AUTH_FAILURE_MIN_SECONDS: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=5.0,
+        description="Minimum duration of a failed login/MFA attempt and of forgot-password.",
+    )
+
+    # The trusted-device cookie (app/services/auth_throttle.py) is sent with
+    # `Secure` and the `__Host-` name prefix, which browsers honour only over
+    # HTTPS. This may be switched off for plain-HTTP local development and
+    # nowhere else: the application refuses to start with it off outside
+    # development.
+    AUTH_DEVICE_COOKIE_SECURE: bool = Field(
+        default=True,
+        description="Send the trusted-device cookie as Secure with the __Host- prefix.",
     )
 
     # ── MFA secret encryption at rest ──────────────────────────────────────
@@ -233,7 +288,35 @@ class Settings(BaseSettings):
     )
     RATE_LIMIT_TRUST_PROXY_HEADER: bool = Field(
         default=False,
-        description="Trust X-Forwarded-For for the client IP. Enable ONLY behind a proxy that overwrites the header, otherwise clients can spoof it and evade the anonymous limit.",
+        description="Trust X-Forwarded-For for the client IP. Enable ONLY behind a proxy we operate that appends to (or overwrites) the header; the address is read from the right-hand end, never from what the client sent.",
+    )
+    # How many of our own proxies stand between the internet and this process.
+    # The client address is that many entries from the right of
+    # X-Forwarded-For; everything further left is the client's own claim.
+    # Too high and a client can forge its address; too low and every user
+    # appears to come from the inner proxy. Used only when the flag above is on.
+    # Which socket peers count as "our proxy". X-Forwarded-For is believed
+    # only on a connection that comes from one of these networks; a client
+    # that reaches the application directly cannot name its own address. The
+    # default is every private and loopback range, which fits a proxy on the
+    # same host, pod or private network. List a public range here only if the
+    # proxy really does connect from one.
+    RATE_LIMIT_TRUSTED_PROXY_CIDRS: list[str] = Field(
+        default=[
+            "127.0.0.0/8",
+            "::1/128",
+            "10.0.0.0/8",
+            "172.16.0.0/12",
+            "192.168.0.0/16",
+            "fc00::/7",
+        ],
+        description="Networks a trusted proxy connects from (JSON array from env).",
+    )
+    RATE_LIMIT_TRUSTED_PROXY_HOPS: int = Field(
+        default=1,
+        ge=1,
+        le=8,
+        description="Number of trusted proxies in front of the application (see RATE_LIMIT_TRUST_PROXY_HEADER).",
     )
 
     # ── AI runtime ─────────────────────────────────────────────────────────
@@ -284,6 +367,14 @@ class Settings(BaseSettings):
             return stripped or None
         return value
 
+    @field_validator("APP_SECRET_KEY", mode="before")
+    @classmethod
+    def _blank_secret_key_is_unset(cls, value: object) -> object:
+        """Treat a whitespace-only signing key as "not configured"."""
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
     @field_validator("MFA_ENCRYPTION_KEY", "MFA_ENCRYPTION_PREVIOUS_KEYS", mode="before")
     @classmethod
     def _blank_mfa_key_is_unset(cls, value: object) -> object:
@@ -321,6 +412,136 @@ class Settings(BaseSettings):
                 msg = f"MFA_ENCRYPTION_KEY is required when APP_ENV is {self.APP_ENV.value}."
                 raise ValueError(msg)
         return self
+
+    @model_validator(mode="after")
+    def _device_cookie_is_secure_outside_development(self) -> Self:
+        """Refuse to run outside development with the device cookie sent in the clear."""
+        if self.APP_ENV != AppEnv.DEVELOPMENT and not self.AUTH_DEVICE_COOKIE_SECURE:
+            msg = f"AUTH_DEVICE_COOKIE_SECURE must be true when APP_ENV is {self.APP_ENV.value}."
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def _proxy_topology_is_declared_outside_development(self) -> Self:
+        """Refuse to run outside development until someone has said whether a proxy is in front.
+
+        Left unsaid, every caller behind an undeclared proxy would look like
+        one source. ``RATE_LIMIT_TRUST_PROXY_HEADER`` must be set, to true or
+        to false; there is no safe guess.
+        """
+        if (
+            self.APP_ENV != AppEnv.DEVELOPMENT
+            and "RATE_LIMIT_TRUST_PROXY_HEADER" not in self.model_fields_set
+        ):
+            msg = (
+                "RATE_LIMIT_TRUST_PROXY_HEADER must be set explicitly (true or false) "
+                f"when APP_ENV is {self.APP_ENV.value}."
+            )
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def _failures_are_padded_outside_development(self) -> Self:
+        """Refuse to run outside development with the failure-duration floor switched off.
+
+        A throttled attempt does no password hashing and an evaluated one
+        does; only the floor makes the two take the same time. Zero is for
+        test suites.
+        """
+        if (
+            self.APP_ENV != AppEnv.DEVELOPMENT
+            and self.AUTH_FAILURE_MIN_SECONDS < MIN_AUTH_FAILURE_SECONDS
+        ):
+            msg = (
+                f"AUTH_FAILURE_MIN_SECONDS must be at least {MIN_AUTH_FAILURE_SECONDS} "
+                f"when APP_ENV is {self.APP_ENV.value}."
+            )
+            raise ValueError(msg)
+        return self
+
+    @field_validator("RATE_LIMIT_TRUSTED_PROXY_CIDRS", mode="before")
+    @classmethod
+    def _parse_trusted_proxy_cidrs(cls, value: object) -> object:
+        """Accept a JSON array string from the environment, and insist on real networks."""
+        parsed = json.loads(value) if isinstance(value, str) else value
+        if not isinstance(parsed, list):
+            msg = "RATE_LIMIT_TRUSTED_PROXY_CIDRS must be a list of networks."
+            raise ValueError(msg)  # noqa: TRY004 — pydantic reports ValueError, not TypeError
+        networks = []
+        for network in parsed:
+            try:
+                networks.append(ipaddress.ip_network(str(network), strict=False))
+            except ValueError:
+                msg = "RATE_LIMIT_TRUSTED_PROXY_CIDRS contains a value that is not a network."
+                raise ValueError(msg) from None
+        # "Everyone is our proxy" is the same as believing whatever address a
+        # caller claims — whether written as one network or as several that
+        # add up to one.
+        v4 = [network for network in networks if isinstance(network, ipaddress.IPv4Network)]
+        v6 = [network for network in networks if isinstance(network, ipaddress.IPv6Network)]
+        covers_everything = any(
+            merged.prefixlen == 0 for merged in ipaddress.collapse_addresses(v4)
+        ) or any(merged.prefixlen == 0 for merged in ipaddress.collapse_addresses(v6))
+        if covers_everything:
+            msg = "RATE_LIMIT_TRUSTED_PROXY_CIDRS must not cover every address."
+            raise ValueError(msg)
+        return parsed
+
+    @model_validator(mode="after")
+    def _resolve_secret_key(self) -> Self:
+        """Make sure tokens are only ever signed with a private key.
+
+        ``APP_SECRET_KEY`` signs every access token and MFA ticket; whoever
+        knows it can mint a valid token for any staff account, with no
+        password and no MFA code. So a key that is missing, too short, or
+        published in this repository is never used:
+
+        * **Staging and production** refuse to start. There is no fallback.
+        * **Development** replaces a missing or published key with a random
+          one generated for this process. Nothing known to anyone else ever
+          signs a token — including when a real deployment is started in
+          development mode by mistake. The cost is that sessions end when the
+          process restarts; set a private key in ``.env`` to keep them.
+
+        The messages name the setting and never the value.
+
+        :raises ValueError: Outside development, if the key is unset, is a
+            published value, or is too short; in development, if a key is set
+            but too short.
+        """
+        key = self.APP_SECRET_KEY.get_secret_value()
+        # Compared without surrounding quotes as well: the published value was
+        # shipped quoted, and not every way of loading an env file strips them.
+        candidates = {key, key.strip("\"'")}
+        published = any(
+            hmac.compare_digest(candidate.encode(), known.encode())
+            for candidate in candidates
+            for known in PUBLISHED_SECRET_KEYS
+        )
+
+        if self.APP_ENV is not AppEnv.DEVELOPMENT:
+            if not key:
+                msg = f"APP_SECRET_KEY is required when APP_ENV is {self.APP_ENV.value}."
+                raise ValueError(msg)
+            if published:
+                msg = (
+                    "APP_SECRET_KEY is set to a value published in the repository; "
+                    f"a private key is required when APP_ENV is {self.APP_ENV.value}."
+                )
+                raise ValueError(msg)
+
+        if not key or published:
+            self.APP_SECRET_KEY = SecretStr(secrets.token_urlsafe(48))
+            self._secret_key_is_ephemeral = True
+        elif len(key) < MIN_SECRET_KEY_LENGTH:
+            msg = f"APP_SECRET_KEY must be at least {MIN_SECRET_KEY_LENGTH} characters."
+            raise ValueError(msg)
+        return self
+
+    @property
+    def secret_key_is_ephemeral(self) -> bool:
+        """True if this process generated its own signing key (development only)."""
+        return self._secret_key_is_ephemeral
 
     def mfa_encryption_keys(self, name: str = "MFA_ENCRYPTION_KEY") -> list[bytes]:
         """Return the keys held in one MFA key setting, in order.

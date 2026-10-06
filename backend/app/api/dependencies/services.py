@@ -18,6 +18,7 @@ Usage::
     SlotRanker,
 )
 from app.services.auth_service import AuthService
+from app.services.auth_throttle import AuthThrottle
 
     async def handler(
         auth: Annotated[AuthService, Depends(get_auth_service)],
@@ -43,6 +44,7 @@ from app.api.dependencies.repositories import (  # noqa: F401
     DbSession,
     get_appointment_repository,
     get_audit_log_repository,
+    get_auth_throttle_repository,
     get_department_repository,
     get_doctor_repository,
     get_hospital_repository,
@@ -64,6 +66,7 @@ from app.api.dependencies.repositories import (  # noqa: F401
     get_report_repository,
     get_role_repository,
     get_service_catalog_repository,
+    get_trusted_device_repository,
     get_user_repository,
 )
 from app.core.audit import AuditSink
@@ -73,6 +76,7 @@ from app.database.unit_of_work import UnitOfWork
 from app.repositories import (
     AppointmentRepository,
     AuditLogRepository,
+    AuthThrottleRepository,
     DepartmentRepository,
     DoctorRepository,
     HospitalRepository,
@@ -94,6 +98,7 @@ from app.repositories import (
     ReportRepository,
     RoleRepository,
     ServiceCatalogRepository,
+    TrustedDeviceRepository,
     UserRepository,
 )
 from app.services.appointment_service import (
@@ -104,6 +109,7 @@ from app.services.appointment_service import (
 )
 from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
+from app.services.auth_throttle import AuthThrottle
 from app.services.billing_service import BillingInvoiceDraftSink, BillingService
 from app.services.department_service import DepartmentService, DepartmentUsageSource
 from app.services.dispensing_service import DispensingService
@@ -216,6 +222,8 @@ def get_auth_service(
     uow: UnitOfWork = Depends(get_unit_of_work),
     audit: AuditSink = Depends(get_audit_sink),
     notifier: Notifier = Depends(get_notifier),
+    throttle_buckets: AuthThrottleRepository = Depends(get_auth_throttle_repository),
+    trusted_devices: TrustedDeviceRepository = Depends(get_trusted_device_repository),
 ) -> AuthService:
     """Provide an :class:`AuthService` composed with its repository dependencies."""
     return AuthService(
@@ -224,6 +232,8 @@ def get_auth_service(
         password_reset_repo=password_reset_repo,
         uow=uow,
         audit=audit,
+        throttle=AuthThrottle(throttle_buckets, uow),
+        trusted_devices=trusted_devices,
         notifier=notifier,
     )
 

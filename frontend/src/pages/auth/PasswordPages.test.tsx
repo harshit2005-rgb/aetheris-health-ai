@@ -84,13 +84,44 @@ describe('ForgotPasswordPage', () => {
 })
 
 describe('ResetPasswordPage', () => {
-  function renderPage() {
+  function renderPage(entry = '/reset-password#token=tok-123') {
     render(
-      <MemoryRouter initialEntries={['/reset-password?token=tok-123']}>
+      <MemoryRouter initialEntries={[entry]}>
         <ResetPasswordPage />
       </MemoryRouter>,
     )
   }
+
+  it('takes the token from the URL fragment, which is never sent to a server', async () => {
+    const user = userEvent.setup()
+    renderPage('/reset-password#token=tok-frag')
+    await fill(user)
+    await submit(user)
+
+    await waitFor(() => expect(resets()).toHaveLength(1))
+    expect(bodyOf(resets()[0])).toEqual({ token: 'tok-frag', new_password: 'correct-horse-battery' })
+  })
+
+  it('still accepts a link sent before the token moved to the fragment', async () => {
+    const user = userEvent.setup()
+    renderPage('/reset-password?token=tok-query')
+    await fill(user)
+    await submit(user)
+
+    await waitFor(() => expect(resets()).toHaveLength(1))
+    expect(bodyOf(resets()[0])).toEqual({ token: 'tok-query', new_password: 'correct-horse-battery' })
+  })
+
+  it('removes the token from the address bar and history once it has been read', () => {
+    const replaceState = vi.spyOn(window.history, 'replaceState')
+    renderPage()
+
+    expect(replaceState).toHaveBeenCalledTimes(1)
+    const url = String(replaceState.mock.calls[0][2])
+    expect(url).not.toContain('token')
+    expect(url).not.toContain('tok-123')
+    replaceState.mockRestore()
+  })
 
   async function fill(user: ReturnType<typeof userEvent.setup>) {
     await user.type(screen.getByLabelText('New password'), 'correct-horse-battery')

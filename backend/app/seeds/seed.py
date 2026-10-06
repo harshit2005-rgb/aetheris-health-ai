@@ -702,6 +702,23 @@ async def seed_database(database_url: str | None = None) -> None:
 
         logger.info("roles_seeded", count=len(role_map))
 
+        # Everything below is demonstration data: a hospital, and staff
+        # accounts — an administrator among them — whose passwords are
+        # written in this file and in the documentation. Outside development
+        # they are never created: a deployment seeded with them would have an
+        # administrator anyone could sign in as. The permission catalogue and
+        # system roles above are reference data and are seeded everywhere.
+        from app.core.config import settings
+
+        if not settings.is_development:
+            await session.commit()
+            logger.warning(
+                "demo_data_not_seeded",
+                reason="demo accounts have published passwords",
+                environment=settings.APP_ENV.value,
+            )
+            return
+
         # ── 3. Create Demo Hospital ──────────────────────────────────────────
         hospital_stmt = select(Hospital).where(Hospital.slug == "demo-hospital")
         hospital_result = await session.execute(hospital_stmt)

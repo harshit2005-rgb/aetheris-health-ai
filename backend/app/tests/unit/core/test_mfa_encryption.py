@@ -6,6 +6,7 @@ need a different key configuration swap it on the settings singleton.
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 import pyotp
@@ -43,10 +44,34 @@ def _use_keys(
     )
 
 
+@pytest.fixture
+def _no_settings_in_the_environment(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make ``_settings()`` mean what it says: explicit values only.
+
+    ``Settings(_env_file=None, ...)`` skips ``.env`` but still reads the
+    process environment, so a shell or CI job exporting any setting — the
+    staging and production cases broke on a stray
+    ``AUTH_DEVICE_COOKIE_SECURE=false`` — decided the outcome of the
+    key-configuration tests. Every variable that names a setting is removed
+    for the duration of each of them.
+    """
+    names = {name.upper() for name in Settings.model_fields}
+    for variable in list(os.environ):
+        if variable.upper() in names:
+            monkeypatch.delenv(variable)
+
+
 def _settings(**values: Any) -> Settings:
     """Build settings from explicit values only — no environment, no ``.env``."""
     values.setdefault("MFA_ENCRYPTION_KEY", None)
     values.setdefault("MFA_ENCRYPTION_PREVIOUS_KEYS", None)
+    # Staging and production also need a private signing key; these tests are
+    # about the MFA key, so give them one.
+    values.setdefault("APP_SECRET_KEY", "a-private-signing-key-for-these-tests-0123456789")
+    # Outside development the proxy topology has to be declared before the
+    # application starts at all. These tests are about the MFA key, so they
+    # declare it ("no proxy") unless a test says otherwise.
+    values.setdefault("RATE_LIMIT_TRUST_PROXY_HEADER", False)
     return Settings(_env_file=None, **values)  # type: ignore[call-arg]
 
 
@@ -181,7 +206,41 @@ class TestKeyRotation:
             decrypt_mfa_secret(stored)
 
 
+@pytest.mark.usefixtures("_no_settings_in_the_environment")
 class TestKeyConfiguration:
+    @pytest.mark.parametrize("environment", ["staging", "production"])
+    @pytest.mark.parametrize(
+        ("variable", "value"),
+        [
+            ("AUTH_DEVICE_COOKIE_SECURE", "false"),
+            ("APP_SECRET_KEY", "short"),
+            ("MFA_ENCRYPTION_PREVIOUS_KEYS", "not-a-key"),
+            ("APP_ENV", "development"),
+        ],
+    )
+    def test_a_stray_environment_variable_cannot_decide_these_tests(
+        self, environment: str, variable: str, value: str
+    ) -> None:
+        """The key rules are judged on the values given, whatever the shell exports."""
+        key = _key()
+        with pytest.MonkeyPatch.context() as patch:
+            patch.setenv(variable, value)
+            names = {name.upper() for name in Settings.model_fields}
+            for present in list(os.environ):
+                if present.upper() in names:
+                    patch.delenv(present)
+
+            configured = _settings(APP_ENV=environment, MFA_ENCRYPTION_KEY=key)
+            with pytest.raises(ValidationError, match="MFA_ENCRYPTION_KEY is required"):
+                _settings(APP_ENV=environment)
+
+        assert configured.mfa_encryption_keys() == [key.encode()]
+
+    def test_the_environment_alone_cannot_supply_a_missing_key_here(self) -> None:
+        """The suite exports a key for the run; these tests must not be leaning on it."""
+        assert "MFA_ENCRYPTION_KEY" not in os.environ
+        assert _settings(APP_ENV="development").MFA_ENCRYPTION_KEY is None
+
     def test_no_key_is_allowed_in_development(self) -> None:
         configured = _settings(APP_ENV="development")
         assert configured.MFA_ENCRYPTION_KEY is None

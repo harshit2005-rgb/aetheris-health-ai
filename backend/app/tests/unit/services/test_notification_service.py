@@ -17,7 +17,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.core.exceptions import ValidationError
-from app.core.notifications import NotificationRequest, Notifier
+from app.core.notifications import NotificationRequest, Notifier, NullNotifier
 from app.models.notification import (
     DeliveryStatus,
     Notification,
@@ -26,6 +26,7 @@ from app.models.notification import (
 )
 from app.schemas.common import PaginationParams
 from app.schemas.notification import BroadcastRequest, UpdatePreferencesRequest
+from app.services import notification_service as notification_service_module
 from app.services.notification_service import (
     EMAIL_BACKOFF_BASE_SECONDS,
     MAX_EMAIL_ATTEMPTS,
@@ -61,6 +62,8 @@ class FakeNotificationRepository:
         self.deliveries: list[NotificationDelivery] = []
         self.preferences: dict[uuid.UUID, dict[str, Any]] = {}
         self.fail_on_create = False
+        #: Raised by the next inserts into the email queue, when set.
+        self.email_insert_error: Exception | None = None
 
     async def create_notification(self, **fields: Any) -> Notification:
         if self.fail_on_create:
@@ -80,6 +83,8 @@ class FakeNotificationRepository:
     async def create_email_delivery(
         self, *, notification: Notification, due_at: datetime, **fields: Any
     ) -> NotificationDelivery:
+        if self.email_insert_error is not None:
+            raise self.email_insert_error
         delivery = NotificationDelivery(
             id=uuid.uuid4(),
             hospital_id=notification.hospital_id,
@@ -328,6 +333,256 @@ class TestNotify:
         await world.service.notify(_invite(user))
 
         assert "An administrator invited you" in world.repo.notifications[0].body
+
+
+# ── deliver_credential ──────────────────────────────────────────────────────
+
+#: The link a credential email carries. Nothing may log it, or any part of it.
+ACTION_URL = f"https://app.test/reset-password#token={TOKEN}"
+#: What the failing email queue says. It quotes the body, as a database error does.
+QUEUE_ERROR = f"invalid input for query argument $3: 'Set your password: {ACTION_URL}'"
+
+
+class _SpyLogger:
+    """Stands in for the service's logger and keeps every call made to it."""
+
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str, dict[str, Any]]] = []
+
+    def __getattr__(self, level: str) -> Any:
+        def _log(event: str, *args: Any, **fields: Any) -> None:
+            assert not args, "positional log arguments would be interpolated into the message"
+            self.calls.append((level, event, fields))
+
+        return _log
+
+    def events(self) -> list[str]:
+        return [event for _, event, _ in self.calls]
+
+    def everything(self) -> str:
+        return repr(self.calls)
+
+
+@pytest.fixture
+def spy_logger(monkeypatch: pytest.MonkeyPatch) -> _SpyLogger:
+    """Everything ``NotificationService`` logs, with the fields it logged."""
+    spy = _SpyLogger()
+    monkeypatch.setattr(notification_service_module, "logger", spy)
+    return spy
+
+
+def _credential(user: MagicMock, **overrides: Any) -> NotificationRequest:
+    """An invitation whose email carries :data:`ACTION_URL`."""
+    return _invite(user, secret_variables={"action_url": ACTION_URL}, **overrides)
+
+
+def _assert_no_secret_logged(spy: _SpyLogger) -> None:
+    """Nothing logged gives away the link, the token, the body or the error's text."""
+    logged = spy.everything()
+    assert TOKEN not in logged, "the token was logged"
+    assert "token=" not in logged, "the link was logged"
+    assert "reset-password" not in logged, "the link was logged"
+    assert "invalid input" not in logged, "the error's own text was logged"
+    assert "asha@example.test" not in logged, "the recipient's address was logged"
+    for level, event, fields in spy.calls:
+        assert level != "exception", f"{event} was logged with a traceback"
+        assert "exc_info" not in fields, f"{event} was logged with a traceback"
+        assert "secret_variables" not in fields
+        assert "action_url" not in fields
+
+
+class TestDeliverCredential:
+    """``deliver_credential``: the caller is told the truth about the email.
+
+    An invitation or reset link may only travel by email. The caller kills
+    the link unless this returns ``True``, so ``True`` has to mean exactly
+    "an email to the recipient is in the queue", and every other outcome has
+    to be ``False`` without raising and without leaving anything behind. The
+    fake repository cannot roll back; that the savepoint was rolled back is
+    asserted here, and that it really removes the rows is asserted against
+    PostgreSQL in ``integration/test_notification_flows.py``.
+    """
+
+    async def test_it_returns_true_with_exactly_one_email_queued(
+        self, spy_logger: _SpyLogger
+    ) -> None:
+        user = _user()
+        world = _World(users=[user])
+
+        queued = await world.service.deliver_credential(_credential(user))
+
+        assert queued is True
+        [delivery] = world.repo.deliveries
+        assert delivery.status is DeliveryStatus.QUEUED
+        assert delivery.to_address == "asha@example.test"
+        assert ACTION_URL in (delivery.body or "")
+        [notification] = world.repo.notifications
+        assert delivery.notification_id == notification.id
+        assert TOKEN not in notification.title + notification.body + (notification.link or "")
+        # In the caller's transaction: a savepoint, kept, and no commit.
+        assert world.session.commits == 0
+        assert world.session.savepoints_opened == 1
+        assert world.session.savepoints_rolled_back == 0
+        assert "notification.credential_not_queued" not in spy_logger.events()
+        _assert_no_secret_logged(spy_logger)
+
+    @pytest.mark.parametrize("recipient", ["unknown", "other_hospital", "nobody_named"])
+    async def test_with_no_recipient_it_returns_false_and_writes_nothing(
+        self, spy_logger: _SpyLogger, recipient: str
+    ) -> None:
+        """Attack: a link is minted for an account the email cannot be addressed to."""
+        outsider = _user(hospital_id=OTHER_HOSPITAL_ID)
+        world = _World(users=[outsider] if recipient == "other_hospital" else [])
+        target = outsider if recipient == "other_hospital" else _user()
+        overrides: dict[str, Any] = (
+            {"recipient_user_ids": ()} if recipient == "nobody_named" else {}
+        )
+
+        queued = await world.service.deliver_credential(_credential(target, **overrides))
+
+        assert queued is False
+        assert world.repo.deliveries == []
+        assert world.repo.notifications == []
+        assert world.session.savepoints_rolled_back == 1
+        assert world.session.commits == 0
+        self._assert_logged_not_queued(spy_logger, error_type="_NoEmailQueuedError")
+
+    @pytest.mark.parametrize("address", [None, ""])
+    async def test_with_no_address_it_returns_false_and_the_in_app_notice_is_undone(
+        self, spy_logger: _SpyLogger, address: str | None
+    ) -> None:
+        """Attack: "you have been invited" appears in-app with no email behind it.
+
+        ``notify`` keeps the in-app copy for a user with no address. For a
+        credential that copy would be a promise nobody keeps, so the savepoint
+        holding it is rolled back along with everything else.
+        """
+        user = _user(email=address)
+        world = _World(users=[user])
+
+        queued = await world.service.deliver_credential(_credential(user))
+
+        assert queued is False
+        assert world.repo.deliveries == []
+        # The notice was written inside the savepoint, and the savepoint was undone.
+        assert world.session.savepoints_opened == 1
+        assert world.session.savepoints_rolled_back == 1
+        assert world.session.commits == 0
+        self._assert_logged_not_queued(spy_logger, error_type="_NoEmailQueuedError")
+
+    @pytest.mark.parametrize(
+        "error",
+        [RuntimeError(QUEUE_ERROR), ValueError(QUEUE_ERROR), KeyError(ACTION_URL)],
+        ids=lambda error: type(error).__name__,
+    )
+    async def test_a_failing_insert_returns_false_and_never_raises(
+        self, spy_logger: _SpyLogger, error: Exception
+    ) -> None:
+        """Attack: break the email queue and read the link out of the error."""
+        user = _user()
+        world = _World(users=[user])
+        world.repo.email_insert_error = error
+
+        queued = await world.service.deliver_credential(_credential(user))  # must not raise
+
+        assert queued is False
+        assert world.repo.deliveries == []
+        assert world.session.savepoints_rolled_back == 1
+        assert world.session.commits == 0
+        self._assert_logged_not_queued(spy_logger, error_type=type(error).__name__)
+
+    async def test_a_failing_notification_insert_returns_false(
+        self, spy_logger: _SpyLogger
+    ) -> None:
+        user = _user()
+        world = _World(users=[user])
+        world.repo.fail_on_create = True
+
+        queued = await world.service.deliver_credential(_credential(user))
+
+        assert queued is False
+        assert world.repo.notifications == []
+        assert world.repo.deliveries == []
+        assert world.session.savepoints_rolled_back == 1
+        self._assert_logged_not_queued(spy_logger, error_type="RuntimeError")
+
+    async def test_an_unknown_kind_returns_false(self, spy_logger: _SpyLogger) -> None:
+        user = _user()
+        world = _World(users=[user])
+
+        queued = await world.service.deliver_credential(_credential(user, kind="no.such.kind"))
+
+        assert queued is False
+        assert world.repo.deliveries == []
+        assert spy_logger.events() == ["notification.credential_not_queued"]
+        _assert_no_secret_logged(spy_logger)
+
+    async def test_an_earlier_success_is_not_mistaken_for_this_one(
+        self, spy_logger: _SpyLogger
+    ) -> None:
+        """Attack: one queued email makes every later failure look queued.
+
+        The same service instance handles several requests in one unit of
+        work. "Queued" is decided per call, so a success before a failure, or
+        a failure before a success, must not leak into the other's answer.
+        """
+        user = _user()
+        unreachable = _user(email=None)
+        world = _World(users=[user, unreachable])
+
+        answers = [
+            await world.service.deliver_credential(_credential(user)),
+            await world.service.deliver_credential(_credential(unreachable)),
+            await world.service.deliver_credential(_credential(user)),
+            await world.service.deliver_credential(_credential(_user())),
+        ]
+        world.repo.email_insert_error = RuntimeError(QUEUE_ERROR)
+        answers.append(await world.service.deliver_credential(_credential(user)))
+        world.repo.email_insert_error = None
+        answers.append(await world.service.deliver_credential(_credential(user)))
+
+        assert answers == [True, False, True, False, False, True]
+        assert len(world.repo.deliveries) == 3
+        assert {delivery.to_address for delivery in world.repo.deliveries} == {"asha@example.test"}
+        _assert_no_secret_logged(spy_logger)
+
+    async def test_an_ordinary_notification_does_not_count_as_a_queued_credential(
+        self, spy_logger: _SpyLogger
+    ) -> None:
+        """An email queued by ``notify`` just before must not answer for the credential."""
+        user = _user()
+        unreachable = _user(email=None)
+        world = _World(users=[user, unreachable])
+
+        await world.service.notify(_invite(user))
+        queued = await world.service.deliver_credential(_credential(unreachable))
+
+        assert queued is False
+        assert [delivery.to_address for delivery in world.repo.deliveries] == ["asha@example.test"]
+
+    async def test_the_null_notifier_queues_nothing_and_says_so(self) -> None:
+        """A service wired with no notifier must not report a credential as sent."""
+        assert isinstance(NullNotifier(), Notifier)
+        assert await NullNotifier().deliver_credential(_credential(_user())) is False
+
+    @staticmethod
+    def _assert_logged_not_queued(spy: _SpyLogger, *, error_type: str) -> None:
+        """The one event, at error level, with the kind of failure and nothing more."""
+        failures = [call for call in spy.calls if call[1] == "notification.credential_not_queued"]
+        assert failures == [
+            (
+                "error",
+                "notification.credential_not_queued",
+                {
+                    "kind": "auth.user_invited",
+                    "hospital_id": str(HOSPITAL_ID),
+                    "error_type": error_type,
+                },
+            )
+        ]
+        # The event ``notify`` uses is not: that path can log a traceback.
+        assert "notification.create_failed" not in spy.events()
+        _assert_no_secret_logged(spy)
 
 
 class TestNotifyByPermission:

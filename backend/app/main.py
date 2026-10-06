@@ -17,6 +17,7 @@ from __future__ import annotations
 import structlog
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
+from sqlalchemy.exc import DBAPIError
 
 from app.api.v1 import (
     appointment_router,
@@ -394,11 +395,20 @@ def _register_exception_handlers(app: FastAPI) -> None:
 
         Only logs the detailed error. Never returns stack traces in production.
         """
-        handler_logger.exception(
-            "unhandled_exception",
-            path=str(request.url.path),
-            exc_info=exc,
-        )
+        if isinstance(exc, DBAPIError):
+            # A database error's own text quotes row values. Log its kind only.
+            handler_logger.error(
+                "unhandled_exception",
+                path=str(request.url.path),
+                error_type=type(exc.orig).__name__ if exc.orig else type(exc).__name__,
+                sqlstate=getattr(exc.orig, "sqlstate", None),
+            )
+        else:
+            handler_logger.exception(
+                "unhandled_exception",
+                path=str(request.url.path),
+                exc_info=exc,
+            )
 
         return JSONResponse(
             status_code=500,

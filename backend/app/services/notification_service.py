@@ -126,6 +126,10 @@ class DeliveryReport:
         return self.sent + self.retrying + self.failed
 
 
+class _NoEmailQueuedError(Exception):
+    """A credential's email was not queued (no recipient, no address, channel off)."""
+
+
 class NotificationService:
     """Creates, serves and delivers notifications.
 
@@ -149,6 +153,8 @@ class NotificationService:
         self._hospitals = hospitals
         self._session = session
         self._audit = audit
+        #: Emails this instance has queued; see :meth:`deliver_credential`.
+        self._emails_queued = 0
 
     # ── Notifier: events from other modules ───────────────────────────────────
 
@@ -165,12 +171,56 @@ class NotificationService:
         try:
             async with self._session.begin_nested():
                 await self._create(request)
-        except Exception:  # noqa: BLE001 — see the docstring
+        except Exception as exc:  # noqa: BLE001 — see the docstring
+            if request.secret_variables:
+                # The request carries a credential (an invitation or reset
+                # link) that was on its way into an email body. An error
+                # raised while writing that body can quote it — a database
+                # error prints the offending value — so neither the message
+                # nor the traceback is logged. Only what kind of error it was.
+                logger.error(
+                    "notification.create_failed",
+                    kind=request.kind,
+                    hospital_id=str(request.hospital_id),
+                    error_type=type(exc).__name__,
+                )
+                return
             logger.exception(
                 "notification.create_failed",
                 kind=request.kind,
                 hospital_id=str(request.hospital_id),
             )
+
+    async def deliver_credential(self, request: NotificationRequest) -> bool:
+        """Queue the email that carries a one-time credential, and report whether it was queued.
+
+        Like :meth:`notify`, this runs in a savepoint and never raises. Unlike
+        it, the caller is told the outcome, and "nothing was queued" undoes
+        the whole request: an in-app "you have been invited" notice with no
+        email behind it would be a promise nobody keeps.
+
+        Nothing rendered from the request is logged — not the message of an
+        error, which can quote the email body, and not a traceback.
+
+        :param request: The request; its ``secret_variables`` carry the link.
+        :returns: ``True`` only if an email was queued.
+        """
+        queued_before = self._emails_queued
+        try:
+            async with self._session.begin_nested():
+                await self._create(request)
+                if self._emails_queued == queued_before:
+                    raise _NoEmailQueuedError
+        except Exception as exc:  # noqa: BLE001 — never raises; see the docstring
+            self._emails_queued = queued_before
+            logger.error(
+                "notification.credential_not_queued",
+                kind=request.kind,
+                hospital_id=str(request.hospital_id),
+                error_type=type(exc).__name__,
+            )
+            return False
+        return True
 
     async def _create(self, request: NotificationRequest) -> list[Notification]:
         """Write the notifications, and queue the emails, for one request.
@@ -250,6 +300,7 @@ class NotificationService:
             body=render(kind.email_body, variables),
             due_at=now,
         )
+        self._emails_queued += 1
 
     async def _resolve_recipients(self, request: NotificationRequest) -> list[User]:
         """Work out who a request is for.
