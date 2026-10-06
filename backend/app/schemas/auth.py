@@ -68,9 +68,21 @@ class MfaEnrollRequest(BaseModel):
 
 
 class MfaConfirmRequest(BaseModel):
-    """MFA enrollment confirmation payload."""
+    """MFA enrollment confirmation payload.
 
-    secret: str = Field(..., description="The TOTP secret from the enroll response")
+    Only ``code`` is used. ``secret`` is still accepted so that existing
+    clients, which echo the enrolment secret back, keep working — but it is
+    ignored. The server confirms against the pending secret it stored itself.
+    """
+
+    secret: str | None = Field(
+        default=None,
+        max_length=128,
+        description=(
+            "Deprecated and ignored. Accepted for backward compatibility only; "
+            "the server never reads a secret from the client."
+        ),
+    )
     code: str = Field(
         ...,
         min_length=6,

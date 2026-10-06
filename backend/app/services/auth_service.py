@@ -687,27 +687,49 @@ class AuthService:
             "provisioning_uri": provisioning_uri,
         }
 
-    async def confirm_mfa(self, user_id: uuid.UUID, secret: str, code: str) -> None:
+    async def confirm_mfa(self, user_id: uuid.UUID, code: str) -> None:
         """Confirm MFA enrollment by verifying a TOTP code.
 
-        :param user_id: The user's UUID.
-        :param secret: The TOTP secret.
-        :param code: The 6-digit TOTP code.
-        :raises AuthenticationError: If the code is invalid.
-        :raises ServiceUnavailableError: If no encryption key is configured.
-        """
-        if not verify_totp_code(secret, code):
-            raise AuthenticationError("Invalid MFA code. Please try again.")
+        The code is checked against the **pending secret the server stored at
+        enrolment** — the only secret this method ever reads. It takes no
+        secret from the caller: confirmation used to verify against, and then
+        store, a secret sent in the request, which let anyone holding a session
+        enable MFA with a secret of their choosing or replace an active one,
+        without the password that enrolment demands.
 
+        Nothing is written to ``mfa_secret`` here except, at most, the same
+        secret re-encrypted under the current key.
+
+        :param user_id: The user's UUID.
+        :param code: The 6-digit TOTP code.
+        :raises AuthenticationError: If the code does not match the pending secret.
+        :raises BusinessRuleError: If MFA is already enabled — the active
+            secret is never replaced through confirmation; disable MFA first —
+            or if no enrolment is in progress.
+        :raises ServiceUnavailableError: If no encryption key is configured, or
+            the pending secret cannot be decrypted.
+        """
         user = await self._user_repo.get_by_id(user_id, _OWN_ACCOUNT)
         if user is None:
             raise AuthenticationError("User not found.")
 
-        await self._user_repo.update(
-            user,
-            mfa_secret=self._encrypt_mfa_secret(secret),
-            mfa_enabled=True,
-        )
+        if user.mfa_enabled:
+            raise BusinessRuleError(
+                "MFA is already enabled for this account. Disable it first if you want to re-enroll."
+            )
+
+        if not user.mfa_secret:
+            raise BusinessRuleError("No MFA enrollment is in progress. Start enrollment first.")
+
+        pending = self._decrypt_mfa_secret(user)
+
+        if not verify_totp_code(pending, code):
+            raise AuthenticationError("Invalid MFA code. Please try again.")
+
+        updates: dict[str, Any] = {"mfa_enabled": True}
+        if mfa_secret_needs_reencryption(user.mfa_secret):
+            updates["mfa_secret"] = self._encrypt_mfa_secret(pending)
+        await self._user_repo.update(user, **updates)
 
         await self._audit.record(
             AuditEvent(

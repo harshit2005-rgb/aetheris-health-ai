@@ -258,6 +258,222 @@ class TestLoginFlow:
         assert user.mfa_enabled is False
 
 
+# ── Confirmation trusts only the server-side pending secret ──────────────────
+
+
+class TestConfirmationHardening:
+    async def test_a_client_supplied_secret_cannot_replace_the_pending_secret(
+        self, api: AsyncClient, db_session: AsyncSession, user: User
+    ) -> None:
+        """(a) Sending your own secret with a code that matches it gets nowhere."""
+        headers = await _bearer(api, user)
+        pending = (await _enroll(api, headers))["secret"]
+        stored_before = await _stored_secret(db_session, user.id)
+        attacker_secret = generate_totp_secret()
+
+        response = await api.post(
+            f"{AUTH}/mfa/confirm",
+            headers=headers,
+            json={"secret": attacker_secret, "code": pyotp.TOTP(attacker_secret).now()},
+        )
+
+        assert response.status_code == 401, response.text
+        stored_after = await _stored_secret(db_session, user.id)
+        assert stored_after == stored_before
+        assert stored_after is not None
+        assert decrypt_mfa_secret(stored_after) == pending
+        await db_session.refresh(user)
+        assert user.mfa_enabled is False
+
+    async def test_a_code_from_any_other_secret_fails(
+        self, api: AsyncClient, db_session: AsyncSession, user: User
+    ) -> None:
+        """(b) Only a code generated from the pending secret confirms."""
+        headers = await _bearer(api, user)
+        pending = (await _enroll(api, headers))["secret"]
+        other = generate_totp_secret()
+        assert other != pending
+
+        # The right secret echoed back, but a code from a different one.
+        response = await api.post(
+            f"{AUTH}/mfa/confirm",
+            headers=headers,
+            json={"secret": pending, "code": pyotp.TOTP(other).now()},
+        )
+
+        assert response.status_code == 401
+        await db_session.refresh(user)
+        assert user.mfa_enabled is False
+
+    async def test_the_pending_secret_and_a_valid_code_succeed(
+        self, api: AsyncClient, db_session: AsyncSession, user: User
+    ) -> None:
+        """(c) The normal path, exactly as the Hospital frontend sends it."""
+        headers = await _bearer(api, user)
+        pending = (await _enroll(api, headers))["secret"]
+        stored_before = await _stored_secret(db_session, user.id)
+
+        response = await api.post(
+            f"{AUTH}/mfa/confirm",
+            headers=headers,
+            json={"secret": pending, "code": pyotp.TOTP(pending).now()},
+        )
+
+        assert response.status_code == 200, response.text
+        await db_session.refresh(user)
+        assert user.mfa_enabled is True
+        # Confirmation switches MFA on; it does not rewrite the secret.
+        assert await _stored_secret(db_session, user.id) == stored_before
+
+    async def test_the_code_alone_is_enough(
+        self, api: AsyncClient, db_session: AsyncSession, user: User
+    ) -> None:
+        """The request needs only the code; the secret field is optional."""
+        headers = await _bearer(api, user)
+        pending = (await _enroll(api, headers))["secret"]
+
+        response = await api.post(
+            f"{AUTH}/mfa/confirm", headers=headers, json={"code": pyotp.TOTP(pending).now()}
+        )
+
+        assert response.status_code == 200, response.text
+        await db_session.refresh(user)
+        assert user.mfa_enabled is True
+
+    async def test_a_wrong_secret_alongside_the_right_code_is_simply_ignored(
+        self, api: AsyncClient, db_session: AsyncSession, user: User
+    ) -> None:
+        """The client's secret has no effect at all — not even as a veto."""
+        headers = await _bearer(api, user)
+        pending = (await _enroll(api, headers))["secret"]
+
+        response = await api.post(
+            f"{AUTH}/mfa/confirm",
+            headers=headers,
+            json={"secret": generate_totp_secret(), "code": pyotp.TOTP(pending).now()},
+        )
+
+        assert response.status_code == 200, response.text
+        stored = await _stored_secret(db_session, user.id)
+        assert stored is not None
+        assert decrypt_mfa_secret(stored) == pending
+
+    async def test_enabled_mfa_cannot_be_replaced_through_confirm(
+        self, api: AsyncClient, db_session: AsyncSession, user: User
+    ) -> None:
+        """(d) With MFA on, confirm rejects — whatever secret and code are sent."""
+        active = await _enroll_and_confirm(api, user)
+        stored_before = await _stored_secret(db_session, user.id)
+        challenge = await _login(api, user)
+        verified = await api.post(
+            f"{AUTH}/mfa/verify",
+            json={"mfa_ticket": challenge["mfa_ticket"], "code": pyotp.TOTP(active).now()},
+        )
+        headers = {"Authorization": f"Bearer {verified.json()['data']['access_token']}"}
+        attacker_secret = generate_totp_secret()
+
+        for body in (
+            {"secret": attacker_secret, "code": pyotp.TOTP(attacker_secret).now()},
+            {"secret": active, "code": pyotp.TOTP(active).now()},
+            {"code": pyotp.TOTP(active).now()},
+        ):
+            response = await api.post(f"{AUTH}/mfa/confirm", headers=headers, json=body)
+            assert response.status_code == 400, response.text
+            assert "already enabled" in response.json()["message"]
+
+        assert await _stored_secret(db_session, user.id) == stored_before
+        await db_session.refresh(user)
+        assert user.mfa_enabled is True
+        # The original authenticator still signs in; the attacker's does not.
+        again = await _login(api, user)
+        rejected = await api.post(
+            f"{AUTH}/mfa/verify",
+            json={"mfa_ticket": again["mfa_ticket"], "code": pyotp.TOTP(attacker_secret).now()},
+        )
+        accepted = await api.post(
+            f"{AUTH}/mfa/verify",
+            json={"mfa_ticket": again["mfa_ticket"], "code": pyotp.TOTP(active).now()},
+        )
+        assert rejected.status_code == 401
+        assert accepted.status_code == 200
+
+    async def test_confirm_without_an_enrolment_in_progress_is_rejected(
+        self, api: AsyncClient, db_session: AsyncSession, user: User
+    ) -> None:
+        """No pending secret: a session alone cannot switch MFA on."""
+        headers = await _bearer(api, user)
+        attacker_secret = generate_totp_secret()
+
+        response = await api.post(
+            f"{AUTH}/mfa/confirm",
+            headers=headers,
+            json={"secret": attacker_secret, "code": pyotp.TOTP(attacker_secret).now()},
+        )
+
+        assert response.status_code == 400, response.text
+        assert await _stored_secret(db_session, user.id) is None
+        await db_session.refresh(user)
+        assert user.mfa_enabled is False
+
+    async def test_confirm_requires_authentication(self, api: AsyncClient) -> None:
+        response = await api.post(f"{AUTH}/mfa/confirm", json={"code": "123456"})
+        assert response.status_code == 401
+
+    async def test_a_pending_secret_is_not_exposed_by_other_endpoints(
+        self, api: AsyncClient, db_session: AsyncSession, user: User
+    ) -> None:
+        """Between enrolment and confirmation the pending secret stays put."""
+        headers = await _bearer(api, user)
+        pending = (await _enroll(api, headers))["secret"]
+        stored = await _stored_secret(db_session, user.id)
+        assert stored is not None
+
+        me = await api.get("/api/v1/users/me", headers=headers)
+        login = await api.post(f"{AUTH}/login", json={"email": user.email, "password": PASSWORD})
+        failed = await api.post(
+            f"{AUTH}/mfa/confirm", headers=headers, json={"secret": pending, "code": "000000"}
+        )
+
+        for response in (me, login, failed):
+            assert pending not in response.text
+            assert stored not in response.text
+            assert "mfa_secret" not in response.text
+        # Enrolment is pending, so a password login still needs no MFA step.
+        assert "access_token" in login.text
+
+    async def test_a_failed_confirmation_logs_no_secret(
+        self,
+        api: AsyncClient,
+        db_session: AsyncSession,
+        user: User,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        recorder = RecordingLogger()
+        headers = await _bearer(api, user)
+        monkeypatch.setattr(auth_service_module, "logger", recorder)
+        pending = (await _enroll(api, headers))["secret"]
+        attacker_secret = generate_totp_secret()
+
+        await api.post(
+            f"{AUTH}/mfa/confirm",
+            headers=headers,
+            json={"secret": attacker_secret, "code": pyotp.TOTP(attacker_secret).now()},
+        )
+        await api.post(
+            f"{AUTH}/mfa/confirm",
+            headers=headers,
+            json={"secret": pending, "code": pyotp.TOTP(pending).now()},
+        )
+        stored = await _stored_secret(db_session, user.id)
+        assert stored is not None
+
+        logged = json.dumps(recorder.entries, default=str)
+        assert "mfa_enabled" in logged
+        assert pending not in logged
+        assert attacker_secret not in logged
+        assert stored not in logged
+
+
 # ── Nothing leaks ────────────────────────────────────────────────────────────
 
 
@@ -692,58 +908,83 @@ class TestMigration:
 
         assert await _run(db_session, module.encrypt_plaintext_secrets, []) == 0
 
-    async def test_downgrade_restores_the_plaintext(
+    async def test_downgrade_refuses_and_never_creates_plaintext(
         self, db_session: AsyncSession, hospital_id: uuid.UUID
     ) -> None:
+        """A downgrade with encrypted secrets stops, and writes nothing."""
         module = _migration()
         key = Fernet.generate_key()
         secret = generate_totp_secret()
-        legacy = await _make_user(db_session, hospital_id, mfa_secret=secret)
+        legacy = await _make_user(db_session, hospital_id, mfa_secret=secret, mfa_enabled=True)
         await _run(db_session, module.encrypt_plaintext_secrets, [key])
+        encrypted = await _stored_secret(db_session, legacy.id)
+        assert encrypted is not None
+        assert await _plaintext_rows(db_session) == 0
 
-        restored = await _run(db_session, module.decrypt_encrypted_secrets, [key])
+        with pytest.raises(RuntimeError, match="Refusing to downgrade") as raised:
+            await db_session.run_sync(
+                lambda sync: module.refuse_downgrade_if_encrypted(sync.connection())
+            )
 
-        assert restored >= 1
-        assert await _stored_secret(db_session, legacy.id) == secret
+        # No plaintext was created, the ciphertext is byte-for-byte unchanged,
+        # and MFA is still switched on for the user.
+        assert await _plaintext_rows(db_session) == 0
+        assert await _stored_secret(db_session, legacy.id) == encrypted
+        assert await _stored_secret(db_session, legacy.id) != secret
+        await db_session.refresh(legacy)
+        assert legacy.mfa_enabled is True
+        # The error explains the way back and carries neither secret nor ciphertext.
+        message = str(raised.value)
+        assert "Roll forward" in message
+        assert "restore a backup" in message
+        assert secret not in message
+        assert encrypted not in message
 
-    async def test_downgrade_changes_nothing_if_any_secret_cannot_be_decrypted(
+    async def test_downgrade_refuses_even_with_the_key_available(
+        self, db_session: AsyncSession, hospital_id: uuid.UUID, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Having the key changes nothing: the downgrade does not decrypt."""
+        module = _migration()
+        key = _key()
+        _use_keys(monkeypatch, key)
+        account = await _make_user(
+            db_session, hospital_id, mfa_secret=encrypt_mfa_secret(generate_totp_secret())
+        )
+        before = await _stored_secret(db_session, account.id)
+
+        with pytest.raises(RuntimeError, match="Refusing to downgrade"):
+            await db_session.run_sync(
+                lambda sync: module.refuse_downgrade_if_encrypted(sync.connection())
+            )
+
+        assert await _stored_secret(db_session, account.id) == before
+        assert await _plaintext_rows(db_session) == 0
+
+    async def test_downgrade_is_a_no_op_when_no_secret_is_stored(
         self, db_session: AsyncSession, hospital_id: uuid.UUID
     ) -> None:
+        """A database with no MFA secrets has nothing to undo, so it may go back."""
         module = _migration()
-        right, wrong = Fernet.generate_key(), Fernet.generate_key()
-        readable = await _make_user(
-            db_session,
-            hospital_id,
-            mfa_secret=Fernet(wrong).encrypt(b"JBSWY3DPEHPK3PXP").decode(),
+        await _make_user(db_session, hospital_id)
+        encrypted = await db_session.execute(
+            text("SELECT count(*) FROM users WHERE mfa_secret LIKE 'gAAAAA%'")
         )
-        unreadable = await _make_user(
-            db_session,
-            hospital_id,
-            mfa_secret=Fernet(right).encrypt(b"JBSWY3DPEHPK3PXQ").decode(),
-        )
-        before = {
-            account.id: await _stored_secret(db_session, account.id)
-            for account in (readable, unreadable)
-        }
+        assert encrypted.scalar_one() == 0
 
-        with pytest.raises(RuntimeError, match="does not decrypt"):
-            await _run(db_session, module.decrypt_encrypted_secrets, [wrong])
-
-        for account_id, stored in before.items():
-            assert await _stored_secret(db_session, account_id) == stored
-
-    async def test_downgrade_refuses_to_run_without_a_key(
-        self, db_session: AsyncSession, hospital_id: uuid.UUID
-    ) -> None:
-        module = _migration()
-        await _make_user(
-            db_session,
-            hospital_id,
-            mfa_secret=Fernet(Fernet.generate_key()).encrypt(b"JBSWY3DPEHPK3PXP").decode(),
+        await db_session.run_sync(
+            lambda sync: module.refuse_downgrade_if_encrypted(sync.connection())
         )
 
-        with pytest.raises(RuntimeError, match="MFA_ENCRYPTION_KEY is not set"):
-            await _run(db_session, module.decrypt_encrypted_secrets, [])
+        assert await _plaintext_rows(db_session) == 0
+
+    async def test_the_migration_has_no_code_path_that_decrypts(self) -> None:
+        """Structural: nothing in the migration can turn ciphertext into plaintext."""
+        source = Path(_migration().__file__ or "").read_text()
+        code = source.split('"""', 2)[2]  # everything after the module docstring
+
+        assert ".decrypt(" not in code
+        assert "MultiFernet" not in code
+        assert not hasattr(_migration(), "decrypt_encrypted_secrets")
 
     async def test_the_migration_reads_its_keys_from_configuration(
         self, monkeypatch: pytest.MonkeyPatch

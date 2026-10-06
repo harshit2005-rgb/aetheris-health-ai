@@ -21,9 +21,16 @@ plaintext secret to convert.**
 Idempotent: a value that is already a Fernet token is left alone, so the
 migration can be re-run and can follow a partial manual conversion.
 
-``downgrade`` restores the plaintext, because the previous application version
-reads the column as plaintext and would otherwise lock every MFA user out. It
-needs the same key. Run it only as part of rolling the application back.
+**``downgrade`` never restores plaintext.** If any encrypted secret exists it
+stops with an error and changes nothing; with none, there is nothing to undo
+and it succeeds. The previous application version reads the column as
+plaintext, so a database holding encrypted secrets cannot be handed back to it
+by a schema downgrade. To roll back:
+
+- roll *forward* — deploy a fixed version that still reads encrypted secrets; or
+- restore a database backup taken before this migration, with the application
+  version that matches it. A backup taken *after* this migration needs the
+  encryption key that was in use, and the newer application.
 """
 
 from __future__ import annotations
@@ -32,7 +39,7 @@ from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
 from alembic import op
-from cryptography.fernet import Fernet, InvalidToken, MultiFernet
+from cryptography.fernet import Fernet
 from sqlalchemy.dialects import postgresql
 
 if TYPE_CHECKING:
@@ -111,47 +118,27 @@ def encrypt_plaintext_secrets(connection: Connection, keys: list[bytes]) -> int:
     return len(plaintext)
 
 
-def decrypt_encrypted_secrets(connection: Connection, keys: list[bytes]) -> int:
-    """Restore every encrypted MFA secret to plaintext (rollback only).
+def refuse_downgrade_if_encrypted(connection: Connection) -> None:
+    """Stop a downgrade that would need plaintext MFA secrets.
+
+    Reads only; writes nothing in any case.
 
     :param connection: The migration's connection.
-    :param keys: Configured keys, current key first. May be empty.
-    :returns: How many secrets were decrypted.
-    :raises RuntimeError: If an encrypted secret exists and no key is
-        configured, or a secret does not decrypt under any configured key.
-        Nothing is changed in either case.
+    :raises RuntimeError: If any encrypted MFA secret exists.
     """
-    encrypted = [
-        (user_id, secret)
-        for user_id, secret in _stored_secrets(connection)
+    encrypted = sum(
+        1
+        for _user_id, secret in _stored_secrets(connection)
         if secret.startswith(_FERNET_TOKEN_PREFIX)
-    ]
-    if not encrypted:
-        return 0
-    if not keys:
+    )
+    if encrypted:
         msg = (
-            f"{len(encrypted)} MFA secret(s) are encrypted and MFA_ENCRYPTION_KEY is not set. "
-            "The downgrade needs the key that encrypted them; nothing was changed."
+            f"Refusing to downgrade: {encrypted} MFA secret(s) are encrypted, and this "
+            "migration never writes them back as plaintext. Roll forward to a compatible "
+            "application version, or restore a backup taken before 0017 together with the "
+            "application version that matches it. Nothing was changed."
         )
         raise RuntimeError(msg)
-
-    cipher = MultiFernet([Fernet(key) for key in keys])
-    decrypted: list[tuple[object, str]] = []
-    for user_id, secret in encrypted:
-        try:
-            decrypted.append((user_id, cipher.decrypt(secret.encode("utf-8")).decode("utf-8")))
-        except InvalidToken:
-            msg = (
-                "An MFA secret does not decrypt under any configured key. "
-                "The downgrade needs the key that encrypted it; nothing was changed."
-            )
-            raise RuntimeError(msg) from None
-
-    for user_id, secret in decrypted:
-        connection.execute(
-            sa.update(_users).where(_users.c.id == user_id).values(mfa_secret=secret)
-        )
-    return len(decrypted)
 
 
 def upgrade() -> None:
@@ -159,4 +146,4 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    decrypt_encrypted_secrets(op.get_bind(), _configured_keys())
+    refuse_downgrade_if_encrypted(op.get_bind())

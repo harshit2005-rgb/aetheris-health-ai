@@ -278,6 +278,7 @@ async def enroll_mfa(
     description="Confirm MFA enrollment by verifying a TOTP code.",
     responses={
         200: {"description": "MFA has been enabled."},
+        400: {"description": "MFA is already enabled, or no enrollment is in progress."},
         401: {"description": "Invalid MFA code."},
     },
 )
@@ -287,9 +288,11 @@ async def confirm_mfa(
     auth_service: AuthService = Depends(get_auth_service),
 ) -> dict[str, Any]:
     """Confirm MFA enrollment by verifying a TOTP code."""
+    # `payload.secret` is deliberately not passed on: the server confirms
+    # against the pending secret it stored at enrolment, never one from the
+    # client (see AuthService.confirm_mfa).
     await auth_service.confirm_mfa(
         user_id=current_user.id,
-        secret=payload.secret,
         code=payload.code,
     )
     return success_envelope("MFA has been enabled successfully.")
