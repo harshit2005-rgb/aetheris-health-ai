@@ -20,16 +20,22 @@ from app.core.exceptions import (
     AuthenticationError,
     BusinessRuleError,
     NotFoundError,
+    ServiceUnavailableError,
 )
 from app.core.notifications import NotificationRequest, Notifier, NullNotifier
 from app.core.security import (
+    MfaEncryptionNotConfiguredError,
+    MfaSecretDecryptionError,
     create_access_token,
     create_mfa_ticket,
+    decrypt_mfa_secret,
+    encrypt_mfa_secret,
     generate_opaque_token,
     generate_totp_secret,
     get_totp_provisioning_uri,
     hash_password,
     hash_token,
+    mfa_secret_needs_reencryption,
     password_needs_rehash,
     validate_password_strength,
     verify_access_token,
@@ -54,6 +60,10 @@ logger = structlog.get_logger(__name__)
 #: principal's own (or comes from a token only that user holds), so the lookup
 #: is by identity rather than by hospital.
 _OWN_ACCOUNT = cross_tenant("own account: id of the authenticated principal")
+
+#: The one message for every MFA encryption failure. It says nothing about the
+#: key or the stored value.
+_MFA_UNAVAILABLE = "Multi-factor authentication is temporarily unavailable."
 
 
 class AuthService:
@@ -209,7 +219,9 @@ class AuthService:
         if not user.mfa_secret:
             raise AuthenticationError("MFA is not configured for this user.")
 
-        if not verify_totp_code(user.mfa_secret, code):
+        secret = self._decrypt_mfa_secret(user)
+
+        if not verify_totp_code(secret, code):
             await self._audit.record(
                 AuditEvent(
                     action="auth.login.failed",
@@ -226,6 +238,13 @@ class AuthService:
             await self._uow.commit()
             logger.info("mfa_verification_failed", user_id=str(user_id))
             raise AuthenticationError("Invalid MFA code.")
+
+        # A secret still encrypted under a retired key is moved to the current
+        # one now that the code has proved it is the right secret — the same
+        # idea as rehashing a password on login. `_issue_tokens` commits it.
+        if mfa_secret_needs_reencryption(user.mfa_secret):
+            await self._user_repo.update(user, mfa_secret=self._encrypt_mfa_secret(secret))
+            logger.info("mfa_secret_reencrypted", user_id=str(user.id))
 
         # Record login
         await self._user_repo.record_login(user)
@@ -618,8 +637,12 @@ class AuthService:
 
         :param user_id: The user's UUID.
         :param password: Current password for verification.
-        :returns: Dict with ``secret``, ``provisioning_uri``.
+        :returns: Dict with ``secret``, ``provisioning_uri``. This response is
+            the one time the plaintext secret leaves the server: the user has
+            to enter it into an authenticator. It is stored only encrypted.
         :raises AuthenticationError: If verification fails.
+        :raises ServiceUnavailableError: If no encryption key is configured.
+            Nothing is stored in that case — never the plaintext.
         :raises BusinessRuleError: If MFA is already enabled — re-enrolment
             would overwrite the working secret stored on the account before the
             user confirms the new one, and from then on no TOTP code the user
@@ -642,8 +665,8 @@ class AuthService:
         provisioning_uri = get_totp_provisioning_uri(secret, user.email)
 
         # Store secret temporarily — user must confirm with a valid TOTP code
-        # before we enable MFA.
-        await self._user_repo.update(user, mfa_secret=secret)
+        # before we enable MFA. Encrypted even while pending.
+        await self._user_repo.update(user, mfa_secret=self._encrypt_mfa_secret(secret))
 
         await self._audit.record(
             AuditEvent(
@@ -671,6 +694,7 @@ class AuthService:
         :param secret: The TOTP secret.
         :param code: The 6-digit TOTP code.
         :raises AuthenticationError: If the code is invalid.
+        :raises ServiceUnavailableError: If no encryption key is configured.
         """
         if not verify_totp_code(secret, code):
             raise AuthenticationError("Invalid MFA code. Please try again.")
@@ -681,7 +705,7 @@ class AuthService:
 
         await self._user_repo.update(
             user,
-            mfa_secret=secret,
+            mfa_secret=self._encrypt_mfa_secret(secret),
             mfa_enabled=True,
         )
 
@@ -712,7 +736,7 @@ class AuthService:
         if not verify_password(password, user.password_hash):
             raise AuthenticationError("Invalid password.")
 
-        if user.mfa_secret and not verify_totp_code(user.mfa_secret, code):
+        if user.mfa_secret and not verify_totp_code(self._decrypt_mfa_secret(user), code):
             raise AuthenticationError("Invalid MFA code.")
 
         await self._user_repo.update(
@@ -734,6 +758,45 @@ class AuthService:
         logger.info("mfa_disabled", user_id=str(user.id))
 
     # ── Internal Helpers ────────────────────────────────────────────────────
+
+    @staticmethod
+    def _encrypt_mfa_secret(secret: str) -> str:
+        """Encrypt a TOTP secret for storage, or refuse the operation.
+
+        :param secret: The plaintext secret.
+        :returns: The value to store in ``users.mfa_secret``.
+        :raises ServiceUnavailableError: If no encryption key is configured.
+            The plaintext is never stored as a fallback.
+        """
+        try:
+            return encrypt_mfa_secret(secret)
+        except MfaEncryptionNotConfiguredError:
+            logger.error("mfa_encryption_not_configured")
+            raise ServiceUnavailableError(_MFA_UNAVAILABLE) from None
+
+    @staticmethod
+    def _decrypt_mfa_secret(user: User) -> str:
+        """Decrypt a user's stored TOTP secret, in memory, or refuse the operation.
+
+        Both failures answer 503 rather than "invalid code": the code is not
+        the problem, and telling the user to retry would only burn attempts.
+        Neither lets the caller through — a secret that cannot be read cannot
+        verify anything.
+
+        :param user: A user whose ``mfa_secret`` is set.
+        :returns: The plaintext secret. Never log or return it.
+        :raises ServiceUnavailableError: If no key is configured, or the
+            stored value does not decrypt under any configured key.
+        """
+        try:
+            return decrypt_mfa_secret(user.mfa_secret or "")
+        except MfaEncryptionNotConfiguredError:
+            logger.error("mfa_encryption_not_configured")
+            raise ServiceUnavailableError(_MFA_UNAVAILABLE) from None
+        except MfaSecretDecryptionError:
+            # The stored value is deliberately absent from this line.
+            logger.error("mfa_secret_undecryptable", user_id=str(user.id))
+            raise ServiceUnavailableError(_MFA_UNAVAILABLE) from None
 
     @staticmethod
     def _email_discriminator(email: str) -> str:

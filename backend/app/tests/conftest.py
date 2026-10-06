@@ -34,6 +34,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
+from cryptography.fernet import Fernet
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -56,6 +57,14 @@ __all__ = ["REAL_NETWORK_ATTEMPTS", "FakeSession", "RecordingAuditSink", "grant_
 # out of the settings singleton for the whole run. The autouse fixtures below
 # then hold every individual test to "AI off, no network".
 os.environ["GROQ_API_KEY"] = ""
+
+# MFA secrets are encrypted at rest and there is deliberately no default key
+# (``app/core/config.py``). The suite gets a fresh random one per run, set the
+# same way and for the same reason as the line above: before the settings
+# singleton is built, and outranking any real key in the developer's shell or
+# ``backend/.env`` — a test must never encrypt or decrypt with a real key.
+os.environ["MFA_ENCRYPTION_KEY"] = Fernet.generate_key().decode()
+os.environ["MFA_ENCRYPTION_PREVIOUS_KEYS"] = ""
 
 #: Names of every AI setting, removed from the environment for each test.
 _AI_ENV_NAMES = (

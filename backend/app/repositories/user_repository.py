@@ -101,6 +101,23 @@ class UserRepository(BaseRepository[User]):
         result = await self._session.execute(stmt)
         return result.unique().scalar_one_or_none()
 
+    async def list_with_mfa_secret_cross_tenant(self) -> list[User]:
+        """List every user that has a stored MFA secret, in every hospital.
+
+        For MFA key rotation only (``app/services/mfa_key_rotation.py``): a
+        retired key can be dropped from configuration only once no row is
+        still encrypted under it, wherever that row is. Soft-deleted users are
+        included for the same reason — their secret is still on disk.
+
+        Must be run under an explicit ``TenantScope.system(...)``; it is never
+        called from a request.
+
+        :returns: Users whose ``mfa_secret`` is not ``NULL``.
+        """
+        stmt = select(User).where(User.mfa_secret.is_not(None)).order_by(User.id)
+        result = await self._session.execute(stmt)
+        return list(result.unique().scalars().all())
+
     async def list_by_hospital(
         self,
         hospital_id: uuid.UUID,

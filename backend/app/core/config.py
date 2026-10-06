@@ -16,9 +16,11 @@ from __future__ import annotations
 
 import re
 from enum import StrEnum
+from typing import Self
 from urllib.parse import urlsplit
 
-from pydantic import Field, SecretStr, field_validator
+from cryptography.fernet import Fernet
+from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -172,6 +174,28 @@ class Settings(BaseSettings):
         default=72, ge=1, le=720, description="Invitation token lifetime in hours (B6 invite seam)"
     )
 
+    # ── MFA secret encryption at rest ──────────────────────────────────────
+    # TOTP secrets are stored encrypted (app/core/security.py). The key is a
+    # Fernet key: 32 random bytes, url-safe base64, 44 characters. Generate one
+    # with `python -c "from cryptography.fernet import Fernet;
+    # print(Fernet.generate_key().decode())"` and supply it from the secrets
+    # manager. There is no default: a key in the repository protects nothing.
+    #
+    # Unset in development means MFA is unavailable (enrol and verify answer
+    # 503) while everything else works. Staging and production refuse to start
+    # without it. Every API instance that shares a database must share the key.
+    MFA_ENCRYPTION_KEY: SecretStr | None = Field(
+        default=None,
+        description="Fernet key that encrypts MFA (TOTP) secrets at rest. Required outside development.",
+    )
+    MFA_ENCRYPTION_PREVIOUS_KEYS: SecretStr | None = Field(
+        default=None,
+        description=(
+            "Comma-separated retired Fernet keys, still accepted for decryption "
+            "while secrets are re-encrypted under MFA_ENCRYPTION_KEY."
+        ),
+    )
+
     # ── Email (Notifications module) ───────────────────────────────────────
     # Email is OFF unless SMTP_HOST is set. With no host, a queued email is
     # marked failed with a clear reason and nothing leaves the process — the
@@ -259,6 +283,58 @@ class Settings(BaseSettings):
             stripped = value.strip()
             return stripped or None
         return value
+
+    @field_validator("MFA_ENCRYPTION_KEY", "MFA_ENCRYPTION_PREVIOUS_KEYS", mode="before")
+    @classmethod
+    def _blank_mfa_key_is_unset(cls, value: object) -> object:
+        """Treat an empty or whitespace-only key setting as "not configured"."""
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
+
+    @model_validator(mode="after")
+    def _validate_mfa_encryption_keys(self) -> Self:
+        """Reject an unusable MFA key configuration before the app serves traffic.
+
+        A malformed key would otherwise surface as a failure on the first MFA
+        login. The messages name the setting and never the value
+        (``hide_input_in_errors`` keeps pydantic from printing it either).
+
+        :raises ValueError: If a key is not a valid Fernet key, if retired keys
+            are given without a current one, or if no key is set outside
+            development.
+        """
+        for name in ("MFA_ENCRYPTION_KEY", "MFA_ENCRYPTION_PREVIOUS_KEYS"):
+            for key in self.mfa_encryption_keys(name):
+                try:
+                    Fernet(key)
+                except (ValueError, TypeError):
+                    msg = f"{name} must be a Fernet key (url-safe base64 of 32 bytes)."
+                    raise ValueError(msg) from None
+
+        if self.MFA_ENCRYPTION_KEY is None:
+            if self.MFA_ENCRYPTION_PREVIOUS_KEYS is not None:
+                msg = "MFA_ENCRYPTION_PREVIOUS_KEYS is set but MFA_ENCRYPTION_KEY is not."
+                raise ValueError(msg)
+            if self.APP_ENV is not AppEnv.DEVELOPMENT:
+                msg = f"MFA_ENCRYPTION_KEY is required when APP_ENV is {self.APP_ENV.value}."
+                raise ValueError(msg)
+        return self
+
+    def mfa_encryption_keys(self, name: str = "MFA_ENCRYPTION_KEY") -> list[bytes]:
+        """Return the keys held in one MFA key setting, in order.
+
+        :param name: ``MFA_ENCRYPTION_KEY`` (at most one key) or
+            ``MFA_ENCRYPTION_PREVIOUS_KEYS`` (comma-separated).
+        :returns: The keys as bytes; empty when the setting is unset.
+        """
+        value: SecretStr | None = getattr(self, name)
+        if value is None:
+            return []
+        return [
+            part.strip().encode() for part in value.get_secret_value().split(",") if part.strip()
+        ]
 
     @field_validator("AI_ENABLED", mode="before")
     @classmethod

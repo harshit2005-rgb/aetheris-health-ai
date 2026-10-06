@@ -154,6 +154,9 @@ EXPLICIT_EXCEPTIONS: dict[str, str] = {
     "UserRepository.get_by_email_cross_tenant": (
         "Login and password reset: the hospital is unknown until the account is found."
     ),
+    "UserRepository.list_with_mfa_secret_cross_tenant": (
+        "MFA key rotation: a retired key can be dropped only when no row anywhere uses it."
+    ),
     "UserRepository.has_role": "user_roles has no hospital column; the service scopes both ends.",
     "UserRepository.add_role": "user_roles has no hospital column; the service scopes both ends.",
     "UserRepository.remove_role": (

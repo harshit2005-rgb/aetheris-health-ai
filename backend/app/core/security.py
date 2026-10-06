@@ -5,6 +5,7 @@ This module is the single place where:
 - Passwords are hashed and verified (Argon2id)
 - Opaque tokens are generated
 - MFA/TOTP codes are verified
+- MFA/TOTP secrets are encrypted and decrypted for storage
 
 **Never** reimplement any of these operations outside this module.
 """
@@ -18,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 
 import jwt as pyjwt
 import pyotp
+from cryptography.fernet import Fernet, InvalidToken, MultiFernet
 from passlib.context import CryptContext
 
 from app.core.config import settings
@@ -257,6 +259,121 @@ def verify_totp_code(secret: str, code: str) -> bool:
     """
     totp = pyotp.TOTP(secret)
     return totp.verify(code)
+
+
+# ── MFA secret encryption at rest ───────────────────────────────────────────
+# A TOTP secret is a long-lived shared key: whoever reads it can produce valid
+# codes for that account for as long as MFA stays enrolled. It is therefore
+# stored encrypted, and decrypted only in memory, only here, only to check a
+# code.
+#
+# Fernet (``cryptography``) is used as-is: AES-128-CBC with an HMAC-SHA256 tag
+# over a versioned, timestamped token. It is authenticated — a token that was
+# altered, truncated or produced under another key fails to decrypt rather
+# than yielding garbage — and it has a standard, documented format, so nothing
+# about the stored value is specific to this codebase.
+
+
+class MfaEncryptionNotConfiguredError(RuntimeError):
+    """No ``MFA_ENCRYPTION_KEY`` is configured, so a secret cannot be stored or read."""
+
+
+class MfaSecretDecryptionError(RuntimeError):
+    """A stored MFA secret could not be decrypted with any configured key.
+
+    Raised for a value encrypted under an unknown key, a corrupted or tampered
+    value, and a value that is not ciphertext at all. The message never
+    contains the stored value.
+    """
+
+
+#: Every Fernet token starts with these characters: the version byte ``0x80``
+#: followed by the high bytes of a 64-bit timestamp, base64-encoded. A base32
+#: TOTP secret is upper-case letters and the digits 2-7, so it can never start
+#: this way — which is what lets the data migration tell the two apart.
+_FERNET_TOKEN_PREFIX = "gAAAAA"  # noqa: S105 — a format marker, not a credential
+
+
+def is_encrypted_mfa_secret(stored: str) -> bool:
+    """Whether a stored value has the shape of an encrypted MFA secret.
+
+    A shape check only — it does not prove the value decrypts.
+
+    :param stored: The value of ``users.mfa_secret``.
+    """
+    return stored.startswith(_FERNET_TOKEN_PREFIX)
+
+
+def _primary_mfa_cipher() -> Fernet:
+    """Return the cipher for the current key.
+
+    :raises MfaEncryptionNotConfiguredError: If no key is configured.
+    """
+    keys = settings.mfa_encryption_keys("MFA_ENCRYPTION_KEY")
+    if not keys:
+        msg = "MFA_ENCRYPTION_KEY is not configured."
+        raise MfaEncryptionNotConfiguredError(msg)
+    return Fernet(keys[0])
+
+
+def _all_mfa_ciphers() -> MultiFernet:
+    """Return a cipher that decrypts under the current key or any retired one."""
+    retired = [Fernet(key) for key in settings.mfa_encryption_keys("MFA_ENCRYPTION_PREVIOUS_KEYS")]
+    return MultiFernet([_primary_mfa_cipher(), *retired])
+
+
+def encrypt_mfa_secret(secret: str) -> str:
+    """Encrypt a TOTP secret for storage, under the current key.
+
+    Each call produces a different token for the same secret (a fresh random
+    IV), so equal secrets are not recognisable in the database.
+
+    :param secret: The plaintext base32 TOTP secret.
+    :returns: A Fernet token, safe to store in a text column.
+    :raises MfaEncryptionNotConfiguredError: If no key is configured. The
+        caller must not fall back to storing the plaintext.
+    """
+    return _primary_mfa_cipher().encrypt(secret.encode("utf-8")).decode("ascii")
+
+
+def decrypt_mfa_secret(stored: str) -> str:
+    """Decrypt a stored TOTP secret, in memory.
+
+    Tries the current key, then each retired key. The result must not be
+    logged, returned from an API, or written anywhere.
+
+    :param stored: The value of ``users.mfa_secret``.
+    :returns: The plaintext base32 TOTP secret.
+    :raises MfaEncryptionNotConfiguredError: If no key is configured.
+    :raises MfaSecretDecryptionError: If the value does not decrypt under any
+        configured key. A plaintext value is **not** accepted: after the data
+        migration none exists, and accepting one would let anyone who can
+        write the column plant a secret of their choosing.
+    """
+    ciphers = _all_mfa_ciphers()
+    try:
+        return ciphers.decrypt(stored.encode("utf-8")).decode("utf-8")
+    except (InvalidToken, UnicodeError):
+        msg = "The stored MFA secret could not be decrypted."
+        raise MfaSecretDecryptionError(msg) from None
+
+
+def mfa_secret_needs_reencryption(stored: str) -> bool:
+    """Whether a stored secret is encrypted under a retired key.
+
+    The counterpart of :func:`password_needs_rehash`: after a successful
+    verification the caller re-encrypts such a value under the current key, so
+    a retired key can eventually be removed from configuration.
+
+    :param stored: A value that :func:`decrypt_mfa_secret` accepts.
+    :returns: ``True`` if the current key alone cannot decrypt it.
+    :raises MfaEncryptionNotConfiguredError: If no key is configured.
+    """
+    try:
+        _primary_mfa_cipher().decrypt(stored.encode("utf-8"))
+    except (InvalidToken, UnicodeError):
+        return True
+    return False
 
 
 # ── Password Policy Validation ──────────────────────────────────────────────
