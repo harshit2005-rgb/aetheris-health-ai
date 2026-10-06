@@ -25,7 +25,7 @@ from typing import Any
 
 import structlog
 
-from app.ai.constants import COST_PER_1K_INPUT, MAX_TOKENS, TEMPERATURE, ModelHint
+from app.ai.constants import MAX_TOKENS, TEMPERATURE, ModelHint, model_info
 from app.ai.errors import (
     AIError,
     AINotConfiguredError,
@@ -339,7 +339,15 @@ class AIService:
             )
             raise AIResponseInvalidError("provider_contract")
 
-        cost = provider.estimate_cost(result.input_tokens, result.output_tokens, resolved_model)
+        # A cost is reported only for a model whose price is recorded. An
+        # unpriced model logs "unknown" (null), never a zero that reads as free.
+        info = model_info(provider.name, resolved_model)
+        cost_known = info is not None and info.priced
+        cost = (
+            provider.estimate_cost(result.input_tokens, result.output_tokens, resolved_model)
+            if cost_known
+            else None
+        )
         self._log_interaction(
             **log_fields,
             status="success",
@@ -348,8 +356,8 @@ class AIService:
             output_tokens=result.output_tokens,
             finish_reason=result.finish_reason,
             latency_ms=latency_ms,
-            cost_estimate_usd=str(cost),
-            cost_known=resolved_model in COST_PER_1K_INPUT.get(provider.name, {}),
+            cost_estimate_usd=None if cost is None else str(cost),
+            cost_known=cost_known,
         )
         return dataclasses.replace(result, provider=provider.name)
 
@@ -360,14 +368,7 @@ class AIService:
         :returns: A (provider, model) tuple.
         :raises ServiceUnavailableError: If no provider can serve the model.
         """
-        for provider_name in self._provider_registry.available_providers:
-            if provider_name in COST_PER_1K_INPUT and model in COST_PER_1K_INPUT[provider_name]:
-                provider_instance = self._provider_registry.get_provider(provider_name)
-                if provider_instance is not None:
-                    return provider_instance, model
-
-        msg = f"No registered provider can serve model '{model}'."
-        raise ServiceUnavailableError(message=msg)
+        return self._provider_registry.resolve_model(model)
 
     def _log_interaction(self, *, status: str, **fields: Any) -> None:
         """Emit the one ``ai_interaction`` log line for a call.
@@ -396,7 +397,7 @@ class AIService:
             "error_kind": None,
             "error_type": None,
             "finish_reason": None,
-            "cost_estimate_usd": "0",
+            "cost_estimate_usd": None,
             "cost_known": False,
             "actor_id": None,
             "hospital_id": None,

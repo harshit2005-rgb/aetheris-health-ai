@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Any
 
 import pytest
 
+from app.ai import constants
 from app.ai.constants import DEFAULT_HINT_MAPPING, ModelHint
 from app.ai.errors import (
     AIError,
@@ -488,25 +489,40 @@ class TestSuccessLog:
         # Strings, not UUID / Decimal objects: the JSON renderer would emit repr().
         assert entry["actor_id"] == str(ACTOR_ID)
         assert entry["hospital_id"] == str(HOSPITAL_ID)
-        assert isinstance(entry["cost_estimate_usd"], str)
-        # No price is invented for a model that is not in the cost table.
-        assert Decimal(entry["cost_estimate_usd"]) == Decimal("0")
+        # No price is recorded for this model, so the cost is unknown — reported
+        # as null, never as a zero that would read as "free".
+        assert entry["cost_estimate_usd"] is None
         assert entry["cost_known"] is False
 
         leaked = contains_any([log.text()], [PROMPT_MARKER, REPLY_MARKER])
         assert leaked is False
 
-    async def test_cost_is_reported_as_known_for_a_priced_model(self, log: RecordingLogger) -> None:
+    async def test_cost_is_reported_as_known_for_a_priced_model(
+        self, log: RecordingLogger, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # No Groq model has a recorded price, so one is given to a test-only id.
+        monkeypatch.setitem(
+            constants.MODEL_CATALOG["groq"],
+            "test/priced-model",
+            constants.ModelInfo(Decimal("0.001"), Decimal("0.002")),
+        )
+        monkeypatch.setitem(
+            constants.COST_PER_1K_INPUT["groq"], "test/priced-model", Decimal("0.001")
+        )
+        monkeypatch.setitem(
+            constants.COST_PER_1K_OUTPUT["groq"], "test/priced-model", Decimal("0.002")
+        )
         provider = FakeProvider()
         registry = AIProviderRegistry()
         registry.register("groq", provider)
-        registry.register_hint(ModelHint.FAST, "groq", "mixtral-8x7b-32768")
+        registry.register_hint(ModelHint.FAST, "groq", "test/priced-model")
 
         await AIService(registry, PromptRegistry()).complete(messages=MESSAGES)
 
         entry = _one_interaction(log)
         assert entry["cost_known"] is True
-        assert Decimal(entry["cost_estimate_usd"]) > 0
+        # 120 prompt and 80 completion tokens at the rates above.
+        assert Decimal(entry["cost_estimate_usd"]) == Decimal("0.000280")
 
     def test_ai_path_does_not_import_the_tool_layer(self) -> None:
         """The model gets no tool: nothing on this path knows the tool registry."""

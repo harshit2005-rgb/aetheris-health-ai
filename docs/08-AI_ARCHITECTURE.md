@@ -425,7 +425,7 @@ Other AI log events: `ai_runtime_configured` / `ai_runtime_disabled` at startup 
 
 **What is never logged:** the API key, the prompt text, the model's answer or reason, the provider's error message, or exception text. Only the class name of an exception is recorded. The base URL is logged as host only.
 
-**Cost.** `cost_estimate_usd` is computed from a static price table in `app/ai/constants.py`. The current model (`openai/gpt-oss-20b`) has no entry there, so its calls log `cost_estimate_usd: "0"` with `cost_known: false`. Token counts are logged and are the reliable usage figure today.
+**Cost.** `MODEL_CATALOG` in `app/ai/constants.py` is the one place that says which provider serves a model and what it costs; the per-token price tables are derived from it. The current model (`openai/gpt-oss-20b`) is listed with its price marked unavailable — no figure from Groq's pricing page has been recorded — so its calls log `cost_estimate_usd: null` with `cost_known: false`, never a zero. Token counts are logged and are the reliable usage figure today. A model set through `AI_FAST_MODEL` that the catalog does not list still works and also logs an unknown cost.
 
 Planned:
 - An `ai_interactions` table with one row per call
