@@ -4,12 +4,9 @@ import {
   Bar,
   BarChart as ReBarChart,
   CartesianGrid,
-  Cell,
   Legend,
   Line,
   LineChart as ReLineChart,
-  Pie,
-  PieChart as RePieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -203,43 +200,6 @@ export function BarChart({
           />
         ))}
       </ReBarChart>
-    </ResponsiveContainer>
-  )
-}
-
-interface PieDatum {
-  name: string
-  value: number
-}
-
-interface PieChartProps {
-  data: PieDatum[]
-  height?: number
-  /** Inner radius > 0 renders a donut. */
-  donut?: boolean
-}
-
-export function PieChart({ data, height = 280, donut = true }: PieChartProps) {
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <RePieChart>
-        <Tooltip contentStyle={TOOLTIP_STYLE} />
-        <Legend wrapperStyle={legendStyle} />
-        <Pie
-          data={data}
-          dataKey="value"
-          nameKey="name"
-          cx="50%"
-          cy="50%"
-          innerRadius={donut ? '55%' : 0}
-          outerRadius="80%"
-          paddingAngle={donut ? 2 : 0}
-        >
-          {data.map((d, i) => (
-            <Cell key={d.name} fill={CHART_COLORS[i % CHART_COLORS.length]} />
-          ))}
-        </Pie>
-      </RePieChart>
     </ResponsiveContainer>
   )
 }
