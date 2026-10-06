@@ -198,6 +198,7 @@ def build_invoice_model(**overrides: Any) -> Invoice:
         "total": Decimal("500.00"),
         "amount_paid": Decimal("0.00"),
         "amount_refunded": Decimal("0.00"),
+        "consultation_fee_pending": False,
         "status": InvoiceStatus.DRAFT,
         "notes": None,
         "issued_at": None,

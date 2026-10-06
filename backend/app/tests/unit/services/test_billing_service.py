@@ -495,6 +495,112 @@ class TestDraftFromAppointment:
         assert session.commits == 0
         assert audit.events == []
 
+    async def _complete_with(
+        self, repo: AsyncMock, existing: Any, *, locked: Any = None
+    ) -> tuple[Any, FakeSession, RecordingAuditSink, uuid.UUID]:
+        """Complete a visit whose live invoice is ``existing``."""
+        appointment_id = existing.appointment_id
+        repo.get_live_invoice_for_appointment.return_value = existing
+        repo.get_invoice_for_update.return_value = existing if locked is None else locked
+        appointments = AsyncMock()
+        appointments.get_appointment_by_id.return_value = _appointment(fee="800.00")
+        service, session, audit = _make_service(repo, appointments=appointments)
+
+        result = await service.draft_from_appointment(
+            HOSPITAL_ID, appointment_id, actor_id=ACTOR_ID
+        )
+        return result, session, audit, appointment_id
+
+    async def test_the_fee_joins_a_draft_a_charge_raised_mid_visit(self, repo: AsyncMock) -> None:
+        # A lab test ordered during the consultation raised the visit's draft
+        # before the visit completed. The fee must not be lost to it.
+        draft = build_invoice_model(
+            hospital_id=HOSPITAL_ID, appointment_id=uuid.uuid4(), consultation_fee_pending=True
+        )
+
+        result, session, audit, _ = await self._complete_with(repo, draft)
+
+        assert result is not None
+        assert result.id == draft.id
+        assert [item.description for item in result.items][-1] == "Consultation — Dr. Priya Sharma"
+        # 500.00 already there, plus the 800.00 fee.
+        assert result.total == Decimal("1300.00")
+        assert draft.consultation_fee_pending is False
+        repo.create_invoice.assert_not_awaited()
+        assert session.commits == 1
+        assert audit.actions() == ["invoice.charges_added"]
+        assert audit.last().context["source"] == "appointment"
+
+    async def test_the_fee_is_added_to_a_charge_raised_draft_only_once(
+        self, repo: AsyncMock
+    ) -> None:
+        draft = build_invoice_model(
+            hospital_id=HOSPITAL_ID, appointment_id=uuid.uuid4(), consultation_fee_pending=True
+        )
+        await self._complete_with(repo, draft)
+
+        result, _, audit, _ = await self._complete_with(repo, draft)
+
+        assert result is None
+        assert draft.total == Decimal("1300.00")
+        assert audit.events == []
+
+    async def test_a_second_completion_that_waited_for_the_lock_adds_nothing(
+        self, repo: AsyncMock
+    ) -> None:
+        appointment_id = uuid.uuid4()
+        stale = build_invoice_model(
+            hospital_id=HOSPITAL_ID, appointment_id=appointment_id, consultation_fee_pending=True
+        )
+        settled = build_invoice_model(hospital_id=HOSPITAL_ID, appointment_id=appointment_id)
+
+        result, session, audit, _ = await self._complete_with(repo, stale, locked=settled)
+
+        assert result is None
+        repo.append_items.assert_not_awaited()
+        assert session.commits == 0
+        assert audit.events == []
+
+    async def test_a_charge_raised_invoice_already_issued_gets_the_fee_on_its_own_draft(
+        self, repo: AsyncMock
+    ) -> None:
+        # AC-1: an issued invoice's lines are frozen.
+        issued = _issued(appointment_id=uuid.uuid4(), consultation_fee_pending=True)
+
+        result, session, audit, _ = await self._complete_with(repo, issued)
+
+        assert result is not None
+        assert result.id != issued.id
+        # Only one live invoice may point at a visit.
+        assert result.appointment_id is None
+        assert result.total == Decimal("800.00")
+        assert issued.total == Decimal("500.00")
+        assert issued.consultation_fee_pending is False
+        repo.append_items.assert_not_awaited()
+        assert session.commits == 1
+        assert audit.actions() == ["invoice.drafted"]
+
+    async def test_a_charge_raised_draft_voided_meanwhile_is_replaced(
+        self, repo: AsyncMock
+    ) -> None:
+        appointment_id = uuid.uuid4()
+        stale = build_invoice_model(
+            hospital_id=HOSPITAL_ID, appointment_id=appointment_id, consultation_fee_pending=True
+        )
+        voided = build_invoice_model(
+            hospital_id=HOSPITAL_ID,
+            appointment_id=appointment_id,
+            consultation_fee_pending=True,
+            status=InvoiceStatus.VOID,
+        )
+
+        result, _, audit, _ = await self._complete_with(repo, stale, locked=voided)
+
+        assert result is not None
+        assert result.appointment_id == appointment_id
+        assert result.total == Decimal("800.00")
+        assert audit.actions() == ["invoice.drafted"]
+
     async def test_losing_a_race_to_a_manual_draft_drafts_nothing(self, repo: AsyncMock) -> None:
         repo.create_invoice.side_effect = _integrity_error("uq_invoices_live_appointment")
         appointments = AsyncMock()
@@ -2100,6 +2206,7 @@ class TestAddCharges:
         assert invoice_id is not None
         assert fields["patient_id"] == PATIENT_ID
         assert fields["appointment_id"] is None
+        assert fields["consultation_fee_pending"] is False
         assert [line["description"] for line in fields["lines"]] == [
             "Lab test — T0",
             "Lab test — T1",
@@ -2118,7 +2225,10 @@ class TestAddCharges:
 
         await self._add(repo, appointment_id=appointment_id)
 
-        assert repo.create_invoice.await_args.kwargs["appointment_id"] == appointment_id
+        fields = repo.create_invoice.await_args.kwargs
+        assert fields["appointment_id"] == appointment_id
+        # The visit has not completed yet, so its fee is still to come.
+        assert fields["consultation_fee_pending"] is True
 
     async def test_the_visits_open_draft_takes_the_lines(self, repo: AsyncMock) -> None:
         appointment_id = uuid.uuid4()
@@ -2154,6 +2264,7 @@ class TestAddCharges:
 
         assert invoice_id != issued.id
         assert repo.create_invoice.await_args.kwargs["appointment_id"] is None
+        assert repo.create_invoice.await_args.kwargs["consultation_fee_pending"] is False
         repo.append_items.assert_not_awaited()
 
     async def test_a_draft_issued_while_we_waited_for_the_lock_is_left_alone(

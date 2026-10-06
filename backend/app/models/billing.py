@@ -321,6 +321,13 @@ class Invoice(UUIDPrimaryKeyMixin, CommonColumnsMixin, Base):
         server_default=text("0"),
         comment="Sum of refunds given back. Never exceeds amount_paid.",
     )
+    consultation_fee_pending: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=False,
+        server_default=text("false"),
+        comment="Raised by another module's charge mid-visit; completion still owes the fee.",
+    )
     status: Mapped[InvoiceStatus] = mapped_column(
         SQLEnum(
             InvoiceStatus,

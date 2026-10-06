@@ -186,6 +186,51 @@ class TestOrderToRelease:
             "invoice.drafted",
         } <= actions
 
+    async def test_a_test_ordered_mid_visit_does_not_cost_the_consultation_fee(
+        self, api: AsyncClient, db_session: AsyncSession, hospital: Hospital
+    ) -> None:
+        # The usual order of events: tests are ordered during the consultation,
+        # and the visit is completed afterwards.
+        await seed_demo_lab(db_session, hospital)
+        admin = await insert_user_with_permissions(
+            db_session, hospital.id, _seeded_permissions("Hospital Admin")
+        )
+        headers = auth_headers(admin.id, hospital.id)
+        doctor = await insert_doctor(db_session, hospital.id, consultation_fee="800.00")
+        patient = await insert_patient(db_session, hospital.id)
+        appointment = await insert_appointment(
+            db_session,
+            hospital.id,
+            patient_id=patient.id,
+            doctor_id=doctor.id,
+            status=AppointmentStatus.IN_PROGRESS,
+        )
+        potassium = (
+            await db_session.execute(
+                select(LabTest.id).where(LabTest.hospital_id == hospital.id, LabTest.code == "K")
+            )
+        ).scalar_one()
+        placed = await api.post(
+            ORDERS,
+            json={"appointment_id": str(appointment.id), "test_ids": [str(potassium)]},
+            headers=headers,
+        )
+        assert placed.status_code == 201, placed.text
+        invoice_url = f"/api/v1/invoices/{placed.json()['data']['invoice_id']}"
+
+        completed = await api.post(
+            f"/api/v1/appointments/{appointment.id}/complete", headers=headers
+        )
+
+        assert completed.status_code == 200, completed.text
+        bill = (await api.get(invoice_url, headers=headers)).json()["data"]
+        assert [line["line_total"] for line in bill["items"]] == ["300.00", "800.00"]
+        assert bill["total"] == "1100.00"
+        assert bill["appointment_id"] == str(appointment.id)
+        # One bill for the visit, not two.
+        listed = await api.get(f"/api/v1/invoices?patient_id={patient.id}", headers=headers)
+        assert [invoice["id"] for invoice in listed.json()["data"]] == [bill["id"]]
+
     async def test_an_order_joins_the_invoice_the_completed_visit_already_has(
         self, api: AsyncClient, db_session: AsyncSession, hospital: Hospital
     ) -> None:
