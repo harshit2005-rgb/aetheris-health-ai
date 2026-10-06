@@ -3,6 +3,7 @@ import { Navigate, createBrowserRouter, Outlet } from 'react-router-dom'
 import { RequireAuth } from '@/components/auth/RequireAuth'
 import { RequirePermission } from '@/components/auth/RequirePermission'
 import { RouteFallback } from '@/components/layout/RouteFallback'
+import RouteErrorPage from '@/pages/RouteErrorPage'
 import { privacyDoc, termsDoc, securityDoc } from '@/content/legal'
 
 // Route-level code splitting: each page (and its heavy deps like Recharts)
@@ -55,6 +56,9 @@ export const router = createBrowserRouter([
         <Outlet />
       </Suspense>
     ),
+    // Catches a page that throws while rendering and a lazy chunk that fails
+    // to load. Imported eagerly: it must render when chunks cannot be fetched.
+    errorElement: <RouteErrorPage />,
     children: [
       // Public marketing pages
       { path: '/', element: <LandingPage /> },
@@ -146,6 +150,8 @@ export const router = createBrowserRouter([
               </RequirePermission>
             ),
           },
+          // Orders are listed on the worklist; a typed or shortened address lands there.
+          { path: '/laboratory/orders', element: <Navigate to="/laboratory" replace /> },
           {
             path: '/laboratory/orders/:orderId',
             element: (

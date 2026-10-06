@@ -67,20 +67,21 @@ export const privacyDoc: LegalDoc = {
 export const termsDoc: LegalDoc = {
   slug: 'terms',
   title: 'Terms of Service',
-  updated: 'August 2026',
+  updated: 'October 2026',
   intro:
     'These terms govern your access to and use of the Aetheris Health AI platform. By using the service, your organization agrees to them.',
   sections: [
     {
       heading: 'The service',
       body: [
-        'Aetheris provides hospital management software for patient registration, appointment scheduling, and billing.',
+        'Aetheris provides hospital management software for patient registration and records, a directory of doctors and departments, appointment scheduling, billing, laboratory orders and results, pharmacy prescribing and dispensing, inventory of supplies, in-app notifications, user and role management, hospital settings, and an audit log.',
       ],
     },
     {
       heading: 'Clinical responsibility',
       body: [
-        'Aetheris is an administrative tool. It does not diagnose, recommend treatment, or make clinical decisions. A qualified clinician is responsible for every diagnosis and treatment decision.',
+        "Aetheris is an administrative and record-keeping tool. The prescriptions it stores, and the laboratory results it marks against a hospital's own reference ranges, are records and not clinical advice.",
+        'It does not diagnose, recommend treatment, or make clinical decisions. A qualified clinician is responsible for every diagnosis and treatment decision.',
       ],
     },
     {

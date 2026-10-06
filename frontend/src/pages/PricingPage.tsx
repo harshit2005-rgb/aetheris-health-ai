@@ -6,7 +6,7 @@ import MarketingFooter from '@/components/layout/MarketingFooter'
 /** What a hospital gets today — each of these is a working module in the product. */
 const INCLUDED = [
   'Patient registry and records',
-  'Doctors, departments, and availability',
+  'Doctor directory by department, with open slots when booking',
   'Appointment booking and the daily queue',
   'Invoices, payments, and refunds',
   'Laboratory orders and results',

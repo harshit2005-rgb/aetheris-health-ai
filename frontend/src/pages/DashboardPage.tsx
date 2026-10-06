@@ -42,6 +42,16 @@ function greeting(hour = new Date().getHours()): string {
   return 'Good evening'
 }
 
+/**
+ * What the greeting says this user can do here — only things their own
+ * dashboard offers, so a lab technician is not told to book appointments.
+ */
+function summary(tasks: string[]): string {
+  if (tasks.length === 0) return 'Your home page — open a module from the menu to start work.'
+  const list = new Intl.ListFormat('en', { style: 'long', type: 'conjunction' }).format(tasks)
+  return `Your operations hub — ${list}.`
+}
+
 /** Grid classes by how many KPI tiles the user may see (static, so Tailwind keeps them). */
 const TILE_GRID: Record<number, string> = {
   1: 'grid gap-5 sm:grid-cols-1',
@@ -62,6 +72,9 @@ export default function DashboardPage() {
   const canSeePatients = can('patient.read')
   const canSeeDoctors = can('doctor.read')
   const canSeeAppointments = can('appointment.read')
+  // The same rule InvoicesAwaitingPayment applies before it shows anything.
+  const canTakePayments =
+    can('invoice.read') && (can('invoice.payment.record') || can('invoice.payment.record.cash'))
   const today = todayISODate()
 
   const patients = usePatients({ page: 1, page_size: 1 }, { enabled: canSeePatients })
@@ -83,7 +96,12 @@ export default function DashboardPage() {
             {greeting()}, {name}
           </h1>
           <p className="font-body text-body-sm text-on-surface-variant mt-1 max-w-xl">
-            Your operations hub — register patients, book appointments, and work the day's queue.
+            {summary([
+              ...(canRegister ? ['register patients'] : []),
+              ...(canBook ? ['book appointments'] : []),
+              ...(canSeeAppointments ? ["follow the day's queue"] : []),
+              ...(canTakePayments ? ['see invoices awaiting payment'] : []),
+            ])}
           </p>
         </div>
         <div className="flex flex-wrap gap-3">

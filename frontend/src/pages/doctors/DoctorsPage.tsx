@@ -52,7 +52,7 @@ export default function DoctorsPage() {
     <div className="w-full">
       <PageHeader
         title="Doctors"
-        subtitle="Clinical directory — specialties, departments and availability."
+        subtitle="Clinical directory — specialties, departments and consultation fees."
         actions={
           <>
             <div className="relative">

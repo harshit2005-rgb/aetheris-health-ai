@@ -238,7 +238,10 @@ describe('BookAppointmentDialog', () => {
     await openAndFill(user)
 
     await submit(user)
-    await waitFor(() => expect(toastError).toHaveBeenCalledWith('Service unavailable.'))
+    // A 5xx is not a refusal the API explains to a user: its text is not shown.
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith('Could not book the appointment. Please try again.'),
+    )
     // The dialog stays open with the details intact, ready to retry.
     expect(screen.getByRole('dialog')).toBeInTheDocument()
 
@@ -303,6 +306,21 @@ describe('BookAppointmentDialog', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'The doctor is not available at that time.',
     )
+  })
+
+  it('shows a plain sentence, not transport text, when the server fails', async () => {
+    // A proxy answering 502 with no envelope: Axios's own message is all there is.
+    onPost = () => ({ status: 502, data: '<html>Bad Gateway</html>' })
+    const user = userEvent.setup()
+    renderDialog()
+    await openAndFill(user)
+
+    await submit(user)
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith('Could not book the appointment. Please try again.'),
+    )
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 
   it('rejects a reason longer than the API allows without sending it', async () => {

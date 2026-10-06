@@ -150,8 +150,9 @@ export default function LandingPage() {
               Run your whole hospital on one connected platform.
             </h1>
             <p className="font-body text-body-md text-on-surface-variant max-w-lg">
-              Patients, scheduling, and billing in a single system that your front desk, doctors,
-              and billing staff all share.
+              Patients, appointments, billing, laboratory, pharmacy, and inventory in a single
+              system that your front desk, doctors, lab, pharmacy, stores, and billing staff all
+              share.
             </p>
             <div className="flex flex-wrap gap-4 pt-2">
               <Link
@@ -180,7 +181,7 @@ export default function LandingPage() {
               <ol className="space-y-2">
                 {[
                   { icon: Users, title: 'Register', body: 'Open a patient record and find it again by name, phone, or MRN.' },
-                  { icon: CalendarDays, title: 'Schedule', body: "Book into a doctor's published slots and run the day's queue." },
+                  { icon: CalendarDays, title: 'Schedule', body: "Book into a doctor's open slots and run the day's queue." },
                   { icon: Receipt, title: 'Bill', body: 'Invoice the visit and record payments against it.' },
                 ].map((step, i, arr) => (
                   <li key={step.title} className="relative flex gap-4 pb-6 last:pb-0">
@@ -222,7 +223,8 @@ export default function LandingPage() {
       <section id="modules" className="px-container-padding mx-auto mt-24 max-w-7xl scroll-mt-28">
         <div className="mb-10 max-w-2xl">
           <h2 className="font-display text-headline-lg text-primary">
-            The front desk, the consulting room, and billing in one place.
+            The front desk, the consulting room, the lab, the pharmacy, stores, and billing in
+            one place.
           </h2>
           <p className="font-body text-body-md text-on-surface-variant mt-3">
             Each team works in its own module and shares the same patient record, so nothing is
@@ -257,7 +259,7 @@ export default function LandingPage() {
           <ModuleCard
             icon={Building2}
             title="Doctors & departments"
-            body="Doctor profiles, weekly availability, leave, and the departments they belong to."
+            body="Doctor profiles with specialty and consultation fee, listed by department. A doctor's open slots are offered when booking."
           />
           <ModuleCard
             icon={FlaskConical}

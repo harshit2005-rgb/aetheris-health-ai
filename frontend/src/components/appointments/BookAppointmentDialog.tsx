@@ -24,6 +24,7 @@ import { PatientPicker } from '@/components/patients/PatientPicker'
 import { useDoctors } from '@/api/doctors'
 import { useBookAppointment, type AppointmentType, type BookAppointmentInput } from '@/api/appointments'
 import { ApiError } from '@/api/types'
+import { apiErrorMessage } from '@/lib/apiErrors'
 import { usePermissions } from '@/hooks/usePermissions'
 import { SlotPicker } from './SlotPicker'
 
@@ -210,7 +211,7 @@ export function BookAppointmentDialog({
         setNotice({ variant: 'error', title: "Couldn't book", body: err.message })
         return
       }
-      toast.error(err instanceof ApiError ? err.message : 'Could not book the appointment.')
+      toast.error(apiErrorMessage(err, 'Could not book the appointment. Please try again.'))
     } finally {
       submitting.current = false
     }

@@ -103,6 +103,11 @@ describe('UsersPage directory', () => {
     await waitFor(() => expect(lastUsersParams().page).toBe(1), { timeout: 2000 })
   })
 
+  it('gives the status filter a name a screen reader can announce', async () => {
+    renderPage()
+    expect(await screen.findByRole('combobox', { name: 'Filter by status' })).toBeInTheDocument()
+  })
+
   it('passes the status filter to the server', async () => {
     renderPage()
     await waitFor(() => expect(usersCalls().length).toBeGreaterThan(0))

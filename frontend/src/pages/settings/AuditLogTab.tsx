@@ -165,7 +165,12 @@ export function AuditLogTab() {
         enableSorting: false,
         cell: ({ row }) => (
           <div className="flex justify-end">
-            <Button variant="ghost" size="sm" onClick={() => setSelected(row.original)}>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label={`View ${row.original.action} by ${row.original.actor_name ?? 'System'} at ${formatTimestamp(row.original.created_at)}`}
+              onClick={() => setSelected(row.original)}
+            >
               View
             </Button>
           </div>
@@ -236,10 +241,6 @@ export function AuditLogTab() {
             columns={columns}
             data={entries}
             isLoading={isLoading}
-            searchable
-            searchPlaceholder="Search action or target…"
-            searchValue={q}
-            onSearchChange={changeQ}
             pageSize={PAGE_SIZE}
             serverPagination={{ page, totalPages: pageCount, onPageChange: setPage }}
             toolbarRight={exportMenu}

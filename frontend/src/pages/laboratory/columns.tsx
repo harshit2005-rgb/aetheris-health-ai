@@ -85,7 +85,7 @@ export const labOrderColumns: ColumnDef<LabOrder>[] = [
       <div className="flex justify-end">
         <Link
           to={`/laboratory/orders/${row.original.id}`}
-          aria-label={`Open lab order for ${row.original.patient_name}`}
+          aria-label={`Open lab order for ${row.original.patient_name}, ordered ${formatDateTime(row.original.ordered_at)}`}
           className="text-outline hover:text-secondary font-body text-body-sm inline-flex items-center gap-1 transition-colors"
         >
           Open <ChevronRight className="size-4" />

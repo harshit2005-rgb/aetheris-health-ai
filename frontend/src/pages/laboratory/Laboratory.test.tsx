@@ -435,7 +435,7 @@ describe('lab worklist', () => {
     expect(within(first).getByText('Dr. Priya Sharma')).toBeInTheDocument()
     expect(within(first).getByText('Awaiting release')).toBeInTheDocument()
     expect(within(first).getByText('Critical result')).toBeInTheDocument()
-    expect(within(first).getByRole('link', { name: 'Open lab order for Ananya Rao' })).toHaveAttribute('href', '/laboratory/orders/o1')
+    expect(within(first).getByRole('link', { name: /^Open lab order for Ananya Rao, ordered / })).toHaveAttribute('href', '/laboratory/orders/o1')
     const second = screen.getByRole('row', { name: /Ravi Menon/ })
     expect(within(second).getByText('STAT')).toBeInTheDocument()
     expect(within(second).getByText('Ordered')).toBeInTheDocument()

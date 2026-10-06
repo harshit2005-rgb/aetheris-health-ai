@@ -138,6 +138,36 @@ describe('audit log', () => {
   })
 })
 
+describe('audit log controls', () => {
+  it("names each row's View button after the entry it opens", async () => {
+    rows = [
+      entry('e1', 'patient.created'),
+      { ...entry('e2', 'patient.updated'), actor_name: null, created_at: '2026-10-05T11:20:00Z' },
+    ]
+    const user = userEvent.setup()
+    renderTab(HOSPITAL_ADMIN)
+    await screen.findByText('patient.created')
+
+    const names = screen.getAllByRole('button', { name: /^View / }).map((b) => b.getAttribute('aria-label'))
+    expect(names).toHaveLength(2)
+    expect(new Set(names).size).toBe(2)
+    expect(names[0]).toMatch(/^View patient\.created by Asha Verma at .+/)
+    expect(names[1]).toMatch(/^View patient\.updated by System at .+/)
+
+    await user.click(screen.getByRole('button', { name: /^View patient\.updated/ }))
+    expect(await screen.findByRole('dialog', { name: 'patient.updated' })).toBeInTheDocument()
+  })
+
+  it('has one search box, not two bound to the same value', async () => {
+    renderTab(HOSPITAL_ADMIN)
+    await screen.findByText('patient.created')
+
+    expect(screen.getByLabelText(/^Search/)).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('Search action or target…')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('textbox')).toHaveLength(2) // Search and Action
+  })
+})
+
 describe('who can export', () => {
   it('shows no export control without audit.export', async () => {
     renderTab(HOSPITAL_ADMIN)

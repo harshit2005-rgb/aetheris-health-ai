@@ -73,7 +73,7 @@ export const prescriptionColumns: ColumnDef<Prescription>[] = [
       <div className="flex justify-end">
         <Link
           to={`/pharmacy/prescriptions/${row.original.id}`}
-          aria-label={`Open prescription for ${row.original.patient_name}`}
+          aria-label={`Open prescription for ${row.original.patient_name}, prescribed ${formatDateTime(row.original.prescribed_at)}`}
           className="text-outline hover:text-secondary font-body text-body-sm inline-flex items-center gap-1 transition-colors"
         >
           Open <ChevronRight className="size-4" />

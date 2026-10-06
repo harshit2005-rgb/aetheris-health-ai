@@ -110,6 +110,20 @@ describe('the signed-in shell', () => {
     expect(fake.sent.some((c) => /\/ai\b|recommend/.test(c.url ?? ''))).toBe(false)
   })
 
+  it('promises nothing as "coming soon": no placeholder control anywhere in the shell', async () => {
+    renderShell(['patient.read', 'appointment.read', 'notification.read.own'])
+    await screen.findByText('Page body')
+
+    // Visible text and every attribute — placeholder, title, aria-label.
+    expect(document.body.innerHTML).not.toMatch(/coming soon/i)
+    // The top bar's dead search box is gone; nothing in the bar is disabled.
+    const bar = screen.getByRole('banner')
+    expect(within(bar).queryByRole('textbox')).not.toBeInTheDocument()
+    expect(bar.querySelector(':disabled')).toBeNull()
+    // AI is still named, and still as not available.
+    expect(screen.getByRole('note', { name: 'AI assistance is not yet available' })).toBeInTheDocument()
+  })
+
   it('keeps the rest of the shell working: navigation still follows permissions', async () => {
     renderShell(['patient.read', 'appointment.read', 'notification.read.own'])
     await screen.findByText('Page body')
@@ -151,6 +165,20 @@ describe('the public pages', () => {
     expect(screen.queryByText(/intelligent platform/i)).not.toBeInTheDocument()
   })
 
+  it('landing: the AI answer says "not yet" and Reports is not offered either', async () => {
+    const user = userEvent.setup()
+    renderPublic(<LandingPage />)
+
+    await user.click(screen.getByRole('button', { name: 'Does Aetheris include AI features today?' }))
+    expect(
+      await screen.findByText(/^Not yet\. AI assistance is planned and is not part of the current product\./),
+    ).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Which modules are available today?' }))
+    expect(
+      await screen.findByText(/Reports are planned and are not part of the product yet\./),
+    ).toBeInTheDocument()
+  })
+
   it('pricing: sells no AI features', () => {
     renderPublic(<PricingPage />)
 
@@ -160,5 +188,8 @@ describe('the public pages', () => {
     expect(within(planned).getByText('AI assistance')).toBeInTheDocument()
     const included = screen.getByRole('region', { name: 'Included today' })
     expect(included.textContent).not.toMatch(/\bAI\b/)
+    expect(included.textContent).not.toMatch(/report|analytics/i)
+    expect(within(planned).getByText('Reports')).toBeInTheDocument()
+    expect(within(planned).getByText('Planned, and not available yet.')).toBeInTheDocument()
   })
 })

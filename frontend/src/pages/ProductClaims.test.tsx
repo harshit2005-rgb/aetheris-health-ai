@@ -73,6 +73,43 @@ function expectHonest(text: string) {
 
 const pageText = () => document.body.textContent ?? ''
 
+/**
+ * Doctor availability and leave exist only as the open slots offered when
+ * booking: no screen shows or edits a schedule, records leave, adds a doctor
+ * or manages departments, so no public page may say one does.
+ */
+const NO_SCREEN_FOR = [
+  /weekly availability/i,
+  /\bleave\b/i,
+  /departments?,? and availability/i,
+  /(manage|managing|management of|edit|set|create|add) (doctor |doctors' |a doctor's )?(departments?|availability|schedules?|rosters?)/i,
+  /department management|roster|shift/i,
+  // Nobody publishes a schedule: booking offers the slots that are open.
+  /publish(ed|es|ing)? (slots?|schedules?|availability|calendars?)/i,
+]
+
+function expectNoScheduleClaims(text: string) {
+  for (const claim of NO_SCREEN_FOR) expect(text).not.toMatch(claim)
+}
+
+const BUILT = /laborator|pharmac|inventor/i
+const NOT_BUILT_WORDING = /planned|roadmap|coming|not (yet )?available|not (a )?part of|soon|upcoming|future/i
+
+/** No sentence may describe Laboratory, Pharmacy or Inventory as something still to come. */
+function expectBuiltModulesNotPlanned(passages: string[]) {
+  for (const passage of passages) {
+    for (const sentence of passage.split(/(?<=[.?!])\s+/)) {
+      if (BUILT.test(sentence)) expect(sentence).not.toMatch(NOT_BUILT_WORDING)
+    }
+  }
+}
+
+/** The text of each element that directly holds copy, one passage per element. */
+const passagesOnPage = () =>
+  Array.from(document.body.querySelectorAll('h1, h2, h3, p, li, span, [role="region"]'))
+    .filter((el) => el.children.length === 0 || el.getAttribute('role') === 'region')
+    .map((el) => el.textContent ?? '')
+
 function renderPublic(page: React.ReactNode) {
   render(<MemoryRouter>{page}</MemoryRouter>)
 }
@@ -157,6 +194,50 @@ describe('landing page', () => {
     }
   })
 
+  it('describes doctors as a directory, and availability only as open slots when booking', () => {
+    renderPublic(<LandingPage />)
+
+    expectNoScheduleClaims(pageText())
+    // The hero's Schedule step says what booking does, in the same words as the rest of the page.
+    expect(screen.getByText("Book into a doctor's open slots and run the day's queue.")).toBeInTheDocument()
+    expect(pageText()).not.toMatch(/published/i)
+    const card = screen.getByRole('heading', { name: 'Doctors & departments' }).parentElement as HTMLElement
+    expect(card).toHaveTextContent(
+      "Doctor profiles with specialty and consultation fee, listed by department. A doctor's open slots are offered when booking.",
+    )
+    // The true statement stays: booking offers the doctor's open slots.
+    expect(screen.getByText("Book the patient into one of the doctor's open slots.")).toBeInTheDocument()
+  })
+
+  it('introduces every team the product serves, not the first three modules', () => {
+    renderPublic(<LandingPage />)
+
+    expect(screen.queryByText(/Patients, scheduling, and billing in a single system/)).not.toBeInTheDocument()
+    expect(
+      screen.getByText(
+        /Patients, appointments, billing, laboratory, pharmacy, and inventory in a single\s+system that your front desk, doctors, lab, pharmacy, stores, and billing staff all\s+share\./,
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', {
+        name: /The front desk, the consulting room, the lab, the pharmacy, stores, and billing in\s+one place\./,
+      }),
+    ).toBeInTheDocument()
+  })
+
+  it('never describes Laboratory, Pharmacy or Inventory as planned', async () => {
+    const user = userEvent.setup()
+    renderPublic(<LandingPage />)
+
+    expectBuiltModulesNotPlanned(passagesOnPage())
+    for (const question of ['Which modules are available today?', 'Does Aetheris include AI features today?']) {
+      await user.click(screen.getByRole('button', { name: question }))
+      expectBuiltModulesNotPlanned(passagesOnPage())
+    }
+    const roadmap = screen.getByRole('heading', { name: 'On the roadmap' }).parentElement as HTMLElement
+    expect(roadmap.textContent).not.toMatch(BUILT)
+  })
+
   it('walks through the visit the product actually carries', () => {
     renderPublic(<LandingPage />)
 
@@ -198,12 +279,27 @@ describe('pricing page', () => {
     expect(
       within(included).getByText('Inventory of supplies by location, with purchase orders'),
     ).toBeInTheDocument()
-    expect(within(planned).queryByText(/Pharmacy|Inventory/)).not.toBeInTheDocument()
+    expect(within(planned).queryByText(/Pharmacy|Inventory|Laborator/)).not.toBeInTheDocument()
+    expect(planned.textContent).not.toMatch(BUILT)
+    expectBuiltModulesNotPlanned(passagesOnPage().filter((text) => text !== planned.textContent))
     for (const module of ['Reports', 'AI assistance']) {
       expect(within(planned).getByText(module)).toBeInTheDocument()
       expect(within(included).queryByText(module)).not.toBeInTheDocument()
     }
     expect(screen.getByRole('link', { name: /Talk to us/ })).toHaveAttribute('href', '/contact')
+  })
+})
+
+describe('pricing page: doctors', () => {
+  it('lists the doctor directory and open slots, not availability management', () => {
+    renderPublic(<PricingPage />)
+
+    const included = screen.getByRole('region', { name: 'Included today' })
+    expect(
+      within(included).getByText('Doctor directory by department, with open slots when booking'),
+    ).toBeInTheDocument()
+    expect(within(included).queryByText('Doctors, departments, and availability')).not.toBeInTheDocument()
+    expectNoScheduleClaims(pageText())
   })
 })
 
@@ -233,6 +329,40 @@ describe('legal and security pages', () => {
     renderPublic(<LegalPage doc={legalDocs.terms} />)
 
     expect(screen.getByText(/does not diagnose, recommend treatment, or make clinical decisions/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/are records and not clinical advice\.$/),
+    ).toHaveTextContent(/prescriptions it stores, and the laboratory results it marks/)
+  })
+
+  it('the terms describe the product that exists today, not the first three modules', () => {
+    renderPublic(<LegalPage doc={legalDocs.terms} />)
+
+    const service = screen.getByRole('heading', { name: 'The service' }).parentElement as HTMLElement
+    for (const part of [
+      'patient registration and records',
+      'a directory of doctors and departments',
+      'appointment scheduling',
+      'billing',
+      'laboratory orders and results',
+      'pharmacy prescribing and dispensing',
+      'inventory of supplies',
+      'in-app notifications',
+      'user and role management',
+      'hospital settings',
+      'an audit log',
+    ]) {
+      expect(service).toHaveTextContent(part)
+    }
+    expect(pageText()).not.toMatch(/patient registration, appointment scheduling, and billing\./)
+    // Neither planned module is described as part of the service.
+    expect(service.textContent).not.toMatch(/report|analytics|\bAI\b|assist/i)
+  })
+
+  it.each(Object.values(legalDocs))('$title claims no schedule management and plans no built module', (doc) => {
+    const passages = [doc.intro, ...doc.sections.flatMap((section) => section.body)]
+
+    expectNoScheduleClaims(passages.join(' '))
+    expectBuiltModulesNotPlanned(passages)
   })
 })
 

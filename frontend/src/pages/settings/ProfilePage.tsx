@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -12,7 +12,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Alert } from '@/components/ui/alert'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ApiError } from '@/api/types'
+import { apiErrorMessage, splitFieldErrors } from '@/lib/apiErrors'
 import { useMyProfile, useUpdateMyProfile } from '@/api/profile'
 import { useAuthStore } from '@/store/auth-store'
 import { ChangePasswordDialog } from './ChangePasswordDialog'
@@ -42,11 +42,17 @@ export default function ProfilePage() {
   const { data: profile, isLoading, isError, refetch } = useMyProfile()
   const updateProfile = useUpdateMyProfile()
   const setUser = useAuthStore((s) => s.setUser)
+  // Anything a 422 rejected that is not one of this form's fields.
+  const [notice, setNotice] = useState<string | null>(null)
+  // `isSubmitting` only disables the button after a re-render; this also stops
+  // a second save fired before that happens.
+  const submitting = useRef(false)
 
   const {
     register,
     handleSubmit,
     reset,
+    setError,
     formState: { errors, isDirty, isSubmitting },
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
@@ -66,6 +72,9 @@ export default function ProfilePage() {
   }, [profile, reset])
 
   async function onSubmit(values: FormValues) {
+    if (submitting.current) return
+    submitting.current = true
+    setNotice(null)
     try {
       const updated = await updateProfile.mutateAsync({
         first_name: values.first_name,
@@ -86,11 +95,20 @@ export default function ProfilePage() {
       })
       toast.success('Profile updated')
     } catch (err) {
-      toast.error(
-        err instanceof ApiError && err.status === 422
-          ? 'Check the highlighted fields and try again.'
-          : 'Could not save your profile. Please try again.',
+      // A 422 names the fields it rejects: each goes under its input, and one
+      // this form does not show goes above the form rather than being lost.
+      const { onFields, other } = splitFieldErrors(err, (field) => field in schema.shape)
+      onFields.forEach((fe, index) =>
+        setError(fe.field as keyof FormValues, { message: fe.message }, { shouldFocus: index === 0 }),
       )
+      if (other.length > 0) setNotice(other.join(' '))
+      if (onFields.length > 0 || other.length > 0) {
+        toast.error('Check the highlighted fields and try again.')
+        return
+      }
+      toast.error(apiErrorMessage(err, 'Could not save your profile. Please try again.'))
+    } finally {
+      submitting.current = false
     }
   }
 
@@ -130,7 +148,12 @@ export default function ProfilePage() {
                 <Skeleton className="h-10 w-2/3" />
               </div>
             ) : (
-              <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
+              <form onSubmit={(e) => handleSubmit(onSubmit)(e)} className="space-y-4" noValidate>
+                {notice && (
+                  <Alert variant="error" title="Couldn't save your profile">
+                    {notice}
+                  </Alert>
+                )}
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Field label="First name" required error={errors.first_name?.message}>
                     {(props) => <Input {...props} {...register('first_name')} />}

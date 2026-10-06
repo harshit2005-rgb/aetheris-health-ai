@@ -1,4 +1,4 @@
-import { Menu, Search } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import Breadcrumbs from '@/components/layout/Breadcrumbs'
 import { ThemeToggle } from '@/components/layout/ThemeToggle'
 import { NotificationBell } from '@/components/notifications/NotificationBell'
@@ -14,7 +14,7 @@ interface TopBarProps {
   onOpenSidebar: () => void
 }
 
-/** App top bar: search, notifications, user menu (spec 2C §2, §6). */
+/** App top bar: breadcrumbs, theme, notifications, who is signed in (spec 2C §2, §6). */
 export default function TopBar({ onOpenSidebar }: TopBarProps) {
   const user = useAuthStore((s) => s.user)
   const name = user?.name ?? 'User'
@@ -36,21 +36,8 @@ export default function TopBar({ onOpenSidebar }: TopBarProps) {
         <Breadcrumbs />
       </div>
 
-      {/* Global search — not wired yet; disabled so it doesn't read as broken (F10) */}
-      <div className="relative mx-auto w-full max-w-md">
-        <Search className="text-outline pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
-        <input
-          type="text"
-          disabled
-          title="Global search — coming soon"
-          aria-label="Global search (coming soon)"
-          placeholder="Search (coming soon)"
-          className="neo-pressed bg-surface/60 font-body text-body-sm placeholder:text-outline-variant w-full cursor-not-allowed rounded-full py-2.5 pr-4 pl-9 opacity-60 outline-none"
-        />
-      </div>
-
-      {/* Actions */}
-      <div className="flex items-center gap-1.5">
+      {/* Actions — pushed to the right edge at every width */}
+      <div className="ml-auto flex items-center gap-1.5">
         <ThemeToggle />
 
         <NotificationBell />
