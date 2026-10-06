@@ -19,7 +19,7 @@ const INCLUDED = [
 ]
 
 /** Planned, and not available yet. */
-const PLANNED = ['AI assistance']
+const PLANNED = ['AI assistance beyond slot suggestions']
 
 /**
  * Pricing. There are no published plans or prices — the product has no

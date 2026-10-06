@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 
 import structlog
 
+from app.ai.runtime import close_ai_runtime, get_ai_runtime
 from app.core.config import settings
 from app.core.redis import close_redis_client
 from app.database import create_session_factory, dispose_engine, initialize_database
@@ -34,14 +35,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:  # noqa: ARG001
     **Startup sequence:**
     1. Initialize the async database engine and session factory.
     2. Verify database connectivity (warm the pool).
-    3. Log startup confirmation.
+    3. Build the AI runtime from settings and log whether AI is configured.
+       No provider is contacted; with no key the application starts normally.
+    4. Log startup confirmation.
 
     **Notes:**
     - Structured logging is configured in :func:`app.main.create_app` before the lifespan runs.
 
     **Shutdown sequence:**
-    1. Dispose the database engine (close all connections).
-    2. Log shutdown confirmation.
+    1. Close the AI provider's HTTP client, if one was created.
+    2. Dispose the database engine (close all connections).
+    3. Log shutdown confirmation.
     """
     # ── Startup ──────────────────────────────────────────────────────────
     # Logging was already configured by create_app() in main.py.
@@ -74,6 +78,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:  # noqa: ARG001
         logger.error("database_connection_failed", error=str(exc))
         raise
 
+    # Built here only so the status line appears at startup. It makes no
+    # network call and never raises: AI being off or misconfigured must not
+    # stop the application from starting.
+    get_ai_runtime()
+
     logger.info(
         "application_started",
         app_name=settings.APP_NAME,
@@ -88,6 +97,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:  # noqa: ARG001
     # Redis is created lazily on first use (rate limiting, health probes), so
     # this is a no-op when nothing ever touched it.
     await close_redis_client()
+
+    await close_ai_runtime()
 
     await dispose_engine()
 

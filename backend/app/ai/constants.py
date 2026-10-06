@@ -26,7 +26,11 @@ class ModelHint(StrEnum):
 #: Default mapping from model hints to (provider, model) tuples.
 #: Override per environment via configuration.
 DEFAULT_HINT_MAPPING: Final[dict[ModelHint, tuple[str, str]]] = {
-    ModelHint.FAST: ("groq", "llama-3.1-70b-versatile"),
+    # Groq decommissioned the previous id here, ``llama-3.1-70b-versatile`` (its API
+    # answers 400 ``model_decommissioned``). ``openai/gpt-oss-20b`` is a reasoning
+    # model: completion tokens include reasoning tokens, so callers must leave room
+    # in ``max_tokens``. Override per deployment with the ``AI_FAST_MODEL`` setting.
+    ModelHint.FAST: ("groq", "openai/gpt-oss-20b"),
     ModelHint.DEEP: ("anthropic", "claude-sonnet-4-20250514"),
     ModelHint.CHEAP: ("openai", "gpt-4o-mini"),
     ModelHint.LOCAL: ("ollama", "qwen2.5:14b"),

@@ -12,7 +12,7 @@ const CONTACT_LINE =
 export const privacyDoc: LegalDoc = {
   slug: 'privacy',
   title: 'Privacy Policy',
-  updated: 'August 2026',
+  updated: 'October 2026',
   intro:
     'This policy explains what information Aetheris Health AI collects, how we use it, and the choices you have. It applies to our marketing site and the Aetheris platform.',
   sections: [
@@ -33,7 +33,7 @@ export const privacyDoc: LegalDoc = {
       heading: 'How we use information',
       body: [
         'To provide, maintain, and improve the platform, to secure it against misuse, and to support your team.',
-        'We do not sell personal information. No AI model is connected to Aetheris, and patient data is not used to train one.',
+        "We do not sell personal information. Aetheris has one optional AI feature: slot suggestions when booking an appointment. It is off unless it has been set up and enabled for a hospital. When staff use it, the date and the open and unavailable times in the chosen doctor's day are sent to an external AI model provider so that it can suggest one. No patient name, record number, contact detail or medical information is sent, and patient data is not used to train a model.",
       ],
     },
     {

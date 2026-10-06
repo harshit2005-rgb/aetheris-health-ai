@@ -21,12 +21,13 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 import { PatientPicker } from '@/components/patients/PatientPicker'
-import { useDoctors } from '@/api/doctors'
+import { useDoctors, type DoctorSlot } from '@/api/doctors'
 import { useBookAppointment, type AppointmentType, type BookAppointmentInput } from '@/api/appointments'
 import { ApiError } from '@/api/types'
 import { apiErrorMessage } from '@/lib/apiErrors'
 import { usePermissions } from '@/hooks/usePermissions'
 import { SlotPicker } from './SlotPicker'
+import { SlotSuggestion } from './SlotSuggestion'
 
 const TYPES: { value: AppointmentType; label: string }[] = [
   { value: 'new', label: 'New' },
@@ -86,6 +87,9 @@ interface Notice {
  * `appointment.book_override`. Someone who holds that override may type a time
  * instead; so does anyone who cannot read availability at all.
  *
+ * Where it is available, an AI suggestion of one of those slots can be asked
+ * for. It only selects a slot in the picker: Book is still what books.
+ *
  * Pass `patient` to book from a patient's record.
  */
 export function BookAppointmentDialog({
@@ -101,6 +105,9 @@ export function BookAppointmentDialog({
 
   const [open, setOpen] = useState(false)
   const [notice, setNotice] = useState<Notice | null>(null)
+  // The server refused an AI suggestion in a way asking again cannot change.
+  // Kept here, outside the keyed control, for as long as the dialog is open.
+  const [suggestionRefused, setSuggestionRefused] = useState(false)
   // `isPending` only disables the button after a re-render; this also stops a
   // second submit (double click, Enter held down) fired before that happens.
   const submitting = useRef(false)
@@ -130,7 +137,10 @@ export function BookAppointmentDialog({
     setValue,
     formState: { errors },
   } = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: defaults })
-  const [doctorId, date, manual] = useWatch({ control, name: ['doctor_id', 'date', 'manual'] })
+  const [doctorId, date, manual, patientId, slot] = useWatch({
+    control,
+    name: ['doctor_id', 'date', 'manual', 'patient_id', 'slot'],
+  })
 
   function closeAndReset(next: boolean) {
     setOpen(next)
@@ -138,6 +148,7 @@ export function BookAppointmentDialog({
       reset(defaults)
       slotEnd.current = ''
       setNotice(null)
+      setSuggestionRefused(false)
     }
   }
 
@@ -145,6 +156,12 @@ export function BookAppointmentDialog({
   function clearSlot() {
     setValue('slot', '')
     slotEnd.current = ''
+  }
+
+  /** Select a slot the AI suggested, exactly as a click in the picker would. */
+  function applySuggestedSlot(suggested: DoctorSlot) {
+    slotEnd.current = suggested.end
+    setValue('slot', suggested.start, { shouldValidate: true, shouldDirty: true })
   }
 
   async function onSubmit(values: FormValues) {
@@ -345,22 +362,37 @@ export function BookAppointmentDialog({
               />
             </div>
           ) : doctorId && date ? (
-            <Controller
-              control={control}
-              name="slot"
-              render={({ field }) => (
-                <SlotPicker
-                  doctorId={doctorId}
-                  date={date}
-                  value={field.value}
-                  error={errors.slot?.message}
-                  onChange={(slot) => {
-                    slotEnd.current = slot.end
-                    field.onChange(slot.start)
-                  }}
-                />
-              )}
-            />
+            <>
+              {/* Before the picker, so a keyboard user reaches it ahead of the
+                  slot buttons. Remounted — dropping any suggestion and any
+                  answer still in flight — when patient, doctor or date changes. */}
+              <SlotSuggestion
+                key={`${patientId}|${doctorId}|${date}`}
+                patientId={patientId}
+                doctorId={doctorId}
+                date={date}
+                selectedStart={slot}
+                onUse={applySuggestedSlot}
+                refused={suggestionRefused}
+                onRefused={() => setSuggestionRefused(true)}
+              />
+              <Controller
+                control={control}
+                name="slot"
+                render={({ field }) => (
+                  <SlotPicker
+                    doctorId={doctorId}
+                    date={date}
+                    value={field.value}
+                    error={errors.slot?.message}
+                    onChange={(slot) => {
+                      slotEnd.current = slot.end
+                      field.onChange(slot.start)
+                    }}
+                  />
+                )}
+              />
+            </>
           ) : (
             <p className="font-body text-body-sm text-on-surface-variant">
               Choose a doctor and a date to see the available time slots.

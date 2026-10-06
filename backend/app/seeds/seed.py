@@ -18,10 +18,12 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 import structlog
 from sqlalchemy import select
 
+from app.core.feature_flags import AI_SLOT_RECOMMENDATION, with_default_flag
 from app.core.security import hash_password
 from app.database import create_session_factory, initialize_database
 from app.models.hospital import Hospital
@@ -29,6 +31,9 @@ from app.models.permission import Permission
 from app.models.role import Role, RolePermission
 from app.models.user import User, UserRole, UserStatus
 from app.seeds.demo_data import seed_demo_data
+
+if TYPE_CHECKING:
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = structlog.get_logger(__name__)
 
@@ -596,6 +601,27 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
 ]
 
 
+async def ensure_demo_flags(session: AsyncSession, hospital: Hospital) -> bool:
+    """Turn AI slot suggestions on for the demo hospital unless the flag was set explicitly.
+
+    The flag only says the hospital has been given the feature; the server
+    still needs an AI key before anything can be suggested.
+
+    :param session: The seed session.
+    :param hospital: The demo hospital.
+    :returns: ``True`` when the flag was defaulted, ``False`` when an explicit
+        value (including ``False``) was left alone.
+    """
+    # Reassigned rather than mutated in place so SQLAlchemy sees the JSONB change.
+    updated = with_default_flag(hospital.settings, AI_SLOT_RECOMMENDATION, True)
+    if updated is None:
+        return False
+    hospital.settings = updated
+    await session.flush()
+    logger.info("demo_hospital_flag_defaulted", flag=AI_SLOT_RECOMMENDATION)
+    return True
+
+
 async def seed_database(database_url: str | None = None) -> None:
     """Seed the database with permissions, roles, and demo data.
 
@@ -704,6 +730,10 @@ async def seed_database(database_url: str | None = None) -> None:
             logger.info("demo_hospital_created", id=str(hospital.id))
         else:
             logger.info("demo_hospital_exists", id=str(hospital.id))
+
+        # AI slot suggestions are on for the demo hospital unless the flag was
+        # set explicitly. It still needs an AI key on the server to be usable.
+        await ensure_demo_flags(session, hospital)
 
         # ── 4. Create Demo Admin User ────────────────────────────────────────
         admin_email = "admin@demohospital.com"

@@ -283,3 +283,85 @@ export function useBookAppointment() {
     },
   })
 }
+
+/** What `POST /appointments/recommend-slot` decided. */
+export type SlotRecommendationStatus = 'recommended' | 'no_free_slots'
+
+/** One AI-suggested slot (`SlotRecommendation`). Only `reason` comes from the model. */
+export interface SlotRecommendation {
+  /** Start of the suggested slot, ISO 8601 with the hospital's UTC offset. Same instant as a `start` from GET /doctors/{id}/slots. */
+  slot_start: string
+  slot_end: string
+  doctor_id: string
+  /** AI-generated, untrusted plain text, at most 200 characters. Null when the model gave none. */
+  reason: string | null
+}
+
+/** Answer of `POST /appointments/recommend-slot` (`SlotRecommendationResponse`). */
+export interface SlotRecommendationResult {
+  status: SlotRecommendationStatus
+  /** Non-null exactly when status is 'recommended'. */
+  recommendation: SlotRecommendation | null
+  /** The requested day, echoed. */
+  date: string
+  /** IANA zone of the hospital. */
+  timezone: string
+  /** How many free slots the server offered the model (0 when status is 'no_free_slots'). */
+  candidate_count: number
+}
+
+/** Body for `POST /appointments/recommend-slot`. Nothing else is accepted. */
+export interface SlotRecommendationInput {
+  patient_id: string
+  doctor_id: string
+  /** Calendar day (YYYY-MM-DD) in the hospital's timezone — the day the slot picker shows. */
+  date: string
+}
+
+/** Longer than the server's own model deadline, so the server's typed answer arrives first. */
+export const SLOT_RECOMMENDATION_TIMEOUT_MS = 15_000
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+const isInstant = (value: unknown): value is string =>
+  typeof value === 'string' && Number.isFinite(Date.parse(value))
+
+/**
+ * True only for a recommendation complete enough to render. The HTTP layer
+ * hands back the response body unvalidated, so it is narrowed here before any
+ * field of it is read.
+ */
+export function isUsableRecommendation(
+  value: unknown,
+): value is SlotRecommendationResult & { status: 'recommended'; recommendation: SlotRecommendation } {
+  if (!isRecord(value) || value.status !== 'recommended') return false
+  const rec = value.recommendation
+  return (
+    isRecord(rec) &&
+    isInstant(rec.slot_start) &&
+    isInstant(rec.slot_end) &&
+    (rec.reason === null || typeof rec.reason === 'string')
+  )
+}
+
+/** True when the server found no free slot to offer the model on that day. */
+export function isNoFreeSlots(value: unknown): boolean {
+  return isRecord(value) && value.status === 'no_free_slots'
+}
+
+/**
+ * Ask the server for one AI-suggested slot. Advisory: it books nothing and
+ * invalidates no cache. A mutation, not a query, and never retried — each call
+ * is one request to the model.
+ */
+export function useSlotRecommendation() {
+  return useMutation({
+    mutationFn: (input: SlotRecommendationInput) =>
+      http.post<SlotRecommendationResult>('/appointments/recommend-slot', input, {
+        timeout: SLOT_RECOMMENDATION_TIMEOUT_MS,
+      }),
+    retry: false,
+  })
+}

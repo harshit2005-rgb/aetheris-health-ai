@@ -70,7 +70,7 @@ const FAQ = [
   },
   {
     q: 'Does Aetheris include AI features today?',
-    a: 'Not yet. AI assistance is planned and is not part of the current product. When it arrives it will only suggest: a member of staff will review and approve every action, and it will never make a clinical decision on its own.',
+    a: "One, and it is optional. When booking an appointment, staff can ask for an AI-suggested time slot, chosen from the doctor's open slots. It only suggests: a member of staff reviews it and books the appointment themselves. It is off unless it has been set up and enabled for your hospital, and it never makes a clinical decision.",
   },
   {
     q: 'Will it connect to our existing EHR and lab systems?',
@@ -238,7 +238,7 @@ export default function LandingPage() {
             dark
             icon={Hourglass}
             title="On the roadmap"
-            body="AI assistance is planned. It is not part of the product today."
+            body="More AI assistance is planned. Today the only AI feature is an optional slot suggestion when booking, where it has been enabled."
             className="md:row-span-2"
           />
           <ModuleCard

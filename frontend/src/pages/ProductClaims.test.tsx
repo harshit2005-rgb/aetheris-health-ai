@@ -175,7 +175,7 @@ describe('landing page', () => {
 
     const roadmap = screen.getByRole('heading', { name: 'On the roadmap' }).parentElement as HTMLElement
     expect(roadmap.textContent).toBe(
-      'On the roadmapAI assistance is planned. It is not part of the product today.',
+      'On the roadmapMore AI assistance is planned. Today the only AI feature is an optional slot suggestion when booking, where it has been enabled.',
     )
     for (const built of [
       'Patients',
@@ -285,7 +285,7 @@ describe('pricing page', () => {
     // Reports has real screens now, so it is listed as included, not planned.
     expect(within(included).getByText('Reports and role dashboards, with CSV export')).toBeInTheDocument()
     expect(within(planned).queryByText(/report/i)).not.toBeInTheDocument()
-    expect(within(planned).getByText('AI assistance')).toBeInTheDocument()
+    expect(within(planned).getByText('AI assistance beyond slot suggestions')).toBeInTheDocument()
     expect(within(included).queryByText('AI assistance')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Talk to us/ })).toHaveAttribute('href', '/contact')
   })

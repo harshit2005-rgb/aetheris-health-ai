@@ -97,13 +97,12 @@ function SidebarBody({ collapsed, onToggleCollapse, onNavigate }: SidebarBodyPro
         ))}
       </nav>
 
-      {/* No AI provider is connected, so this is a notice, not a control: it
-          says what is not there yet instead of opening an assistant that
-          cannot answer. */}
+      {/* One AI feature exists, and only inside the booking dialog. This stays
+          a notice, not a control: nothing here opens an assistant. */}
       <div
         role="note"
-        aria-label="AI assistance is not yet available"
-        title={collapsed ? 'AI assistance is not yet available' : undefined}
+        aria-label="AI assistance is limited to slot suggestions when booking, where enabled"
+        title={collapsed ? 'AI assistance is limited to slot suggestions when booking, where enabled' : undefined}
         className={cn(
           'border-outline-variant/40 text-on-surface-variant flex items-center gap-3 rounded-xl border border-dashed px-3 py-2.5',
           collapsed && 'justify-center',
@@ -113,7 +112,7 @@ function SidebarBody({ collapsed, onToggleCollapse, onNavigate }: SidebarBodyPro
         {!collapsed && (
           <div className="min-w-0 leading-tight">
             <p className="font-label text-label-caps">AI assistance</p>
-            <p className="font-body text-outline text-xs">Not yet available</p>
+            <p className="font-body text-outline text-xs">Slot suggestions only, where enabled</p>
           </div>
         )}
       </div>

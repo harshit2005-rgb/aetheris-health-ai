@@ -11,9 +11,10 @@ import PricingPage from './PricingPage'
 import PatientsPage from './patients/PatientsPage'
 
 /**
- * The backend has no AI provider connected and no AI endpoint an assistant
- * could call, so the frontend must not offer one or describe one as working.
- * These tests hold the shell and the public pages to that.
+ * One AI feature exists: an advisory, opt-in slot suggestion inside the
+ * booking dialog. There is no assistant, so the shell and the public pages
+ * must not offer one, and must not describe the one feature as more than it
+ * is. These tests hold them to that.
  */
 
 /** Wording that would describe an AI capability as something the product does today. */
@@ -67,13 +68,13 @@ function renderShell(permissions: string[], page = <p>Page body</p>) {
 }
 
 describe('the signed-in shell', () => {
-  it('says AI assistance is not available, and does not offer it as a control', async () => {
+  it('names the one AI feature as limited, and does not offer it as a control', async () => {
     renderShell(['patient.read'])
     await screen.findByText('Page body')
 
-    const notice = screen.getByRole('note', { name: 'AI assistance is not yet available' })
+    const notice = screen.getByRole('note', { name: 'AI assistance is limited to slot suggestions when booking, where enabled' })
     expect(within(notice).getByText('AI assistance')).toBeInTheDocument()
-    expect(within(notice).getByText('Not yet available')).toBeInTheDocument()
+    expect(within(notice).getByText('Slot suggestions only, where enabled')).toBeInTheDocument()
     // A notice, not something to click: nothing inside it is interactive.
     expect(within(notice).queryByRole('button')).not.toBeInTheDocument()
     expect(within(notice).queryByRole('link')).not.toBeInTheDocument()
@@ -104,7 +105,7 @@ describe('the signed-in shell', () => {
     renderShell(['patient.read'])
     await screen.findByText('Page body')
 
-    await user.click(screen.getByRole('note', { name: 'AI assistance is not yet available' }))
+    await user.click(screen.getByRole('note', { name: 'AI assistance is limited to slot suggestions when booking, where enabled' }))
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(fake.sent.some((c) => /\/ai\b|recommend/.test(c.url ?? ''))).toBe(false)
@@ -120,8 +121,8 @@ describe('the signed-in shell', () => {
     const bar = screen.getByRole('banner')
     expect(within(bar).queryByRole('textbox')).not.toBeInTheDocument()
     expect(bar.querySelector(':disabled')).toBeNull()
-    // AI is still named, and still as not available.
-    expect(screen.getByRole('note', { name: 'AI assistance is not yet available' })).toBeInTheDocument()
+    // AI is still named, and only for what it does.
+    expect(screen.getByRole('note', { name: 'AI assistance is limited to slot suggestions when booking, where enabled' })).toBeInTheDocument()
   })
 
   it('keeps the rest of the shell working: navigation still follows permissions', async () => {
@@ -154,23 +155,27 @@ describe('the public pages', () => {
     render(<MemoryRouter>{page}</MemoryRouter>)
   }
 
-  it('landing: says AI is planned, not present', () => {
+  it('landing: describes the one AI feature as optional', () => {
     renderPublic(<LandingPage />)
 
     expectNoAiClaims()
     const roadmap = screen.getByRole('heading', { name: 'On the roadmap' }).parentElement as HTMLElement
-    expect(roadmap).toHaveTextContent('AI assistance is planned. It is not part of the product today.')
+    expect(roadmap).toHaveTextContent(
+      'More AI assistance is planned. Today the only AI feature is an optional slot suggestion when booking, where it has been enabled.',
+    )
     expect(screen.getByText('Does Aetheris include AI features today?')).toBeInTheDocument()
     expect(screen.queryByText(/intelligent platform/i)).not.toBeInTheDocument()
   })
 
-  it('landing: the AI answer says "not yet", and the list of modules names reports but no AI', async () => {
+  it('landing: the AI answer names one optional feature, and the list of modules names reports but no AI', async () => {
     const user = userEvent.setup()
     renderPublic(<LandingPage />)
 
     await user.click(screen.getByRole('button', { name: 'Does Aetheris include AI features today?' }))
     expect(
-      await screen.findByText(/^Not yet\. AI assistance is planned and is not part of the current product\./),
+      await screen.findByText(
+        /^One, and it is optional\. When booking an appointment, staff can ask for an AI-suggested time slot/,
+      ),
     ).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Which modules are available today?' }))
     const modules = await screen.findByText(/^Patients, doctors and departments, appointments, billing/)
@@ -186,12 +191,14 @@ describe('the public pages', () => {
     expectNoAiClaims()
     // AI appears once, under what is planned — never under what is included.
     const planned = screen.getByRole('region', { name: 'On the roadmap' })
-    expect(within(planned).getByText('AI assistance')).toBeInTheDocument()
+    expect(within(planned).getByText('AI assistance beyond slot suggestions')).toBeInTheDocument()
     const included = screen.getByRole('region', { name: 'Included today' })
     expect(included.textContent).not.toMatch(/\bAI\b/)
     expect(included.textContent).not.toMatch(/analytics/i)
-    // Planned is exactly AI assistance: Reports has left the roadmap.
-    expect(within(planned).getAllByRole('listitem').map((item) => item.textContent)).toEqual(['AI assistance'])
+    // Planned is exactly more AI assistance: Reports has left the roadmap.
+    expect(within(planned).getAllByRole('listitem').map((item) => item.textContent)).toEqual([
+      'AI assistance beyond slot suggestions',
+    ])
     expect(within(planned).getByText('Planned, and not available yet.')).toBeInTheDocument()
   })
 })
