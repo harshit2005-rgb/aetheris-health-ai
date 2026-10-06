@@ -42,6 +42,7 @@ from app.core.exceptions import (
 )
 from app.core.feature_flags import AI_SLOT_RECOMMENDATION, flag_is_on
 from app.core.logging import get_logger
+from app.core.tenancy import TenantScope, tenant_scope
 from app.models.appointment import (
     Appointment,
     AppointmentStatus,
@@ -738,10 +739,19 @@ class AppointmentService:
         Called by the Arq worker every five minutes. Split from the job itself
         so the rule is testable without a Redis broker or a running scheduler.
 
-        Runs untenanted — see
-        :meth:`~app.repositories.appointment_repository.AppointmentRepository.find_no_show_candidates`
-        for why — but records each hospital on its own audit event, so the trail
-        stays per-tenant.
+        A scheduled job has no user and no single hospital, so tenancy is
+        explicit here (``app/core/tenancy.py``):
+
+        * *finding* the overdue appointments is the one cross-hospital step,
+          and runs under a named system scope — see
+          :meth:`~app.repositories.appointment_repository.AppointmentRepository.find_no_show_candidates`;
+        * *changing* each one runs under that appointment's own hospital, read
+          off the row. While it is bound, the session can neither read nor
+          write another hospital's rows, so one appointment's update cannot
+          spill into a different hospital.
+
+        Each hospital is recorded on its own audit event, so the trail stays
+        per-tenant.
 
         The grace period is read per hospital from ``hospitals.settings``
         (§5.7), falling back to :data:`DEFAULT_NO_SHOW_GRACE_MINUTES`.
@@ -755,40 +765,15 @@ class AppointmentService:
 
         # Widest possible grace, so the query returns every plausible candidate;
         # each is then re-checked against its own hospital's setting below.
-        candidates = await self._appointments.find_no_show_candidates(
-            cutoff=reference - timedelta(minutes=DEFAULT_NO_SHOW_GRACE_MINUTES), limit=limit
-        )
+        with tenant_scope(TenantScope.system("no-show sweeper: find overdue appointments")):
+            candidates = await self._appointments.find_no_show_candidates(
+                cutoff=reference - timedelta(minutes=DEFAULT_NO_SHOW_GRACE_MINUTES), limit=limit
+            )
 
         swept = 0
         for appointment in candidates:
-            grace = await self._no_show_grace_minutes(appointment.hospital_id)
-            if appointment.scheduled_end >= reference - timedelta(minutes=grace):
-                # Inside this hospital's grace window — not overdue yet.
-                continue
-
-            previous = appointment.status
-            await self._appointments.update_appointment(
-                appointment, status=AppointmentStatus.NO_SHOW
-            )
-            await self._appointments.record_transition(
-                appointment=appointment,
-                from_status=previous,
-                to_status=AppointmentStatus.NO_SHOW,
-                # NULL actor: the system did this, not a user.
-                changed_by=None,
-                reason="no_show_sweeper",
-            )
-            await self._audit.record(
-                AuditEvent(
-                    action="appointment.no_show",
-                    hospital_id=appointment.hospital_id,
-                    target_type="appointment",
-                    target_id=appointment.id,
-                    actor_id=None,
-                    context={"swept_by": "no_show_sweeper", "from_status": previous.value},
-                )
-            )
-            swept += 1
+            with tenant_scope(TenantScope.hospital(appointment.hospital_id)):
+                swept += await self._sweep_one(appointment, reference)
 
         if swept:
             await self._session.commit()
@@ -800,6 +785,43 @@ class AppointmentService:
             reference=reference.isoformat(),
         )
         return swept
+
+    async def _sweep_one(self, appointment: Appointment, reference: datetime) -> int:
+        """Mark one overdue appointment as a no-show, inside its own hospital.
+
+        The caller has bound the appointment's hospital as the tenant scope.
+
+        :param appointment: A sweep candidate.
+        :param reference: The instant the sweep is measured against.
+        :returns: ``1`` if it was marked, ``0`` if it is still within its
+            hospital's grace window.
+        """
+        grace = await self._no_show_grace_minutes(appointment.hospital_id)
+        if appointment.scheduled_end >= reference - timedelta(minutes=grace):
+            # Inside this hospital's grace window — not overdue yet.
+            return 0
+
+        previous = appointment.status
+        await self._appointments.update_appointment(appointment, status=AppointmentStatus.NO_SHOW)
+        await self._appointments.record_transition(
+            appointment=appointment,
+            from_status=previous,
+            to_status=AppointmentStatus.NO_SHOW,
+            # NULL actor: the system did this, not a user.
+            changed_by=None,
+            reason="no_show_sweeper",
+        )
+        await self._audit.record(
+            AuditEvent(
+                action="appointment.no_show",
+                hospital_id=appointment.hospital_id,
+                target_type="appointment",
+                target_id=appointment.id,
+                actor_id=None,
+                context={"swept_by": "no_show_sweeper", "from_status": previous.value},
+            )
+        )
+        return 1
 
     # ── Queries ───────────────────────────────────────────────────────────────
 

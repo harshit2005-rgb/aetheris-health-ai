@@ -177,7 +177,8 @@ class _World:
             self.people[actor.id] = actor
 
         self.users = AsyncMock()
-        self.users.get_by_id.side_effect = lambda user_id: self.people.get(user_id)
+        # Mirrors the repository: a user lookup always carries a tenant scope.
+        self.users.get_by_id.side_effect = lambda user_id, _scope: self.people.get(user_id)
         self.users.list_active_recipients.return_value = list(users or [])
 
         hospital = MagicMock()

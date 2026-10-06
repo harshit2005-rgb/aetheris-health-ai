@@ -23,6 +23,7 @@ from app.core.exceptions import (
 )
 from app.core.notifications import NotificationRequest, Notifier, NullNotifier
 from app.core.security import generate_opaque_token, hash_password
+from app.core.tenancy import cross_tenant, tenant_or_platform
 from app.models.user import User, UserStatus
 
 if TYPE_CHECKING:
@@ -80,7 +81,13 @@ class UserService:
         :raises NotFoundError: If the user doesn't exist or is soft-deleted.
         :raises PermissionDeniedError: If cross-hospital access is attempted.
         """
-        user = await self._user_repo.get_by_id(user_id)
+        user = await self._user_repo.get_by_id(
+            user_id,
+            tenant_or_platform(
+                actor_hospital_id,
+                reason="platform-level actor, or a user reading their own account",
+            ),
+        )
         if user is None:
             raise NotFoundError("User not found.")
 
@@ -167,7 +174,9 @@ class UserService:
         :returns: The user instance.
         :raises NotFoundError: If the user doesn't exist.
         """
-        user = await self._user_repo.get_by_id(user_id)
+        user = await self._user_repo.get_by_id(
+            user_id, cross_tenant("own account: id of the authenticated principal")
+        )
         if user is None:
             raise NotFoundError("User not found.")
         return user
@@ -226,7 +235,7 @@ class UserService:
         if role_ids:
             unknown_ids: list[str] = []
             for role_id in role_ids:
-                role = await self._role_repo.get_by_id(role_id)
+                role = await self._role_repo.get_by_id(role_id, hospital_id)
                 if role is None:
                     unknown_ids.append(str(role_id))
                     continue
@@ -521,7 +530,12 @@ class UserService:
         :raises NotFoundError: If the role is not visible to the actor's tenant.
         :raises PermissionDeniedError: If the role grants anything the actor lacks.
         """
-        role = await self._role_repo.get_with_permissions(role_id, hospital_id=actor_hospital_id)
+        role = await self._role_repo.get_with_permissions(
+            role_id,
+            hospital_id=tenant_or_platform(
+                actor_hospital_id, reason="grant check for a platform-level administrator"
+            ),
+        )
         if role is None:
             raise NotFoundError("Role not found.")
 
@@ -563,7 +577,12 @@ class UserService:
 
         user = await self.get_user(user_id, actor_hospital_id)
 
-        role = await self._role_repo.get_by_id(role_id)
+        role = await self._role_repo.get_by_id(
+            role_id,
+            tenant_or_platform(
+                actor_hospital_id, reason="role assignment by a platform-level administrator"
+            ),
+        )
         if role is None:
             raise NotFoundError("Role not found.")
 

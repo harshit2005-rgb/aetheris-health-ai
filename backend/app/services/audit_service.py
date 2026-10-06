@@ -120,11 +120,11 @@ class AuditService:
             different hospital — the tenant check is the security boundary,
             so a miss and a foreign row look identical to the caller.
         """
-        row = await self._audit_repo.get_by_id(log_id)
+        row = await self._audit_repo.get_by_id(log_id, hospital_id)
         if row is None or row.hospital_id != hospital_id:
             msg = "Audit entry not found."
             raise NotFoundError(msg)
-        actors = await self._resolve_actors([row])
+        actors = await self._resolve_actors([row], hospital_id)
         return self._to_response(row, actors)
 
     async def list_logs(
@@ -168,7 +168,7 @@ class AuditService:
             end=end,
             q=q,
         )
-        actors = await self._resolve_actors(rows)
+        actors = await self._resolve_actors(rows, hospital_id)
         items = [self._to_response(row, actors) for row in rows]
 
         return Page[AuditLogResponse](
@@ -206,17 +206,24 @@ class AuditService:
             skip=0,
             limit=limit,
         )
-        actors = await self._resolve_actors(rows)
+        actors = await self._resolve_actors(rows, hospital_id)
         return [self._to_response(row, actors) for row in rows]
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
-    async def _resolve_actors(self, rows: list[Any]) -> dict[uuid.UUID, User]:
-        """Batch-load the actors referenced by ``rows`` (one query, not N)."""
+    async def _resolve_actors(
+        self, rows: list[Any], hospital_id: uuid.UUID
+    ) -> dict[uuid.UUID, User]:
+        """Batch-load the actors referenced by ``rows`` (one query, not N).
+
+        Confined to ``hospital_id``: an entry's actor is a member of the same
+        hospital as the entry, so a user of another hospital is never resolved
+        into this hospital's trail.
+        """
         actor_ids = {row.actor_user_id for row in rows if row.actor_user_id is not None}
         if not actor_ids:
             return {}
-        users = await self._user_repo.get_by_ids(list(actor_ids))
+        users = await self._user_repo.get_by_ids(list(actor_ids), hospital_id)
         return {user.id: user for user in users}
 
     @staticmethod

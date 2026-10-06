@@ -374,11 +374,12 @@ class AppointmentRepository(BaseRepository[Appointment]):
         """Find appointments that should be marked ``no_show`` (module spec §5.7).
 
         Deliberately **not** scoped to one hospital: the sweeper is a
-        platform-wide background job with no tenant context, and scoping it
-        would mean either iterating every hospital or inventing an ambient one.
-        Every other read path in this repository is tenant-scoped; this is the
-        single, documented exception, and the caller records the hospital on
-        each resulting audit event.
+        platform-wide background job. Every other read path in this repository
+        is tenant-scoped; this is the single, documented exception. The caller
+        must run it under an explicit ``TenantScope.system(...)`` and then
+        handle each returned appointment under that appointment's own hospital
+        (see ``AppointmentService.sweep_no_shows``). It must never be called
+        from a request.
 
         :param cutoff: Appointments whose ``scheduled_end`` is before this
             instant are overdue. The caller subtracts the grace period.

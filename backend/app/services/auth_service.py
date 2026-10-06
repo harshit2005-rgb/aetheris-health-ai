@@ -36,6 +36,7 @@ from app.core.security import (
     verify_password,
     verify_totp_code,
 )
+from app.core.tenancy import cross_tenant, tenant_or_platform
 from app.models.user import User, UserStatus
 
 if TYPE_CHECKING:
@@ -48,6 +49,11 @@ if TYPE_CHECKING:
     from app.repositories.user_repository import UserRepository
 
 logger = structlog.get_logger(__name__)
+
+#: Scope for a user acting on their own account. The id is the authenticated
+#: principal's own (or comes from a token only that user holds), so the lookup
+#: is by identity rather than by hospital.
+_OWN_ACCOUNT = cross_tenant("own account: id of the authenticated principal")
 
 
 class AuthService:
@@ -193,7 +199,9 @@ class AuthService:
             raise AuthenticationError("Invalid MFA ticket.")
 
         user_id = uuid.UUID(payload["sub"])
-        user = await self._user_repo.get_by_id(user_id)
+        user = await self._user_repo.get_by_id(
+            user_id, cross_tenant("identity named by a verified MFA ticket")
+        )
 
         if user is None:
             raise AuthenticationError("User not found.")
@@ -271,7 +279,9 @@ class AuthService:
             # Reuse detection needs the hospital for the audit trail. The user
             # row is fetched here because the event carries tenant context that
             # the token row alone does not.
-            owner = await self._user_repo.get_by_id(stored_token.user_id)
+            owner = await self._user_repo.get_by_id(
+                stored_token.user_id, cross_tenant("owner of a presented refresh token")
+            )
             if owner is not None:
                 await self._audit.record(
                     AuditEvent(
@@ -295,7 +305,9 @@ class AuthService:
             raise AuthenticationError("Refresh token has expired.")
 
         # ── Fetch User ─────────────────────────────────────────────────
-        user = await self._user_repo.get_by_id(stored_token.user_id)
+        user = await self._user_repo.get_by_id(
+            stored_token.user_id, cross_tenant("owner of a presented refresh token")
+        )
         if user is None or user.status != UserStatus.ACTIVE:
             raise AuthenticationError("User account is not active.")
 
@@ -456,7 +468,9 @@ class AuthService:
             raise AuthenticationError("Invalid or expired password reset token.")
 
         # Find the user
-        user = await self._user_repo.get_by_id(token.user_id)
+        user = await self._user_repo.get_by_id(
+            token.user_id, cross_tenant("owner of a valid password-reset token")
+        )
         if user is None:
             raise AuthenticationError("User not found.")
 
@@ -505,7 +519,7 @@ class AuthService:
         :raises AuthenticationError: If the current password is wrong.
         :raises BusinessRuleError: If the password is too weak.
         """
-        user = await self._user_repo.get_by_id(user_id)
+        user = await self._user_repo.get_by_id(user_id, _OWN_ACCOUNT)
         if user is None:
             raise AuthenticationError("User not found.")
 
@@ -560,7 +574,12 @@ class AuthService:
             hospital. 404 — not 401 — so a cross-tenant UUID is
             indistinguishable from one that does not exist.
         """
-        user = await self._user_repo.get_by_id(user_id)
+        user = await self._user_repo.get_by_id(
+            user_id,
+            tenant_or_platform(
+                actor_hospital_id, reason="password reset by a platform-level administrator"
+            ),
+        )
         if user is None or (
             actor_hospital_id is not None and user.hospital_id != actor_hospital_id
         ):
@@ -607,7 +626,7 @@ class AuthService:
             enters would verify (lockout recoverable only from the database).
             Disabling MFA first is the supported path back to enrolment.
         """
-        user = await self._user_repo.get_by_id(user_id)
+        user = await self._user_repo.get_by_id(user_id, _OWN_ACCOUNT)
         if user is None:
             raise AuthenticationError("User not found.")
 
@@ -656,7 +675,7 @@ class AuthService:
         if not verify_totp_code(secret, code):
             raise AuthenticationError("Invalid MFA code. Please try again.")
 
-        user = await self._user_repo.get_by_id(user_id)
+        user = await self._user_repo.get_by_id(user_id, _OWN_ACCOUNT)
         if user is None:
             raise AuthenticationError("User not found.")
 
@@ -686,7 +705,7 @@ class AuthService:
         :param code: The 6-digit TOTP code.
         :raises AuthenticationError: If verification fails.
         """
-        user = await self._user_repo.get_by_id(user_id)
+        user = await self._user_repo.get_by_id(user_id, _OWN_ACCOUNT)
         if user is None:
             raise AuthenticationError("User not found.")
 

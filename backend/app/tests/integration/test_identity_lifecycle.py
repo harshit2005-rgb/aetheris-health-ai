@@ -161,7 +161,7 @@ class TestFullLifecycle:
         # The invite token is a single-use password-reset token; consuming it
         # transitions the account INVITED → ACTIVE.
         await auth_service.reset_password(raw_token=invite_token, new_password=PASSWORD)
-        activated = await UserRepository(db_session).get_by_id(invited.id)
+        activated = await UserRepository(db_session).get_by_id(invited.id, hospital_id)
         assert activated is not None
         assert activated.status == UserStatus.ACTIVE
 

@@ -35,6 +35,7 @@ from app.core.email import EmailMessage
 from app.core.exceptions import NotFoundError, ValidationError
 from app.core.logging import get_logger
 from app.core.notifications import NotificationRequest
+from app.core.tenancy import TenantScope, tenant_scope
 from app.models.notification import DeliveryStatus, NotificationChannel
 from app.schemas.common import Page, PaginationParams
 from app.schemas.notification import (
@@ -61,7 +62,7 @@ if TYPE_CHECKING:
 
     from app.core.audit import AuditSink
     from app.core.email import EmailSender
-    from app.models.notification import Notification
+    from app.models.notification import Notification, NotificationDelivery
     from app.models.user import User
     from app.repositories.hospital_repository import HospitalRepository
     from app.repositories.notification_repository import NotificationRepository
@@ -266,7 +267,7 @@ class NotificationService:
 
         recipients: list[User] = []
         for user_id in dict.fromkeys(request.recipient_user_ids):
-            user = await self._users.get_by_id(user_id)
+            user = await self._users.get_by_id(user_id, request.hospital_id)
             if user is not None and user.hospital_id == request.hospital_id:
                 recipients.append(user)
         return recipients
@@ -274,7 +275,11 @@ class NotificationService:
     async def _shared_variables(self, request: NotificationRequest) -> dict[str, str]:
         """Return the template variables every notification in a request shares."""
         hospital = await self._hospitals.get_by_id(request.hospital_id)
-        actor = await self._users.get_by_id(request.actor_id) if request.actor_id else None
+        actor = (
+            await self._users.get_by_id(request.actor_id, request.hospital_id)
+            if request.actor_id
+            else None
+        )
         return {
             "hospital_name": hospital.name if hospital else "your hospital",
             "actor_name": f"{actor.first_name} {actor.last_name}" if actor else _UNKNOWN_ACTOR,
@@ -513,6 +518,12 @@ class NotificationService:
 
         The body is cleared in the first and last cases: it may hold a token.
 
+        Tenancy is explicit, because a scheduled job has no user and no single
+        hospital (``app/core/tenancy.py``): the queue is *claimed* across
+        hospitals under a named system scope, and each delivery is then
+        *handled* under its own hospital, read off the row. While that is
+        bound the session cannot read or write another hospital's rows.
+
         :param sender: The mail transport, or ``None`` if email is switched off.
         :param now: The current instant. Defaults to now; a parameter so tests
             can drive the backoff.
@@ -520,73 +531,19 @@ class NotificationService:
         :returns: What this run did.
         """
         current = now or datetime.now(UTC)
-        deliveries = await self._notifications.claim_due_deliveries(now=current, limit=limit)
+        with tenant_scope(TenantScope.system("email queue: claim due deliveries")):
+            deliveries = await self._notifications.claim_due_deliveries(now=current, limit=limit)
         sent = retrying = failed = 0
 
         for delivery in deliveries:
-            attempts = delivery.attempts + 1
-
-            if sender is None:
-                await self._notifications.update_delivery(
-                    delivery,
-                    status=DeliveryStatus.FAILED,
-                    attempts=attempts,
-                    last_error=_NO_TRANSPORT,
-                    next_attempt_at=None,
-                    body=None,
-                )
+            with tenant_scope(TenantScope.hospital(delivery.hospital_id)):
+                outcome = await self._deliver_one(delivery, sender, current)
+            if outcome is DeliveryStatus.SENT:
+                sent += 1
+            elif outcome is DeliveryStatus.FAILED:
                 failed += 1
-                continue
-
-            try:
-                await sender.send(
-                    EmailMessage(
-                        to=delivery.to_address,
-                        subject=delivery.subject or "",
-                        body=delivery.body or "",
-                    )
-                )
-            except Exception as exc:  # noqa: BLE001 — any transport failure is retried
-                error = f"{type(exc).__name__}: {exc}"[:_ERROR_MAX]
-                if attempts >= MAX_EMAIL_ATTEMPTS:
-                    await self._notifications.update_delivery(
-                        delivery,
-                        status=DeliveryStatus.FAILED,
-                        attempts=attempts,
-                        last_error=error,
-                        next_attempt_at=None,
-                        body=None,
-                    )
-                    failed += 1
-                else:
-                    delay = EMAIL_BACKOFF_BASE_SECONDS * 2 ** (attempts - 1)
-                    await self._notifications.update_delivery(
-                        delivery,
-                        attempts=attempts,
-                        last_error=error,
-                        next_attempt_at=current + timedelta(seconds=delay),
-                    )
-                    retrying += 1
-                # The address and server reply stay out of the log (PII).
-                logger.warning(
-                    "notification.email_attempt_failed",
-                    delivery_id=str(delivery.id),
-                    attempts=attempts,
-                    error_type=type(exc).__name__,
-                )
-                continue
-
-            await self._notifications.update_delivery(
-                delivery,
-                status=DeliveryStatus.SENT,
-                attempts=attempts,
-                last_error=None,
-                next_attempt_at=None,
-                sent_at=current,
-                body=None,
-            )
-            delivery.notification.sent_email = True
-            sent += 1
+            else:
+                retrying += 1
 
         await self._session.commit()
         report = DeliveryReport(sent=sent, retrying=retrying, failed=failed)
@@ -598,3 +555,84 @@ class NotificationService:
                 failed=failed,
             )
         return report
+
+    async def _deliver_one(
+        self,
+        delivery: NotificationDelivery,
+        sender: EmailSender | None,
+        current: datetime,
+    ) -> DeliveryStatus:
+        """Attempt one queued email, inside its own hospital.
+
+        The caller has bound the delivery's hospital as the tenant scope.
+
+        :param delivery: A claimed, locked delivery.
+        :param sender: The mail transport, or ``None`` if email is switched off.
+        :param current: The instant this run is measured against.
+        :returns: ``SENT``, ``FAILED``, or ``QUEUED`` when it will be retried.
+        """
+        attempts = delivery.attempts + 1
+
+        if sender is None:
+            await self._notifications.update_delivery(
+                delivery,
+                status=DeliveryStatus.FAILED,
+                attempts=attempts,
+                last_error=_NO_TRANSPORT,
+                next_attempt_at=None,
+                body=None,
+            )
+            return DeliveryStatus.FAILED
+
+        try:
+            await sender.send(
+                EmailMessage(
+                    to=delivery.to_address,
+                    subject=delivery.subject or "",
+                    body=delivery.body or "",
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 — any transport failure is retried
+            error = f"{type(exc).__name__}: {exc}"[:_ERROR_MAX]
+            exhausted = attempts >= MAX_EMAIL_ATTEMPTS
+            if exhausted:
+                await self._notifications.update_delivery(
+                    delivery,
+                    status=DeliveryStatus.FAILED,
+                    attempts=attempts,
+                    last_error=error,
+                    next_attempt_at=None,
+                    body=None,
+                )
+            else:
+                delay = EMAIL_BACKOFF_BASE_SECONDS * 2 ** (attempts - 1)
+                await self._notifications.update_delivery(
+                    delivery,
+                    attempts=attempts,
+                    last_error=error,
+                    next_attempt_at=current + timedelta(seconds=delay),
+                )
+            # The address and server reply stay out of the log (PII).
+            logger.warning(
+                "notification.email_attempt_failed",
+                delivery_id=str(delivery.id),
+                attempts=attempts,
+                error_type=type(exc).__name__,
+            )
+            return DeliveryStatus.FAILED if exhausted else DeliveryStatus.QUEUED
+
+        # Marked before the delivery update, not after: that update flushes,
+        # so the notification row is written while its own hospital is still
+        # the bound tenant scope. Left for a later flush it would be written
+        # under the next delivery's hospital, which the session refuses.
+        delivery.notification.sent_email = True
+        await self._notifications.update_delivery(
+            delivery,
+            status=DeliveryStatus.SENT,
+            attempts=attempts,
+            last_error=None,
+            next_attempt_at=None,
+            sent_at=current,
+            body=None,
+        )
+        return DeliveryStatus.SENT
