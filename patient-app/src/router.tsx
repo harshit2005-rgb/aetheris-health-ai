@@ -47,6 +47,25 @@ export const routes: RouteObject[] = [
                 lazy: async () => ({ Component: (await import('@/pages/home/HomePage')).HomePage }),
               },
               {
+                path: '/hospitals',
+                lazy: async () => ({
+                  Component: (await import('@/pages/hospitals/HospitalsPage')).HospitalsPage,
+                }),
+              },
+              {
+                path: '/hospitals/:hospitalRef',
+                lazy: async () => ({
+                  Component: (await import('@/pages/hospitals/HospitalDetailPage')).HospitalDetailPage,
+                }),
+              },
+              {
+                // The entry point of doctor discovery; it lists no doctors yet.
+                path: '/hospitals/:hospitalRef/doctors',
+                lazy: async () => ({
+                  Component: (await import('@/pages/doctors/HospitalDoctorsPage')).HospitalDoctorsPage,
+                }),
+              },
+              {
                 path: '/link-patient',
                 lazy: async () => ({
                   Component: (await import('@/pages/hospitals/LinkPatientPage')).LinkPatientPage,

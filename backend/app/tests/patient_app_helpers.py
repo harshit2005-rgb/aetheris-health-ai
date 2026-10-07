@@ -55,6 +55,7 @@ __all__ = [
     "audit_rows",
     "bearer",
     "build_patient_application",
+    "insert_hospital",
     "insert_patient_record",
     "new_phone",
     "open_hospital",
@@ -172,6 +173,43 @@ async def sign_in(client: AsyncClient, sms: FakeSmsSender, phone: str) -> dict[s
     assert verified.status_code == 200, verified.text
     data: dict[str, Any] = verified.json()["data"]
     return data
+
+
+async def insert_hospital(
+    session: AsyncSession,
+    *,
+    name: str,
+    slug: str | None = None,
+    address: Any = None,
+    enabled: Any = True,
+    is_active: bool = True,
+    settings: dict[str, Any] | None = None,
+    **columns: Any,
+) -> Hospital:
+    """Insert a hospital as the platform would have set it up, for discovery tests.
+
+    :param enabled: The stored value of the Patient App flag. ``True`` opens
+        the hospital; anything else — including ``"true"`` and ``1`` — is
+        stored as given. ``None`` leaves the flag out altogether.
+    :param settings: Other settings to store next to the flag.
+    :param columns: Any other column (``phone``, ``logo_url``, ``tax_id``, …).
+    """
+    stored = dict(settings or {})
+    if enabled is not None:
+        stored[PATIENT_APP_ENABLED] = enabled
+    hospital = Hospital(
+        id=uuid.uuid4(),
+        name=name,
+        slug=slug or f"h-{uuid.uuid4().hex[:16]}",
+        address={"line1": "1 Test Road", "city": "Hyderabad"} if address is None else address,
+        settings=stored,
+        is_active=is_active,
+        **columns,
+    )
+    session.add(hospital)
+    await session.flush()
+    await session.commit()
+    return hospital
 
 
 async def open_hospital(

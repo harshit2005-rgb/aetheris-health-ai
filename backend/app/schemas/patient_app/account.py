@@ -38,6 +38,12 @@ class PatientLink(BaseModel):
     """One of the account's record links. Says nothing about the record itself."""
 
     hospital_id: UUID = Field(description="The hospital the record is at.")
+    hospital_ref: str | None = Field(
+        description=(
+            "That hospital's public reference (its code), as hospital discovery uses it. "
+            "Null if the hospital has no code a reference can spell."
+        )
+    )
     hospital_name: str = Field(description="That hospital's name.")
     linked_at: datetime = Field(description="When the link was made (UTC).")
     suspended: bool = Field(

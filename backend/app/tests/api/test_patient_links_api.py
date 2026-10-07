@@ -191,8 +191,15 @@ class TestLink:
 
         assert response.status_code == 201, response.text
         data = response.json()["data"]
-        assert set(data) == {"hospital_id", "hospital_name", "linked_at", "suspended"}
+        assert set(data) == {
+            "hospital_id",
+            "hospital_ref",
+            "hospital_name",
+            "linked_at",
+            "suspended",
+        }
         assert data["hospital_id"] == str(hospital.id)
+        assert data["hospital_ref"] == hospital.slug
         assert data["hospital_name"] == hospital.name
         assert data["suspended"] is False
         [link] = await _links(db_session, patient.account_id)

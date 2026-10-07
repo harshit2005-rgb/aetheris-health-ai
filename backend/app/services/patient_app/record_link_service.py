@@ -63,6 +63,7 @@ from app.schemas.patient_app.account import (
 from app.services.auth_throttle import BucketKind, bucket
 from app.services.patient_app.common import ClientContext, patient_event
 from app.services.patient_app.errors import LinkMrnRequiredError, LinkUnavailableError
+from app.services.patient_app.hospital_gate import PatientHospitalGate
 
 if TYPE_CHECKING:
     import uuid
@@ -77,7 +78,6 @@ if TYPE_CHECKING:
     from app.repositories.patient_repository import PatientRepository
     from app.services.auth_throttle import Admission, AuthThrottle
     from app.services.patient_app.consent_service import ConsentService
-    from app.services.patient_app.hospital_gate import PatientHospitalGate
     from app.services.patient_service import PatientService
 
 __all__ = ["LinkOutcome", "RecordLinkService"]
@@ -689,6 +689,7 @@ class RecordLinkService:
         """A link that was just made or confirmed: by construction it is honoured."""
         return PatientLink(
             hospital_id=hospital.id,
+            hospital_ref=PatientHospitalGate.public_ref(hospital),
             hospital_name=hospital.name,
             linked_at=link.linked_at,
             suspended=False,

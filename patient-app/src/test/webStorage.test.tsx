@@ -1,7 +1,17 @@
 import { screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { fail, noContent, ok, serve } from '@/test/fakeApi'
-import { cityCare, me, otpRequested, PHONE_MASKED, PHONE_TYPED, verifiedSession } from '@/test/fixtures'
+import {
+  cityCare,
+  lakesideHospital,
+  manyHospitals,
+  me,
+  otpRequested,
+  PHONE_MASKED,
+  PHONE_TYPED,
+  verifiedSession,
+} from '@/test/fixtures'
+import { hospitalDirectory } from '@/test/hospitalDirectory'
 import { loadApp } from '@/test/renderApp'
 
 /**
@@ -53,5 +63,39 @@ describe('web storage', () => {
     expect(read.mock.calls).toEqual([[ROUTER_TRANSITIONS_KEY]])
     expect(window.localStorage).toHaveLength(0)
     expect(window.sessionStorage).toHaveLength(0)
+  })
+
+  it('is never touched by hospital discovery: search, filter, pages, a hospital, its doctors page, linking', async () => {
+    const read = vi.spyOn(Storage.prototype, 'getItem')
+    const touched = [
+      vi.spyOn(Storage.prototype, 'removeItem'),
+      vi.spyOn(Storage.prototype, 'clear'),
+      vi.spyOn(Storage.prototype, 'key'),
+    ]
+    serve({
+      'POST /auth/refresh': ok({ access_token: 'access-secret', expires_in: 900 }),
+      'GET /me': ok(me([cityCare])),
+      ...hospitalDirectory([lakesideHospital, ...manyHospitals(45)]),
+    })
+    // A reload in the middle of a search: the filters come from the URL, not from storage.
+    const { user } = loadApp('/hospitals?q=clinic&city=Bengaluru')
+
+    expect(await screen.findByRole('link', { name: 'Clinic 01' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findByRole('link', { name: 'Clinic 21' })).toBeInTheDocument()
+    await user.selectOptions(screen.getByRole('combobox', { name: 'City' }), 'Mysuru')
+    await user.click(screen.getByRole('button', { name: 'Clear search' }))
+    await user.click(await screen.findByRole('link', { name: 'Lakeside Clinic' }))
+    await user.click(await screen.findByRole('link', { name: 'View Doctors' }))
+    await screen.findByRole('heading', { name: 'Doctors at Lakeside Clinic' })
+    await user.click(screen.getByRole('link', { name: 'Back to Lakeside Clinic' }))
+    await user.click(await screen.findByRole('link', { name: 'Link my record' }))
+    expect(await screen.findByLabelText('Hospital code')).toHaveValue('lakeside-clinic')
+
+    for (const access of touched) expect(access).not.toHaveBeenCalled()
+    expect(read.mock.calls).toEqual([[ROUTER_TRANSITIONS_KEY]])
+    expect(window.localStorage).toHaveLength(0)
+    expect(window.sessionStorage).toHaveLength(0)
+    expect(document.cookie).toBe('')
   })
 })

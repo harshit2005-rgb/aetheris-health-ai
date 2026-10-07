@@ -12,12 +12,14 @@ See :mod:`app.main` for registration.
 from fastapi import APIRouter
 
 from app.api.v1.patient.auth import router as auth_router
+from app.api.v1.patient.hospitals import router as hospitals_router
 from app.api.v1.patient.links import router as links_router
 from app.api.v1.patient.me import router as me_router
 
 router = APIRouter(prefix="/patient")
 router.include_router(auth_router)
 router.include_router(me_router)
+router.include_router(hospitals_router)
 router.include_router(links_router)
 
 __all__ = ["router"]

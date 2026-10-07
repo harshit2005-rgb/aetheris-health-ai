@@ -1,4 +1,4 @@
-import { Building2, LogOut, Plus } from 'lucide-react'
+import { Building2, LogOut, Plus, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Alert, Button, EmptyState, Skeleton } from '@atheris/ui'
 import { useSignOut } from '@/api/auth'
@@ -6,8 +6,9 @@ import { useMe, type HospitalLink } from '@/api/me'
 import { formatDay } from '@/lib/format'
 import { usePageTitle } from '@/lib/usePageTitle'
 import { homeStrings as S } from '@/pages/home/strings'
+import { hospitalPath } from '@/pages/hospitals/paths'
 
-/** Home: who is signed in and which hospital records are linked. */
+/** Home: who is signed in, the way to hospital discovery, and the linked hospital records. */
 export function HomePage() {
   usePageTitle(S.title)
   const me = useMe()
@@ -24,6 +25,21 @@ export function HomePage() {
             {S.signedInAs} <span className="text-on-surface font-semibold">{me.data.account.phone_masked}</span>
           </p>
         )}
+      </section>
+
+      <section aria-labelledby="find-heading" className="bg-card space-y-3 rounded-2xl border p-5">
+        <div className="space-y-1">
+          <h2 id="find-heading" className="font-display text-title-lg text-primary">
+            {S.findHeading}
+          </h2>
+          <p className="text-body-sm text-on-surface-variant">{S.findBody}</p>
+        </div>
+        <Button asChild size="touch" className="w-full">
+          <Link to="/hospitals">
+            <Search aria-hidden />
+            {S.findCta}
+          </Link>
+        </Button>
       </section>
 
       <section aria-labelledby="hospitals-heading" className="space-y-4">
@@ -91,13 +107,22 @@ export function HomePage() {
 
 function HospitalCard({ link }: { link: HospitalLink }) {
   return (
-    <li className="bg-card rounded-2xl border p-4">
+    <li className="bg-card relative rounded-2xl border p-4">
       <div className="flex items-start gap-3">
         <span className="bg-secondary-fixed/50 text-secondary flex size-11 shrink-0 items-center justify-center rounded-xl">
           <Building2 className="size-5" aria-hidden />
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-body-lg text-on-surface font-semibold break-words">{link.hospital_name}</p>
+          <p className="text-body-lg text-on-surface font-semibold break-words">
+            {link.hospital_ref ? (
+              // Stretched over the card, so the whole card opens the hospital's page.
+              <Link to={hospitalPath(link.hospital_ref)} className="after:absolute after:inset-0 after:rounded-2xl">
+                {link.hospital_name}
+              </Link>
+            ) : (
+              link.hospital_name
+            )}
+          </p>
           <p className="text-body-sm text-on-surface-variant">{S.linkedOn(formatDay(link.linked_at))}</p>
         </div>
         <span

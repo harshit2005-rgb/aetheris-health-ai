@@ -5,6 +5,8 @@ import { http } from '@/api/client'
 /** One hospital record this account is linked to. */
 export interface HospitalLink {
   hospital_id: string
+  /** The hospital's public reference: where its page in the app lives. Null if it has none. */
+  hospital_ref: string | null
   hospital_name: string
   linked_at: string
   /**

@@ -156,6 +156,7 @@ class PatientAuthorization:
             views.append(
                 PatientLink(
                     hospital_id=hospital.id,
+                    hospital_ref=self._gate.public_ref(hospital),
                     hospital_name=hospital.name,
                     linked_at=link.linked_at,
                     suspended=not bound,

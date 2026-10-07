@@ -25,6 +25,35 @@ export const ok = (data: unknown, status = 200): Outcome => ({
   data: { success: true, message: 'ok', data, metadata: { request_id: 'req-test' } },
 })
 
+/** A page of a list, as `paginated_envelope` in `backend/app/core/envelope.py` builds it. */
+export const okPage = (items: unknown[], page = 1, pageSize = 20, total = items.length): Outcome => ({
+  status: 200,
+  data: {
+    success: true,
+    message: 'ok',
+    data: items,
+    metadata: {
+      request_id: 'req-test',
+      pagination: { page, page_size: pageSize, total_records: total, total_pages: Math.ceil(total / pageSize) },
+    },
+  },
+})
+
+/**
+ * An answer the test gives later, to look at what is on screen in the
+ * meantime. It is safe to give before the request has even been made.
+ */
+export function deferred(): { handler: Handler; answer: (outcome: Outcome) => void } {
+  let answer: (outcome: Outcome) => void = () => {}
+  const outcome = new Promise<Outcome>((resolve) => (answer = resolve))
+  return { handler: () => outcome, answer }
+}
+
+/** A request that never gets an answer: no network, or a server that cannot be reached. */
+export const unreachable: Handler = (config) => {
+  throw new AxiosError('Network Error', 'ERR_NETWORK', config)
+}
+
 /** A 204: no envelope, no body. */
 export const noContent = (): Outcome => ({ status: 204, data: '' })
 

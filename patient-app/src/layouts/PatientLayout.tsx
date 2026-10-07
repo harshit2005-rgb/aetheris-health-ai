@@ -1,11 +1,13 @@
-import { Building2, House, type LucideIcon } from 'lucide-react'
+import { Building2, Hospital, House, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { cn } from '@atheris/ui'
 import { Brand } from '@/components/Brand'
 
-const NAV: { to: string; label: string; icon: LucideIcon }[] = [
-  { to: '/', label: 'Home', icon: House },
-  { to: '/link-patient', label: 'Link hospital', icon: Building2 },
+/** `end`: current only on that exact path. Hospitals stays current on a hospital's own pages. */
+const NAV: { to: string; label: string; icon: LucideIcon; end: boolean }[] = [
+  { to: '/', label: 'Home', icon: House, end: true },
+  { to: '/hospitals', label: 'Hospitals', icon: Hospital, end: false },
+  { to: '/link-patient', label: 'Link hospital', icon: Building2, end: true },
 ]
 
 /**
@@ -30,11 +32,11 @@ export function PatientLayout() {
         className="bg-surface-container-lowest fixed inset-x-0 bottom-0 z-10 border-t pb-[env(safe-area-inset-bottom)]"
       >
         <ul className="mx-auto flex w-full max-w-xl">
-          {NAV.map(({ to, label, icon: Icon }) => (
+          {NAV.map(({ to, label, icon: Icon, end }) => (
             <li key={to} className="flex-1">
               <NavLink
                 to={to}
-                end
+                end={end}
                 className={({ isActive }) =>
                   cn(
                     'text-body-sm flex min-h-14 flex-col items-center justify-center gap-0.5 font-medium',

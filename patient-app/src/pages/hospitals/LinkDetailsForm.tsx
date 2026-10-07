@@ -47,12 +47,14 @@ const FAILURE_MESSAGE: Record<Exclude<LinkFailure, 'mrn_required' | 'not_found'>
 }
 
 interface LinkDetailsFormProps {
+  /** A code to start with, when the patient came from a hospital's page. */
+  initialHospitalCode?: string
   onDone: (outcome: LinkSuccess) => void
   onRegister: (attempt: LinkAttempt) => void
 }
 
 /** Hospital code + date of birth, and the MRN once the server asks for it. */
-export function LinkDetailsForm({ onDone, onRegister }: LinkDetailsFormProps) {
+export function LinkDetailsForm({ initialHospitalCode = '', onDone, onRegister }: LinkDetailsFormProps) {
   const link = useLinkPatient()
   const [submitted, setSubmitted] = useState<Submitted | null>(null)
   // The MRN is asked for only for the exact details the server asked it for.
@@ -65,7 +67,7 @@ export function LinkDetailsForm({ onDone, onRegister }: LinkDetailsFormProps) {
     formState: { errors },
   } = useForm<LinkValues>({
     resolver: zodResolver(schema),
-    defaultValues: { hospitalCode: '', dateOfBirth: '', mrn: '', consent: false },
+    defaultValues: { hospitalCode: initialHospitalCode, dateOfBirth: '', mrn: '', consent: false },
   })
 
   const [hospitalCode, dateOfBirth] = useWatch({ control, name: ['hospitalCode', 'dateOfBirth'] })

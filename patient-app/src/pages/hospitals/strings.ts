@@ -74,3 +74,67 @@ export const genderLabels: Record<Gender, string> = {
   other: 'Other',
   unspecified: 'Prefer not to say',
 }
+
+/** User-facing strings of hospital discovery: the list and one hospital's page. */
+export const hospitalStrings = {
+  listTitle: 'Find a hospital',
+  listHeading: 'Find a hospital',
+  listIntro: 'Search the hospitals that are available in this app.',
+  searchFormLabel: 'Find a hospital',
+  searchLabel: 'Search by hospital name',
+  clearSearch: 'Clear search',
+  cityLabel: 'City',
+  allCities: 'All cities',
+
+  resultsHeading: 'Hospitals',
+  loading: 'Loading hospitals…',
+  // The position in the results, exactly as the server reported it.
+  count: (total: number) => (total === 1 ? '1 hospital' : `${total} hospitals`),
+  range: (from: number, to: number, total: number) => `Showing ${from}–${to} of ${total} hospitals`,
+  paginationLabel: 'Pages of hospitals',
+  pageOf: (page: number, pages: number) => `Page ${page} of ${pages}`,
+  previous: 'Previous',
+  next: 'Next',
+
+  // Two different kinds of nothing: none exist, or none match.
+  noneStatus: 'No hospitals to show',
+  noneTitle: 'No hospitals to show yet',
+  noneBody: 'No hospital is available in the app right now. Please check again later.',
+  noMatchStatus: 'No hospitals match',
+  noMatchTitle: 'No hospitals match your search',
+  noMatchBody: 'Check the spelling, or clear the search and the city to see every hospital.',
+  clearFilters: 'Clear search and city',
+  pastEndStatus: 'Nothing on this page',
+  pastEndTitle: 'There is nothing on this page',
+  pastEndBody: (total: number) =>
+    total === 1 ? 'There is 1 hospital in all, on the first page.' : `There are ${total} hospitals in all, on earlier pages.`,
+  firstPage: 'Go to the first page',
+
+  listFailed: 'We could not load the hospitals. Please try again.',
+  hospitalFailed: 'We could not load this hospital. Please try again.',
+  offlineTitle: 'No connection',
+  offlineBody: 'We could not reach the server. Check your internet connection and try again.',
+  policiesPending: 'We cannot show this in the app right now. Please try again later.',
+  busy: 'Too many requests. Please wait a moment and try again.',
+  retry: 'Try again',
+
+  linked: 'Linked',
+  // Paid placement, whenever it exists, is always said out loud.
+  sponsored: 'Sponsored',
+
+  detailTitle: 'Hospital',
+  loadingHospital: 'Loading hospital…',
+  allHospitals: 'All hospitals',
+  logoAlt: (name: string) => `${name} logo`,
+  addressLabel: 'Address',
+  phoneLabel: 'Phone',
+  timezoneLabel: 'Time zone',
+  linkedNote: 'Your record at this hospital is linked to your account.',
+  viewDoctors: 'View Doctors',
+  linkRecord: 'Link my record',
+
+  // One neutral message for "no such hospital" and "not available in the app".
+  notFoundTitle: 'This hospital is not available',
+  notFoundBody: 'It may not be available in the app, or the link you followed may be wrong.',
+  browseHospitals: 'Browse hospitals',
+} as const

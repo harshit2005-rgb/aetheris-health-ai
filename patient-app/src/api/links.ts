@@ -1,6 +1,7 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toApiError, type ApiResponse } from '@atheris/api-core'
 import { api, http } from '@/api/client'
+import { hospitalKeys } from '@/api/hospitals'
 import { meKeys } from '@/api/me'
 import { CONSENT_POLICY_VERSION } from '@/lib/consent'
 
@@ -49,18 +50,28 @@ async function linkPatient(input: LinkInput): Promise<LinkOutcome> {
   }
 }
 
+/**
+ * A new link changes two things the app has already read: the account's links,
+ * and the `linked` mark on that hospital wherever it is listed.
+ */
+function useRefreshLinks() {
+  const queryClient = useQueryClient()
+  return () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: meKeys.me }),
+      queryClient.invalidateQueries({ queryKey: hospitalKeys.all }),
+    ])
+}
+
 /** Link this account to the patient's existing record at one hospital. */
 export function useLinkPatient() {
-  const queryClient = useQueryClient()
-  return useMutation({
-    mutationFn: linkPatient,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: meKeys.me }),
-  })
+  const refreshLinks = useRefreshLinks()
+  return useMutation({ mutationFn: linkPatient, onSuccess: refreshLinks })
 }
 
 /** Register as a new patient at one hospital, when no record matched. */
 export function useRegisterPatient() {
-  const queryClient = useQueryClient()
+  const refreshLinks = useRefreshLinks()
   return useMutation({
     mutationFn: (input: RegisterInput) =>
       http.post<unknown>(hospitalPath(input.hospitalRef, 'register'), {
@@ -70,6 +81,6 @@ export function useRegisterPatient() {
         gender: input.gender,
         consent_policy_version: CONSENT_POLICY_VERSION,
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: meKeys.me }),
+    onSuccess: refreshLinks,
   })
 }

@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { CircleCheck } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { Button } from '@atheris/ui'
 import { usePageTitle } from '@/lib/usePageTitle'
 import { LinkDetailsForm } from '@/pages/hospitals/LinkDetailsForm'
+import { hospitalCodeFrom } from '@/pages/hospitals/linkState'
 import type { LinkAttempt, LinkSuccess } from '@/pages/hospitals/outcomes'
 import { RegisterForm } from '@/pages/hospitals/RegisterForm'
 import { linkStrings as S } from '@/pages/hospitals/strings'
@@ -22,10 +23,14 @@ const DONE: Record<LinkSuccess, { title: string; body: string }> = {
 /**
  * Link this account to a hospital record: details first; registration as a
  * confirmed second step only when the hospital has no record to link.
+ *
+ * Arriving from a hospital's page, that hospital's code is already filled in;
+ * it is a starting value, and the patient can still type another.
  */
 export function LinkPatientPage() {
   usePageTitle(S.title)
   const [step, setStep] = useState<Step>({ name: 'details' })
+  const hospitalCode = hospitalCodeFrom(useLocation().state)
 
   if (step.name === 'done') {
     const { title, body } = DONE[step.outcome]
@@ -53,6 +58,7 @@ export function LinkPatientPage() {
 
   return (
     <LinkDetailsForm
+      initialHospitalCode={hospitalCode}
       onDone={(outcome) => setStep({ name: 'done', outcome })}
       onRegister={(attempt) => setStep({ name: 'register', attempt })}
     />

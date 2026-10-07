@@ -7,7 +7,15 @@ import { renderApp, signIn } from '@/test/renderApp'
 const LOGIN_HEADING = 'Sign in with your mobile number'
 
 describe('route guards', () => {
-  it.each(['/', '/link-patient', '/no-such-page'])('sends a visitor at %s to the sign-in page', async (path) => {
+  it.each([
+    '/',
+    '/link-patient',
+    '/hospitals',
+    '/hospitals?q=care&city=Bengaluru&page=2',
+    '/hospitals/city-care',
+    '/hospitals/city-care/doctors',
+    '/no-such-page',
+  ])('sends a visitor at %s to the sign-in page', async (path) => {
     const api = serve({})
     const { router } = renderApp(path)
 
