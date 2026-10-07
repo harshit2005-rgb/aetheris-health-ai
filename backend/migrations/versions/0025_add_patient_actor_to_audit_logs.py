@@ -1,7 +1,7 @@
 """add patient actor to audit logs
 
-Revision ID: 0024
-Revises: 0023
+Revision ID: 0025
+Revises: 0024
 Create Date: 2026-10-07 10:30:00.000000
 
 Adds ``audit_logs.patient_account_id``.
@@ -37,8 +37,8 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 # revision identifiers, used by Alembic.
-revision: str = "0024"
-down_revision: str | None = "0023"
+revision: str = "0025"
+down_revision: str | None = "0024"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

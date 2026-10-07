@@ -1,11 +1,11 @@
 """create patient account links
 
-Revision ID: 0022
-Revises: 0021
+Revision ID: 0023
+Revises: 0022
 Create Date: 2026-10-07 10:10:00.000000
 
 Adds ``patient_account_links``: the verified statement that a patient account
-(migration 0021) may act as one patient record
+(migration 0022) may act as one patient record
 (``docs/modules/15-patient-app.md`` §4).
 
 The link is a table of its own, and not a column on either side, because one
@@ -44,8 +44,8 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 # revision identifiers, used by Alembic.
-revision: str = "0022"
-down_revision: str | None = "0021"
+revision: str = "0023"
+down_revision: str | None = "0022"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

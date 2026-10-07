@@ -1,7 +1,7 @@
 """normalize staff email identity
 
-Revision ID: 0018
-Revises: 0017
+Revision ID: 0019
+Revises: 0018
 Create Date: 2026-10-06 22:00:00.000000
 
 Makes a staff email name exactly one live account on the platform.
@@ -56,8 +56,8 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Connection
 
 # revision identifiers, used by Alembic.
-revision: str = "0018"
-down_revision: str | None = "0017"
+revision: str = "0019"
+down_revision: str | None = "0018"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

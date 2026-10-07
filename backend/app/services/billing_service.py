@@ -393,6 +393,13 @@ class BillingService:
         hand. Returns ``None`` in that case, and when the appointment cannot be
         found.
 
+        The exception is an invoice another module's charge raised while the
+        consultation was still going on (:meth:`add_charges`): a lab test
+        ordered or a medicine dispensed mid-visit. That invoice does not yet
+        carry the fee, so the fee is added to it here, once. If it has been
+        issued in the meantime its lines are frozen (AC-1) and the fee goes on
+        a draft of its own.
+
         The consultation line is not taxed. Whether a hospital's consultations
         are taxable is not something the catalog records for a doctor's fee, so
         the line is drafted untaxed and left for billing staff to correct.
@@ -415,7 +422,15 @@ class BillingService:
         existing = await self._invoices.get_live_invoice_for_appointment(
             hospital_id, appointment_id
         )
-        if existing is not None:
+        owed: Invoice | None = None
+        if existing is not None and existing.consultation_fee_pending:
+            # Lock before trusting the marker: a second completion of the same
+            # visit may be adding the fee right now.
+            owed = await self._invoices.get_invoice_for_update(hospital_id, existing.id)
+            if owed is not None and owed.status is InvoiceStatus.VOID:
+                # Voided while we waited: the visit has no live invoice now.
+                existing = owed = None
+        if existing is not None and (owed is None or not owed.consultation_fee_pending):
             logger.info(
                 "invoice.draft_skipped",
                 hospital_id=str(hospital_id),
@@ -439,12 +454,28 @@ class BillingService:
             }
         ]
         totals = compute_invoice_totals([amounts])
+        currency, _, _ = await self._hospital_billing_context(hospital_id)
+
+        if owed is not None and owed.status is InvoiceStatus.DRAFT:
+            await self._append_charges(owed, lines, [amounts], "appointment", actor_id)
+            invoice = await self._invoices.update_invoice(
+                owed, updated_by=actor_id, consultation_fee_pending=False
+            )
+            await self._session.commit()
+            return InvoiceResponse.from_model(invoice, currency=currency)
+
+        if owed is not None:
+            # Issued before the visit ended. The fee is no longer owed to this
+            # invoice, and only one live invoice may point at a visit.
+            await self._invoices.update_invoice(
+                owed, updated_by=actor_id, consultation_fee_pending=False
+            )
 
         try:
             invoice = await self._insert_draft(
                 hospital_id=hospital_id,
                 patient_id=appointment.patient_id,
-                appointment_id=appointment_id,
+                appointment_id=appointment_id if owed is None else None,
                 notes=None,
                 lines=lines,
                 totals=totals,
@@ -464,7 +495,6 @@ class BillingService:
         await self._record_drafted(invoice, actor_id=actor_id, source="appointment")
         await self._session.commit()
 
-        currency, _, _ = await self._hospital_billing_context(hospital_id)
         return InvoiceResponse.from_model(invoice, currency=currency)
 
     async def update_invoice(
@@ -1086,6 +1116,10 @@ class BillingService:
         visit has no invoice yet, standalone when its invoice has already been
         issued, because an issued invoice's lines are frozen (AC-1).
 
+        A draft raised here for a visit is marked as still owing the
+        consultation fee, which :meth:`draft_from_appointment` adds when the
+        visit completes.
+
         **Does not commit.** The charge belongs to the caller's transaction, so
         a test is never ordered without being charged, nor charged without
         being ordered.
@@ -1141,6 +1175,7 @@ class BillingService:
                 lines=lines,
                 totals=compute_invoice_totals(amounts),
                 actor_id=actor_id,
+                consultation_fee_pending=appointment_id is not None and visit_invoice is None,
             )
         except DuplicateAppointmentInvoiceError:
             # The visit gained an invoice between the check and the insert.
@@ -1586,6 +1621,7 @@ class BillingService:
         lines: Sequence[dict[str, Any]],
         totals: InvoiceTotals,
         actor_id: uuid.UUID | None,
+        consultation_fee_pending: bool = False,
     ) -> Invoice:
         """Insert a draft, translating a lost appointment race into a 409.
 
@@ -1607,6 +1643,7 @@ class BillingService:
                     tax_amount=totals.tax_amount,
                     total=totals.total,
                     created_by=actor_id,
+                    consultation_fee_pending=consultation_fee_pending,
                 )
         except IntegrityError as exc:
             if appointment_id is not None and "uq_invoices_live_appointment" in str(

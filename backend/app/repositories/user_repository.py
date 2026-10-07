@@ -127,7 +127,7 @@ class UserRepository(BaseRepository[User]):
 
         Fails closed. Soft-deleted users are never returned. If the address
         unexpectedly names more than one live account — which the unique index
-        from migration 0018 forbids, but which must not be trusted blindly —
+        from migration 0019 forbids, but which must not be trusted blindly —
         nobody is returned and the anomaly is logged. Authentication must
         never pick one of several candidates, and must never raise.
 
@@ -219,7 +219,7 @@ class UserRepository(BaseRepository[User]):
         An address is unavailable when:
 
         * any live user on the platform — in any hospital — already has it
-          (the platform-wide identity rule, migration 0018); or
+          (the platform-wide identity rule, migration 0019); or
         * any user of ``hospital_id``, including a soft-deleted one, has it —
           the older per-hospital constraint still covers deleted rows.
 

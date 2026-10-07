@@ -1,4 +1,4 @@
-"""Migrations 0021–0024 — the Patient App tables and the patient audit actor.
+"""Migrations 0022–0025 — the Patient App tables and the patient audit actor.
 
 Run against scratch databases that each test creates and drops (the harness in
 ``test_staff_email_migration.py``). They check that the tables the models
@@ -31,11 +31,11 @@ if TYPE_CHECKING:
 
 pytestmark = pytest.mark.database
 
-BEFORE = "0020"
-IDENTITY = "0021"
-LINKS = "0022"
-CONSENT = "0023"
-AUDIT = "0024"
+BEFORE = "0021"
+IDENTITY = "0022"
+LINKS = "0023"
+CONSENT = "0024"
+AUDIT = "0025"
 
 IDENTITY_TABLES = {
     "patient_accounts",

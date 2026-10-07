@@ -1,7 +1,7 @@
 """create patient identity tables
 
-Revision ID: 0021
-Revises: 0020
+Revision ID: 0022
+Revises: 0021
 Create Date: 2026-10-07 10:00:00.000000
 
 Adds the Patient App's login identity (``docs/modules/15-patient-app.md`` §4
@@ -17,7 +17,7 @@ row, a role or a permission, and none of these tables references ``users``.
 * ``patient_accounts`` — a login identity exists before it is linked to any
   hospital, and one person can be a patient at several. Putting a hospital on
   the account would make that impossible. What an account may see is decided
-  by ``patient_account_links`` (migration 0022), which *is* tenant data.
+  by ``patient_account_links`` (migration 0023), which *is* tenant data.
 * ``patient_otp_challenges`` — a code is requested for a phone number before
   any account exists, and requesting or verifying one never touches a
   hospital's data. The row holds a keyed hash of the code (HMAC-SHA-256 under
@@ -26,7 +26,7 @@ row, a role or a permission, and none of these tables references ``users``.
   only through it, exactly as ``refresh_tokens`` belongs to a staff user. Only
   the SHA-256 of the token is stored.
 * ``patient_devices`` — a browser that has completed a sign-in to an account;
-  the counterpart of ``trusted_devices`` (migration 0020). It decides only
+  the counterpart of ``trusted_devices`` (migration 0021). It decides only
   which throttle bucket a request for a code is charged to. Only the SHA-256
   of the cookie token is stored.
 
@@ -50,8 +50,8 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 # revision identifiers, used by Alembic.
-revision: str = "0021"
-down_revision: str | None = "0020"
+revision: str = "0022"
+down_revision: str | None = "0021"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

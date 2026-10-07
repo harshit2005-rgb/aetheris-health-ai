@@ -592,7 +592,7 @@ def _login_email_for(hospital: Hospital, email: str) -> str:
     """Return the login address a demo account gets in ``hospital``.
 
     A staff email names one account across the whole platform (migration
-    0018), so the same address cannot be seeded into two hospitals. The demo
+    0019), so the same address cannot be seeded into two hospitals. The demo
     hospital keeps the documented addresses; any other hospital gets the
     address tagged with its own slug, e.g. ``asha+city-clinic@example.com``.
 

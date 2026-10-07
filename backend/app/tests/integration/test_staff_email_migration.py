@@ -1,4 +1,4 @@
-"""Migration 0018 — staff email becomes a platform-wide identity.
+"""Migration 0019 — staff email becomes a platform-wide identity.
 
 These tests run the real Alembic migrations against **scratch databases** that
 each test creates and drops. Nothing here touches the suite's own test
@@ -31,9 +31,9 @@ pytestmark = pytest.mark.database
 
 SCRATCH_PREFIX = "aetheris_scratch_mig_"
 INDEX = "uq_users_email_normalized_active"
-BEFORE = "0017"
+BEFORE = "0018"
 #: The revision under test. Later migrations have their own tests.
-HEAD = "0018"
+HEAD = "0019"
 
 
 def _alembic(database_url: str, action: str, revision: str) -> None:

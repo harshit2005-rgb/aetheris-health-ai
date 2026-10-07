@@ -814,9 +814,9 @@ def _migration() -> ModuleType:
         Path(__file__).resolve().parents[3]
         / "migrations"
         / "versions"
-        / "0017_encrypt_mfa_secrets.py"
+        / "0018_encrypt_mfa_secrets.py"
     )
-    spec = importlib.util.spec_from_file_location("migration_0017", path)
+    spec = importlib.util.spec_from_file_location("migration_0018", path)
     assert spec is not None
     assert spec.loader is not None
     module = importlib.util.module_from_spec(spec)
@@ -842,8 +842,8 @@ async def _plaintext_rows(session: AsyncSession) -> int:
 class TestMigration:
     async def test_it_follows_the_last_migration(self) -> None:
         module = _migration()
-        assert module.revision == "0017"
-        assert module.down_revision == "0016"
+        assert module.revision == "0018"
+        assert module.down_revision == "0017"
 
     async def test_existing_plaintext_secrets_are_encrypted_and_still_work(
         self, db_session: AsyncSession, hospital_id: uuid.UUID

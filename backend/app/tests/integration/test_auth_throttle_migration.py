@@ -1,4 +1,4 @@
-"""Migrations 0019 and 0020 — throttle buckets and trusted devices.
+"""Migrations 0020 and 0021 — throttle buckets and trusted devices.
 
 Run against scratch databases that each test creates and drops (the harness in
 ``test_staff_email_migration.py``). They check that the tables the models
@@ -27,9 +27,9 @@ if TYPE_CHECKING:
 
 pytestmark = pytest.mark.database
 
-BEFORE = "0018"
-BUCKETS = "0019"
-DEVICES = "0020"
+BEFORE = "0019"
+BUCKETS = "0020"
+DEVICES = "0021"
 
 
 async def _tables(engine: AsyncEngine) -> set[str]:

@@ -1,13 +1,13 @@
 """create trusted devices
 
-Revision ID: 0020
-Revises: 0019
+Revision ID: 0021
+Revises: 0020
 Create Date: 2026-10-06 23:40:00.000000
 
 Adds ``trusted_devices``: browsers that have completed a full sign-in to an
 account.
 
-The authentication throttle (migration 0019) has to bound guessing that comes
+The authentication throttle (migration 0020) has to bound guessing that comes
 from many addresses at once, which means one budget per account shared by
 every source it does not recognise. On its own that budget would let an
 attacker with a handful of addresses keep an account's owner out. A browser
@@ -38,8 +38,8 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 # revision identifiers, used by Alembic.
-revision: str = "0020"
-down_revision: str | None = "0019"
+revision: str = "0021"
+down_revision: str | None = "0020"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

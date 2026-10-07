@@ -1,7 +1,7 @@
 """encrypt mfa secrets at rest
 
-Revision ID: 0017
-Revises: 0016
+Revision ID: 0018
+Revises: 0017
 Create Date: 2026-10-06 20:00:00.000000
 
 A data migration — no schema change. ``users.mfa_secret`` stays ``TEXT``; its
@@ -48,8 +48,8 @@ if TYPE_CHECKING:
     from sqlalchemy.engine import Connection
 
 # revision identifiers, used by Alembic.
-revision: str = "0017"
-down_revision: str | None = "0016"
+revision: str = "0018"
+down_revision: str | None = "0017"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -135,7 +135,7 @@ def refuse_downgrade_if_encrypted(connection: Connection) -> None:
         msg = (
             f"Refusing to downgrade: {encrypted} MFA secret(s) are encrypted, and this "
             "migration never writes them back as plaintext. Roll forward to a compatible "
-            "application version, or restore a backup taken before 0017 together with the "
+            "application version, or restore a backup taken before 0018 together with the "
             "application version that matches it. Nothing was changed."
         )
         raise RuntimeError(msg)

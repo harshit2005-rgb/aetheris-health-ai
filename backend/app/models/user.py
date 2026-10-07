@@ -55,7 +55,7 @@ class User(UUIDPrimaryKeyMixin, CommonColumnsMixin, Base):
 
     __table_args__ = (
         UniqueConstraint("hospital_id", "email", name="uq_users_hospital_email"),
-        # The effective identity rule (migration 0018): one live staff account
+        # The effective identity rule (migration 0019): one live staff account
         # per lower-cased email across the whole platform. Login takes an email
         # and no hospital, so an address must name exactly one account.
         Index(
@@ -119,7 +119,7 @@ class User(UUIDPrimaryKeyMixin, CommonColumnsMixin, Base):
     )
     # LEGACY, UNUSED. The next two columns belonged to the account lockout that
     # the authentication throttle replaced (app/services/auth_throttle.py,
-    # migration 0019). Nothing reads or writes them; an account cannot be
+    # migration 0020). Nothing reads or writes them; an account cannot be
     # "locked". They stay only so that the schema does not change under a
     # rollback, and are to be dropped in a later migration.
     failed_login_attempts: Mapped[int] = mapped_column(

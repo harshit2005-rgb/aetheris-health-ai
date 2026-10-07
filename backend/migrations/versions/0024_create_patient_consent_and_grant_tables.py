@@ -1,14 +1,14 @@
 """create patient consent and access grant tables
 
-Revision ID: 0023
-Revises: 0022
+Revision ID: 0024
+Revises: 0023
 Create Date: 2026-10-07 10:20:00.000000
 
 Adds ``patient_consent_records`` and ``patient_access_grants``, and the
 ``patient_record_category`` enum type the grants use
 (``docs/modules/15-patient-app.md`` §8).
 
-They answer two questions the record link (migration 0022) does not:
+They answer two questions the record link (migration 0023) does not:
 
 * **Purpose consent** — has the patient agreed to this specific use, under
   this version of the policy text? One row per account, purpose, hospital (or
@@ -50,8 +50,8 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
 # revision identifiers, used by Alembic.
-revision: str = "0023"
-down_revision: str | None = "0022"
+revision: str = "0024"
+down_revision: str | None = "0023"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
