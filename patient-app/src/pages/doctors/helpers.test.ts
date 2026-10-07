@@ -37,6 +37,9 @@ describe('doctor paths and references', () => {
     expect(doctorPath('city-care', REF)).toBe(`/hospitals/city-care/doctors/${REF}`)
     expect(doctorAvailabilityPath('city-care', REF)).toBe(`/hospitals/city-care/doctors/${REF}/availability`)
     expect(doctorPath('city-care', '../../me?x#y')).toBe('/hospitals/city-care/doctors/..%2F..%2Fme%3Fx%23y')
+    expect(doctorAvailabilityPath('city-care', '../../me?x#y', { date: '2026-10-08' })).toBe(
+      '/hospitals/city-care/doctors/..%2F..%2Fme%3Fx%23y/availability?date=2026-10-08',
+    )
   })
 
   it.each([REF, REF.toUpperCase(), '5f0c2a9e-7b1d-4c58-9e7a-2f6d1b3c4a55'])('takes %s for a reference', (ref) => {

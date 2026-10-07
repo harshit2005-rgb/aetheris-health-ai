@@ -760,6 +760,9 @@ describe('KEYBOARD and SCREEN READER — the basics of using discovery without a
     ['the doctors page', '/hospitals/city-care/doctors'],
     ['a doctor', `/hospitals/city-care/doctors/${ashaRao.ref}`],
     ['the availability page', `/hospitals/city-care/doctors/${ashaRao.ref}/availability`],
+    ['a later week of availability, with a slot chosen', `/hospitals/city-care/doctors/${ashaRao.ref}/availability?date=2026-10-15&slot=2026-10-15T09%3A00%3A00%2B05%3A30`],
+    ['the booking page', `/hospitals/city-care/doctors/${ashaRao.ref}/book?date=2026-10-09&start=2026-10-09T10%3A15%3A00%2B05%3A30&end=2026-10-09T10%3A30%3A00%2B05%3A30`],
+    ['the booking page with a link that is not valid', `/hospitals/city-care/doctors/${ashaRao.ref}/book?date=yesterday`],
   ])('on %s nothing jumps the tab order, every icon is hidden from a screen reader and every control has a name', async (_case, path) => {
     serve({ ...hospitalDirectory(THREE), ...doctorDirectory('city-care', [ashaRao, vikramShah]) })
     open(path)

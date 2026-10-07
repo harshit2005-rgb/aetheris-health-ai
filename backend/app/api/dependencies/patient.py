@@ -39,6 +39,7 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from app.api.dependencies.repositories import (
+    get_appointment_repository,
     get_auth_throttle_repository,
     get_doctor_repository,
     get_hospital_repository,
@@ -63,6 +64,7 @@ from app.core.tenancy import TenantScope, bind_tenant_scope
 from app.database.unit_of_work import UnitOfWork
 from app.models.patient_account import PatientAccount
 from app.repositories import (
+    AppointmentRepository,
     AuthThrottleRepository,
     DoctorRepository,
     HospitalRepository,
@@ -77,6 +79,7 @@ from app.repositories import (
 )
 from app.services.auth_throttle import AuthThrottle
 from app.services.patient_app.access_grant_service import AccessGrantService
+from app.services.patient_app.availability_service import DoctorAvailabilityService
 from app.services.patient_app.common import ClientContext
 from app.services.patient_app.consent_service import ConsentService
 from app.services.patient_app.doctor_directory_service import HospitalDoctorDirectoryService
@@ -94,6 +97,7 @@ __all__ = [
     "get_access_grant_service",
     "get_client_context",
     "get_consent_service",
+    "get_doctor_availability_service",
     "get_doctor_directory_service",
     "get_hospital_directory_service",
     "get_patient_account",
@@ -283,6 +287,16 @@ def get_hospital_directory_service(
 ) -> HospitalDirectoryService:
     """Provide a :class:`HospitalDirectoryService`."""
     return HospitalDirectoryService(gate, authorization, consent)
+
+
+def get_doctor_availability_service(
+    gate: PatientHospitalGate = Depends(get_patient_hospital_gate),
+    doctors: DoctorRepository = Depends(get_doctor_repository),
+    appointments: AppointmentRepository = Depends(get_appointment_repository),
+    consent: ConsentService = Depends(get_consent_service),
+) -> DoctorAvailabilityService:
+    """Provide a :class:`DoctorAvailabilityService`."""
+    return DoctorAvailabilityService(gate, doctors, appointments, consent)
 
 
 def get_doctor_directory_service(

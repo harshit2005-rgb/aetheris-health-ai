@@ -71,10 +71,16 @@ export const routes: RouteObject[] = [
                 }),
               },
               {
-                // The entry point of availability and booking; it shows no slots yet.
                 path: '/hospitals/:hospitalRef/doctors/:doctorRef/availability',
                 lazy: async () => ({
                   Component: (await import('@/pages/doctors/DoctorAvailabilityPage')).DoctorAvailabilityPage,
+                }),
+              },
+              {
+                // Where "Continue to booking" leads; it shows the chosen slot and books nothing yet.
+                path: '/hospitals/:hospitalRef/doctors/:doctorRef/book',
+                lazy: async () => ({
+                  Component: (await import('@/pages/doctors/DoctorBookingPlaceholderPage')).DoctorBookingPlaceholderPage,
                 }),
               },
               {

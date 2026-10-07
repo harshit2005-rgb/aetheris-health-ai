@@ -30,9 +30,10 @@ from app.api.dependencies.patient import get_sms_sender
 from app.core.feature_flags import PATIENT_APP_ENABLED
 from app.core.sms import SmsDeliveryError, SmsMessage
 from app.main import create_app
+from app.models.appointment import Appointment, AppointmentStatus, AppointmentType
 from app.models.audit_log import AuditLog
 from app.models.department import Department
-from app.models.doctor import Doctor, DoctorAvailability
+from app.models.doctor import Doctor, DoctorAvailability, DoctorLeave
 from app.models.hospital import Hospital
 from app.models.patient import Gender, Patient
 from app.models.user import User, UserStatus
@@ -58,12 +59,15 @@ __all__ = [
     "audit_rows",
     "bearer",
     "build_patient_application",
+    "insert_appointment",
     "insert_department",
     "insert_doctor",
     "insert_hospital",
+    "insert_leave",
     "insert_patient_record",
     "new_phone",
     "open_hospital",
+    "set_windows",
     "patient_client",
     "set_cookie_headers",
     "sign_in",
@@ -282,6 +286,78 @@ async def insert_doctor(
         await session.flush()
     await session.commit()
     return doctor
+
+
+async def set_windows(
+    session: AsyncSession, doctor: Doctor, windows: list[tuple[int, time, time, int]]
+) -> None:
+    """Replace a doctor's weekly windows: ``(day_of_week, start, end, slot_minutes)`` each."""
+    from sqlalchemy import delete
+
+    await session.execute(
+        delete(DoctorAvailability).where(DoctorAvailability.doctor_id == doctor.id)
+    )
+    for day_of_week, start, end, minutes in windows:
+        session.add(
+            DoctorAvailability(
+                id=uuid.uuid4(),
+                doctor_id=doctor.id,
+                hospital_id=doctor.hospital_id,
+                day_of_week=day_of_week,
+                start_time=start,
+                end_time=end,
+                slot_duration_minutes=minutes,
+            )
+        )
+    await session.flush()
+    await session.commit()
+
+
+async def insert_leave(
+    session: AsyncSession, doctor: Doctor, starts_at: datetime, ends_at: datetime
+) -> DoctorLeave:
+    """Put a doctor on leave between two instants."""
+    leave = DoctorLeave(
+        id=uuid.uuid4(),
+        doctor_id=doctor.id,
+        hospital_id=doctor.hospital_id,
+        starts_at=starts_at,
+        ends_at=ends_at,
+        reason="LEAVECANARY private reason",
+    )
+    session.add(leave)
+    await session.flush()
+    await session.commit()
+    return leave
+
+
+async def insert_appointment(
+    session: AsyncSession,
+    doctor: Doctor,
+    patient_id: uuid.UUID,
+    starts_at: datetime,
+    ends_at: datetime,
+    *,
+    status: AppointmentStatus = AppointmentStatus.BOOKED,
+    hospital_id: uuid.UUID | None = None,
+) -> Appointment:
+    """Book a doctor for another patient, in any lifecycle state."""
+    appointment = Appointment(
+        id=uuid.uuid4(),
+        hospital_id=hospital_id or doctor.hospital_id,
+        patient_id=patient_id,
+        doctor_id=doctor.id,
+        scheduled_start=starts_at,
+        scheduled_end=ends_at,
+        status=status,
+        type=AppointmentType.NEW,
+        reason="APPTCANARY another patient's reason",
+        notes="NOTESCANARY reception notes",
+    )
+    session.add(appointment)
+    await session.flush()
+    await session.commit()
+    return appointment
 
 
 async def insert_department(

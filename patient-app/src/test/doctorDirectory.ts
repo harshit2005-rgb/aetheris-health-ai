@@ -1,4 +1,5 @@
 import type { PatientDepartment, PatientDoctor } from '@/api/doctors'
+import { availabilityRoute, type FakeSchedule } from '@/test/availability'
 import { ok, okPage, type Routes } from '@/test/fakeApi'
 
 const lower = (value: unknown) => String(value ?? '').toLowerCase()
@@ -16,8 +17,15 @@ const lower = (value: unknown) => String(value ?? '').toLowerCase()
  * - `GET /hospitals/{ref}/doctors/{doctor}` — one route per doctor; any other
  *   reference is left unrouted on purpose, so a test must say what an unknown
  *   one answers.
+ * - `GET /hospitals/{ref}/doctors/{doctor}/availability` — one route per
+ *   doctor, over `schedule` (see `src/test/availability.ts`).
  */
-export function doctorDirectory(hospitalRef: string, doctors: PatientDoctor[], described: PatientDepartment[] = []): Routes {
+export function doctorDirectory(
+  hospitalRef: string,
+  doctors: PatientDoctor[],
+  described: PatientDepartment[] = [],
+  schedule: Partial<FakeSchedule> = {},
+): Routes {
   const base = `GET /hospitals/${hospitalRef}`
   const ordered = [...doctors].sort((a, b) => lower(a.name).localeCompare(lower(b.name)) || a.ref.localeCompare(b.ref))
   const departments = [...new Map(ordered.flatMap((d) => (d.department ? [[d.department.ref, d.department]] : []))).values()]
@@ -41,5 +49,6 @@ export function doctorDirectory(hospitalRef: string, doctors: PatientDoctor[], d
     },
     [`${base}/departments`]: ok({ departments }),
     ...Object.fromEntries(ordered.map((d) => [`${base}/doctors/${d.ref}`, ok(d)])),
+    ...Object.assign({}, ...ordered.map((d) => availabilityRoute(hospitalRef, d.ref, schedule))),
   }
 }

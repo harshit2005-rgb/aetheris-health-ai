@@ -1,6 +1,7 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import { onlineManager } from '@tanstack/react-query'
 import { afterEach, describe, expect, it } from 'vitest'
+import { availabilityRoute } from '@/test/availability'
 import { doctorDirectory } from '@/test/doctorDirectory'
 import { deferred, fail, headerOf, ok, serve, unreachable, type Outcome, type Routes } from '@/test/fakeApi'
 import { ashaRao, cardiology, cityCareHospital, doctor, lakesideHospital, meeraIyer, orthopaedics, vikramShah } from '@/test/fixtures'
@@ -398,36 +399,10 @@ describe('doctor discovery — one doctor', () => {
 })
 
 describe('doctor discovery — availability, the next step', () => {
-  it('says plainly that availability and booking are not in the app yet, and leads back', async () => {
-    const api = serve(cityCareWith())
-    open(`${ASHA_PATH}/availability`)
-
-    expect(await title('Availability')).toBeInTheDocument()
-    expect(screen.getByText('Asha Rao')).toBeInTheDocument()
-    expect(screen.getByText('City Care Hospital')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 2, name: 'Availability and booking are not in the app yet' })).toBeInTheDocument()
-    expect(
-      screen.getByText(
-        'You cannot see when this doctor is available or book an appointment in the app yet. For now, please contact the hospital directly.',
-      ),
-    ).toBeInTheDocument()
-    expect(document.title).toBe('Availability · Atheris Health')
-
-    // Two ways back to the profile, and one to where the hospital's contact details are.
-    expect(screen.getByRole('link', { name: 'Back to Asha Rao' })).toHaveAttribute('href', ASHA_PATH)
-    expect(screen.getByRole('link', { name: 'Back to the profile' })).toHaveAttribute('href', ASHA_PATH)
-    expect(screen.getByRole('link', { name: 'Hospital contact details' })).toHaveAttribute('href', '/hospitals/city-care')
-    expect(within(main()).getAllByRole('link')).toHaveLength(3)
-
-    // The hospital and the doctor are all that is asked for: there is no availability endpoint to call.
-    expect(api.sent.map(routeOf)).toEqual([HOSPITAL, ASHA])
-    expect(api.sent.some((request) => /availab|slot|schedul|appointment|book/i.test(request.url ?? ''))).toBe(false)
-  })
-
-  it('NO FAKE SLOTS — no time, date, day, slot, count or promise of one, loading or loaded, whatever the response carries', async () => {
+  it('NO FAKE SLOTS — the profile shows no time, date, day, slot or count, whatever the doctor’s answer carries', async () => {
     const { handler, answer } = deferred()
     serve({ ...cityCareWith(), [ASHA]: handler })
-    open(`${ASHA_PATH}/availability`)
+    open()
 
     // While loading: placeholders for the page, and nothing that could be taken for a slot.
     expect(await screen.findByRole('status', { name: 'Loading doctor…' })).toBeInTheDocument()
@@ -445,28 +420,50 @@ describe('doctor discovery — availability, the next step', () => {
         slots_left: 4,
       }),
     )
-    await title('Availability')
+    await title('Asha Rao')
 
     expect(main().querySelector('[data-slot="skeleton"]')).toBeNull()
-    for (const role of ['list', 'listitem', 'table', 'grid', 'img', 'article', 'searchbox', 'combobox', 'button', 'radio', 'checkbox', 'textbox']) {
+    for (const role of ['table', 'grid', 'img', 'article', 'searchbox', 'combobox', 'button', 'radio', 'checkbox', 'textbox']) {
       expect(within(main()).queryByRole(role)).not.toBeInTheDocument()
     }
     expect(main().querySelector('input, select, textarea, time, form')).toBeNull()
     expect(main()).not.toHaveTextContent(SCHEDULE)
-    // Asha Rao's own name has no digit in it, so neither has the page.
-    expect(main()).not.toHaveTextContent(/\d/)
-    expect(main().innerHTML).not.toMatch(/2026|09:30|10:00|slots_left/)
+    expect(main().innerHTML).not.toMatch(/2026|09:30|10:00|slots_left|available_today/)
+    // The year of a degree is the only number of the doctor's own.
+    expect(main().textContent?.match(/\d+/g)).toEqual(['2008'])
   })
 
-  it('the only digits on the page are the ones in the doctor’s and the hospital’s own names', async () => {
-    const numbered = doctor({ name: 'Asha Rao 2nd', specialization: 'Unit 7 Cardiology' })
-    serve({ ...cityCareWith(), [HOSPITAL]: ok({ ...cityCareHospital, name: 'City Care 24' }), [ASHA]: ok(numbered) })
-    open(`${ASHA_PATH}/availability`)
-    await title('Availability')
+  it('the availability page shows what the availability endpoint returns, and nothing the doctor’s own answer carries', async () => {
+    const leakyDoctor = {
+      ...ashaRao,
+      slots: [{ start: '2026-10-08T09:30:00Z', end: '2026-10-08T09:45:00Z', status: 'available' }],
+      availability: { monday: ['09:30', '10:00'], next_available: 'Tomorrow 9:30 am' },
+      available_today: true,
+      slots_left: 4,
+    }
+    // The availability endpoint has one free slot in the whole week: Thursday at 14:00.
+    const api = serve({
+      ...cityCareWith(),
+      [ASHA]: ok(leakyDoctor),
+      ...availabilityRoute('city-care', ashaRao.ref, { slotsOn: (date) => (date === '2026-10-08' ? ['14:00'] : []) }),
+    })
+    const { user } = open()
+    await title('Asha Rao')
 
-    // The name, twice (the way back and under the heading), and the hospital's — and not the specialisation's.
-    expect(main().textContent?.match(/\d+/g)).toEqual(['2', '2', '24'])
-    expect(main()).not.toHaveTextContent(SCHEDULE)
+    await user.click(screen.getByRole('link', { name: 'View Availability' }))
+
+    expect(await title('Availability')).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /^14:00 to 14:15, Thursday 8 October 2026$/ })).toBeInTheDocument()
+    expect(screen.getByText('Asha Rao')).toBeInTheDocument()
+    expect(screen.getByText('City Care Hospital')).toBeInTheDocument()
+    expect(document.title).toBe('Availability · Atheris Health')
+    expect(screen.getByRole('link', { name: 'Back to Asha Rao' })).toHaveAttribute('href', ASHA_PATH)
+    // Nothing of the doctor's own "availability" is on the page: the endpoint's answer is the only one.
+    expect(main().innerHTML).not.toMatch(/09:30|10:00|Tomorrow|slots_left|available_today|next_available/)
+    expect(main()).not.toHaveTextContent(/4 (free )?slots/)
+    // The hospital, the doctor, and then — only once on the availability page — the availability, with no dates.
+    expect(api.sent.map(routeOf)).toEqual([HOSPITAL, ASHA, `${ASHA}/availability`])
+    expect(api.calls(`${ASHA}/availability`)[0].params).toBeUndefined()
   })
 })
 
@@ -494,6 +491,22 @@ describe('doctor discovery — navigation', () => {
     expect(await title('Availability')).toHaveFocus()
     expect(router.state.location.pathname).toBe(`${ASHA_PATH}/availability`)
 
+    // A day, a time, and on to booking.
+    await user.click(await screen.findByRole('button', { name: 'Friday 9 October 2026, 2 free slots' }))
+    await user.click(screen.getByRole('button', { name: /^10:15 to 10:30, Friday 9 October 2026$/ }))
+    await user.click(screen.getByRole('link', { name: 'Continue to booking' }))
+
+    expect(await title('Booking')).toHaveFocus()
+    expect(router.state.location.pathname).toBe(`${ASHA_PATH}/book`)
+    expect(screen.getByText('Friday 9 October 2026')).toBeInTheDocument()
+    expect(screen.getByText('10:15 – 10:30')).toBeInTheDocument()
+
+    // Back to the availability as it was left: the same day and time chosen.
+    await user.click(screen.getAllByRole('link', { name: 'Back to availability' })[0])
+    expect(await title('Availability')).toHaveFocus()
+    expect(router.state.location.search).toBe('?date=2026-10-09&slot=2026-10-09T10%3A15%3A00%2B05%3A30')
+    expect(await screen.findByRole('button', { name: /^10:15 to 10:30/ })).toHaveAttribute('aria-pressed', 'true')
+
     await user.click(screen.getByRole('link', { name: 'Back to Asha Rao' }))
     expect(await title('Asha Rao')).toHaveFocus()
 
@@ -504,8 +517,10 @@ describe('doctor discovery — navigation', () => {
     await user.click(screen.getByRole('link', { name: 'Back to City Care Hospital' }))
     expect(await title('City Care Hospital')).toHaveFocus()
 
-    // Each thing was read once and reused on the way: the hospital, the list, the departments, the doctor.
-    expect(api.sent.map(routeOf).sort()).toEqual([HOSPITAL, `${HOSPITAL}/departments`, LIST, ASHA].sort())
+    // Each thing was read once and reused on the way: the hospital, the list, the departments, the doctor, the availability.
+    expect(api.sent.map(routeOf).sort()).toEqual([HOSPITAL, `${HOSPITAL}/departments`, LIST, ASHA, `${ASHA}/availability`].sort())
+    // Nothing on the way booked, held or reserved anything.
+    expect(api.sent.every((request) => (request.method ?? 'get').toLowerCase() === 'get')).toBe(true)
   })
 
   it('BACK from a profile returns to the list as it was: the search, the department and the page', async () => {

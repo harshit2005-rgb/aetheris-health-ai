@@ -1,4 +1,4 @@
-/** User-facing strings of doctor discovery: a hospital's doctors, one doctor, and the way on to availability. */
+/** User-facing strings of doctor discovery: a hospital's doctors, one doctor, their availability, and the way on to booking. */
 export const doctorStrings = {
   title: 'Doctors',
   heading: (hospital: string) => `Doctors at ${hospital}`,
@@ -62,13 +62,66 @@ export const doctorStrings = {
   notFoundBody: 'They may not be listed in the app, or the link you followed may be wrong.',
   browseDoctors: 'Browse doctors',
 
-  availabilityTitle: 'Availability',
-  availabilityHeading: 'Availability',
-  // Said as it is: the app has no availability to show and no date for it.
-  availabilityUnavailableTitle: 'Availability and booking are not in the app yet',
-  availabilityUnavailableBody:
-    'You cannot see when this doctor is available or book an appointment in the app yet. For now, please contact the hospital directly.',
   backToProfile: 'Back to the profile',
   backToDoctor: (doctor: string) => `Back to ${doctor}`,
-  hospitalDetails: 'Hospital contact details',
+
+  // Availability: the free slots the server returned, on the hospital's clock, and nothing more.
+  availabilityTitle: 'Availability',
+  availabilityHeading: 'Availability',
+  loadingAvailability: 'Loading availability…',
+  // The zone is the server's text; it is shown as it is, inside this sentence.
+  timezoneNoteBefore: 'Times are in the hospital’s local time (',
+  timezoneNoteAfter: ')',
+  notReserved: 'Seeing a free slot does not reserve it — it can be taken until the booking is confirmed.',
+
+  daysHeading: 'Choose a day',
+  daysLabel: 'Days',
+  earlierDays: 'Earlier days',
+  laterDays: 'Later days',
+  windowRange: (from: string, to: string) => (from === to ? from : `${from} – ${to}`),
+  today: 'Today',
+  // On a day chip: how many free slots the server returned for that day.
+  slotCount: (count: number) => (count === 1 ? '1 slot' : `${count} slots`),
+  noSlotsOnChip: 'No slots',
+  dayLabel: (day: string, count: number) =>
+    `${day}, ${count === 0 ? 'no free slots' : count === 1 ? '1 free slot' : `${count} free slots`}`,
+
+  timesHeading: 'Choose a time',
+  timesLabel: (day: string) => `Times on ${day}`,
+  slotLabel: (from: string, to: string, day: string) => `${from} to ${to}, ${day}`,
+  // The live line under "Choose a time".
+  dayStatus: (count: number, day: string) =>
+    count === 0 ? `No free slots on ${day}` : count === 1 ? `1 free slot on ${day}` : `${count} free slots on ${day}`,
+  windowStatus: (from: string, to: string) => (from === to ? `No free slots on ${from}` : `No free slots from ${from} to ${to}`),
+  emptyDayTitle: 'No free slots on this day',
+  emptyDayBody: 'Choose another day, or look at the days after these.',
+  emptyWindowTitle: 'No free slots in these days',
+  emptyWindowBody: 'Look at the days before or after these, or check again later.',
+  // A slot that was in the address but is not among the free ones any more.
+  slotGone: 'That time is no longer free.',
+
+  availabilityFailed: 'We could not load the availability. Please try again.',
+  // The server refused the dates: the bookable days have moved on since the page was opened.
+  dateGoneTitle: 'This date is no longer available',
+  dateGoneBody: 'The days that can be booked have moved on. Start again from today.',
+  goToToday: 'Go to today',
+
+  selectionHeading: 'Your selection',
+  selectionHint: 'Choose a day and a time to continue.',
+  selectionSummary: (day: string, from: string, to: string) => `${day}, ${from} to ${to}`,
+  clearSelection: 'Clear selection',
+  continueToBooking: 'Continue to booking',
+
+  // The booking step itself is not in the app yet: the chosen slot is shown back, and nothing is reserved.
+  bookingTitle: 'Booking',
+  bookingHeading: 'Booking',
+  chosenTimeHeading: 'Your chosen time',
+  chosenDayLabel: 'Day',
+  chosenTimeLabel: 'Time',
+  bookingUnavailableTitle: 'Booking is not available in the app yet',
+  bookingUnavailableBody: 'This slot is not reserved. For now, please contact the hospital to book an appointment.',
+  invalidLinkTitle: 'This booking link is not valid',
+  invalidLinkBody: 'Choose a day and a time from the doctor’s availability to continue.',
+  backToAvailability: 'Back to availability',
+  goToAvailability: 'Go to availability',
 } as const

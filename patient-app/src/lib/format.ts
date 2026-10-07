@@ -10,6 +10,37 @@ export function isIsoDate(value: string): boolean {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
 }
 
+/**
+ * An instant written as ISO-8601 with its UTC offset (`Z` or `±hh:mm`), e.g.
+ * `2026-10-07T11:30:00+05:30`. A date alone, a time without an offset, or any
+ * other spelling `Date.parse` would accept is not one: an instant that does
+ * not say what clock it is on cannot be shown on any other.
+ */
+const ISO_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:\d{2})$/
+
+/** The epoch milliseconds of an ISO instant with an offset, or `null` for anything else. */
+export function parseInstant(value: string): number | null {
+  if (!ISO_INSTANT.test(value)) return null
+  const ms = Date.parse(value)
+  return Number.isNaN(ms) ? null : ms
+}
+
+/** A calendar date as a UTC instant at noon: safe from any zone's day boundary. */
+const noonOf = (date: string) =>
+  Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10)), 12)
+
+const DAY_MS = 86_400_000
+
+/** The calendar date `n` days after `date` (negative for before). */
+export function addDays(date: string, n: number): string {
+  return new Date(noonOf(date) + n * DAY_MS).toISOString().slice(0, 10)
+}
+
+/** Whole days from `from` to `to`; negative when `to` is earlier. */
+export function daysBetween(from: string, to: string): number {
+  return Math.round((noonOf(to) - noonOf(from)) / DAY_MS)
+}
+
 /** Today in the viewer's own calendar, as `YYYY-MM-DD`. */
 export function todayIsoDate(): string {
   const now = new Date()
