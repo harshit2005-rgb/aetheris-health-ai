@@ -26,6 +26,28 @@ bucket              shape      counts
 ``invite_resend``   budget     invitation emails sent again for one account
 ==================  =========  ====================================================
 
+The Patient App (``docs/modules/15-patient-app.md`` §5) counts in the same
+table, with kinds of its own that only the patient services use:
+
+========================  ======  ============================================
+bucket                    shape   counts
+========================  ======  ============================================
+``pt_otp_send_source``    budget  codes requested from one source, any number
+``pt_otp_send_pair``      budget  codes requested for one number from one source
+``pt_otp_send_phone``     budget  codes requested for one number from every
+                                  source that is not a recognised device of it;
+                                  and, in a key space of its own, codes
+                                  requested from every recognised device of
+                                  one account together
+``pt_otp_send_device``    budget  codes requested for one number from one of
+                                  its recognised devices
+``pt_otp_send_global``    budget  codes sent by the whole platform
+``pt_otp_verify_source``  budget  code verifications from one source
+``pt_link_attempt``       budget  record link or registration attempts by one
+                                  account at one hospital, per hour
+``pt_link_daily``         budget  the same attempts, per day
+========================  ======  ============================================
+
 A *backoff* bucket lets a few attempts through at once and then makes each
 further one wait twice as long as the last, up to a cap. A *budget* is an
 allowance that refills at a steady rate. Nothing is ever locked: when the wait
@@ -100,6 +122,15 @@ class BucketKind(StrEnum):
     SESSION_PW = "session_pw"
     SESSION_CODE = "session_code"
     INVITE_RESEND = "invite_resend"
+    # Patient App. Appended, so the lock order of the kinds above is unchanged.
+    PT_OTP_SEND_SOURCE = "pt_otp_send_source"
+    PT_OTP_SEND_PAIR = "pt_otp_send_pair"
+    PT_OTP_SEND_PHONE = "pt_otp_send_phone"
+    PT_OTP_SEND_DEVICE = "pt_otp_send_device"
+    PT_OTP_SEND_GLOBAL = "pt_otp_send_global"
+    PT_OTP_VERIFY_SOURCE = "pt_otp_verify_source"
+    PT_LINK_ATTEMPT = "pt_link_attempt"
+    PT_LINK_DAILY = "pt_link_daily"
 
 
 @dataclass(frozen=True, slots=True)
@@ -155,6 +186,35 @@ POLICIES: Final[dict[BucketKind, Backoff | Budget]] = {
     BucketKind.SESSION_PW: Backoff(free=5, base=_MINUTE, cap=30 * _MINUTE, quiet=2 * _HOUR),
     BucketKind.SESSION_CODE: Backoff(free=5, base=_MINUTE, cap=_HOUR, quiet=4 * _HOUR),
     BucketKind.INVITE_RESEND: Budget(burst=3, refill=10 * _MINUTE),
+    # ── Patient App ──────────────────────────────────────────────────────
+    # Every code that is sent costs money, so sends are budgets and a
+    # successful sign-in gives nothing back. One source asking for codes for
+    # many numbers: sized for a clinic's waiting room behind one address.
+    BucketKind.PT_OTP_SEND_SOURCE: Budget(burst=30, refill=_MINUTE),
+    # One number from one source: three codes, then one every ten minutes.
+    BucketKind.PT_OTP_SEND_PAIR: Budget(burst=3, refill=10 * _MINUTE),
+    # One number from every source that is not a recognised device of it:
+    # what bounds a flood of texts to somebody's phone from many addresses.
+    BucketKind.PT_OTP_SEND_PHONE: Budget(burst=6, refill=5 * _MINUTE),
+    # One number from one browser its owner has signed in from before. Drawn
+    # on *instead of* the pair and phone budgets above, so that somebody who
+    # only knows the number cannot use up the owner's own allowance. Every
+    # recognised device of one account also shares a budget under the
+    # ``PT_OTP_SEND_PHONE`` policy, keyed by the account id, so that minting
+    # device rows mints no allowance; and the source budget still applies.
+    BucketKind.PT_OTP_SEND_DEVICE: Budget(burst=3, refill=10 * _MINUTE),
+    # The whole platform: the ceiling on what SMS pumping can cost.
+    BucketKind.PT_OTP_SEND_GLOBAL: Budget(burst=600, refill=timedelta(seconds=1)),
+    # Verifications from one source. A single challenge already dies after
+    # five attempts; this bounds one source working through many challenges.
+    BucketKind.PT_OTP_VERIFY_SOURCE: Budget(burst=60, refill=timedelta(seconds=30)),
+    # Attempts to link to, or register, a record: five, then five an hour,
+    # per account and hospital.
+    BucketKind.PT_LINK_ATTEMPT: Budget(burst=5, refill=12 * _MINUTE),
+    # The same attempts, over a day: ten, then ten a day. Charged together
+    # with the hourly allowance, so both must have room
+    # (``docs/modules/15-patient-app.md`` §4.5: 5 per hour *and* 10 per day).
+    BucketKind.PT_LINK_DAILY: Budget(burst=10, refill=144 * _MINUTE),
 }
 
 _LOCK_ORDER: Final[dict[BucketKind, int]] = {kind: index for index, kind in enumerate(BucketKind)}

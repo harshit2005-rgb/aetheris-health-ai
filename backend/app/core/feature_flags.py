@@ -16,10 +16,22 @@ from typing import TYPE_CHECKING, Any, Final
 if TYPE_CHECKING:
     from collections.abc import Mapping
 
-__all__ = ["AI_SLOT_RECOMMENDATION", "KNOWN_FLAGS", "flag_is_on", "with_default_flag"]
+__all__ = [
+    "AI_SLOT_RECOMMENDATION",
+    "KNOWN_FLAGS",
+    "PATIENT_APP_ENABLED",
+    "flag_is_on",
+    "with_default_flag",
+]
 
 #: AI slot suggestions in the appointment booking dialog.
 AI_SLOT_RECOMMENDATION: Final = "feature.ai.slot_recommendation"
+
+#: The Patient App may be used with this hospital: patients can link to, or
+#: register, a record here (``docs/modules/15-patient-app.md`` §6). Off unless
+#: set. It is read only by the patient services and is deliberately not in
+#: :data:`KNOWN_FLAGS`: the staff capability read does not report it.
+PATIENT_APP_ENABLED: Final = "feature.patient_app.enabled"
 
 #: Every flag the capability read may report. Nothing else in ``settings`` is
 #: ever returned by it.

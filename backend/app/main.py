@@ -33,6 +33,7 @@ from app.api.v1 import (
     lab_order_router,
     medicine_router,
     notification_router,
+    patient_app_router,
     patient_router,
     permission_router,
     prescription_router,
@@ -283,6 +284,10 @@ def _register_routers(app: FastAPI) -> None:
         prefix=API_V1_PREFIX,
     )
 
+    # Patient App (docs/modules/15-patient-app.md §27) — a namespace of its
+    # own under /api/v1/patient, for a principal that is never a staff user.
+    app.include_router(patient_app_router, prefix=API_V1_PREFIX)
+
     logger.debug("routers_registered")
 
 
@@ -333,6 +338,9 @@ def _register_exception_handlers(app: FastAPI) -> None:
                 errors=exc.detail,
                 request_id=getattr(request.state, "request_id", None),
             ),
+            # Only an error that defines response headers carries any
+            # (the Patient App's Retry-After on a throttled code request).
+            headers=getattr(exc, "headers", None),
         )
 
     @app.exception_handler(StarletteHTTPException)

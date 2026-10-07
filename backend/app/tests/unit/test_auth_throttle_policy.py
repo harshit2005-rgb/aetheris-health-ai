@@ -150,6 +150,19 @@ class TestPolicyTable:
         BucketKind.SESSION_PW: Backoff(free=5, base=MINUTE, cap=30 * MINUTE, quiet=2 * HOUR),
         BucketKind.SESSION_CODE: Backoff(free=5, base=MINUTE, cap=HOUR, quiet=4 * HOUR),
         BucketKind.INVITE_RESEND: Budget(burst=3, refill=10 * MINUTE),
+        # Patient App (docs/modules/15-patient-app.md §5): used by the
+        # patient services only, and all budgets — a code that was sent was
+        # paid for, so nothing is ever cleared by a success.
+        BucketKind.PT_OTP_SEND_SOURCE: Budget(burst=30, refill=MINUTE),
+        BucketKind.PT_OTP_SEND_PAIR: Budget(burst=3, refill=10 * MINUTE),
+        BucketKind.PT_OTP_SEND_PHONE: Budget(burst=6, refill=5 * MINUTE),
+        BucketKind.PT_OTP_SEND_DEVICE: Budget(burst=3, refill=10 * MINUTE),
+        BucketKind.PT_OTP_SEND_GLOBAL: Budget(burst=600, refill=timedelta(seconds=1)),
+        BucketKind.PT_OTP_VERIFY_SOURCE: Budget(burst=60, refill=timedelta(seconds=30)),
+        BucketKind.PT_LINK_ATTEMPT: Budget(burst=5, refill=12 * MINUTE),
+        # Ten link attempts a day on top of five an hour: one back every
+        # 144 minutes is ten in twenty-four hours.
+        BucketKind.PT_LINK_DAILY: Budget(burst=10, refill=144 * MINUTE),
     }
 
     def test_every_number_is_exactly_the_reviewed_one(self) -> None:
@@ -188,6 +201,15 @@ class TestPolicyTable:
             "session_pw",
             "session_code",
             "invite_resend",
+            # Appended: the staff kinds above keep their lock order.
+            "pt_otp_send_source",
+            "pt_otp_send_pair",
+            "pt_otp_send_phone",
+            "pt_otp_send_device",
+            "pt_otp_send_global",
+            "pt_otp_verify_source",
+            "pt_link_attempt",
+            "pt_link_daily",
         ]
         assert [kind for kind, _ in sorted(module._LOCK_ORDER.items(), key=lambda i: i[1])] == list(  # noqa: SLF001
             BucketKind

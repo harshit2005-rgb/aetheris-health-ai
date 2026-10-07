@@ -61,6 +61,12 @@ WINDOW_SECONDS = 60
 _AI_PATH_MARKERS: tuple[str, ...] = ("/recommend-slot", "/ai/")
 
 
+#: Where a patient token is billed to its account, and the public part of
+#: that namespace where it is not.
+_PATIENT_PATH_PREFIX = "/api/v1/patient/"
+_PATIENT_OTP_PATH_PREFIX = "/api/v1/patient/auth/otp/"
+
+
 class _Decision(Protocol):
     """Shape returned by a backend check."""
 
@@ -208,6 +214,21 @@ def _is_ai_path(path: str) -> bool:
     return any(marker in path for marker in _AI_PATH_MARKERS)
 
 
+def _is_patient_account_path(path: str) -> bool:
+    """Return whether a patient token may move *path* onto the per-account tier.
+
+    A patient token is self-service — anybody with a phone can obtain one —
+    so it lifts a caller off the per-source limit only where it is the
+    credential the endpoint asks for: under the Patient App namespace. The
+    two public one-time-code endpoints are left out even there: they are
+    anonymous by design, and a token attached to them must not buy a larger
+    allowance of attempts than the caller's address has.
+
+    :param path: The request path.
+    """
+    return path.startswith(_PATIENT_PATH_PREFIX) and not path.startswith(_PATIENT_OTP_PATH_PREFIX)
+
+
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """Enforce per-user, per-hospital, and per-IP request limits."""
 
@@ -259,13 +280,27 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         """Build the ``(key, limit)`` pairs this request must satisfy.
 
         :param request: The incoming request, after ``AuthMiddleware`` has run.
-        :returns: One pair for an anonymous caller; two for an authenticated one
-            (user and hospital), so a single user cannot exhaust a tenant's
-            budget unnoticed.
+        :returns: One pair for an anonymous caller; one for a patient account
+            on a Patient App endpoint (anywhere else its token is ignored);
+            two for an authenticated staff user (user and hospital), so a
+            single user cannot exhaust a tenant's budget unnoticed.
         """
         user_id = getattr(request.state, "user_id", None)
         hospital_id = getattr(request.state, "hospital_id", None)
+        patient_account_id = getattr(request.state, "patient_account_id", None)
         is_ai = _is_ai_path(request.url.path)
+
+        if (
+            user_id is None
+            and patient_account_id is not None
+            and _is_patient_account_path(request.url.path)
+        ):
+            # A Patient App principal on a Patient App endpoint: billed to its
+            # own account, never to a staff user or a hospital, and never to
+            # the address it shares with everyone else on the same network.
+            # Everywhere else a patient token changes nothing: the request is
+            # anonymous, and counted against its source below.
+            return [(f"patient:{patient_account_id}", settings.RATE_LIMIT_USER_PER_MIN)]
 
         if user_id is None:
             ip = _client_ip(request)

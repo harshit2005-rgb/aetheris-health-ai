@@ -16,6 +16,7 @@ from app.api.v1.invoices import router as invoice_router
 from app.api.v1.lab_orders import router as lab_order_router
 from app.api.v1.medicines import router as medicine_router
 from app.api.v1.notifications import router as notification_router
+from app.api.v1.patient import router as patient_app_router
 from app.api.v1.patients import router as patient_router
 from app.api.v1.prescriptions import router as prescription_router
 from app.api.v1.purchase_orders import router as purchase_order_router
@@ -42,6 +43,7 @@ __all__ = [
     "lab_order_router",
     "medicine_router",
     "notification_router",
+    "patient_app_router",
     "patient_router",
     "permission_router",
     "prescription_router",

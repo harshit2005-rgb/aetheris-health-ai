@@ -55,6 +55,7 @@ class ExceptionHandlerMiddleware(BaseHTTPMiddleware):
                     errors=exc.detail,
                     request_id=getattr(request.state, "request_id", None),
                 ),
+                headers=getattr(exc, "headers", None),
             )
         except Exception as exc:  # noqa: BLE001
             if isinstance(exc, DBAPIError):

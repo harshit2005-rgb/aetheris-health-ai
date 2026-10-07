@@ -141,7 +141,27 @@ class TestModelClassification:
             for mapper in Base.registry.mappers
             if is_tenant_scoped(mapper.class_) and tenant_column_nullable(mapper.class_)
         }
-        assert nullable == {"roles", "audit_logs"}
+        # ``patient_consent_records`` joined the two with the Patient App: a
+        # consent to a platform policy (terms of service, privacy notice)
+        # belongs to no hospital, a consent to a hospital purpose belongs to
+        # that one. A check constraint ties the column to the purpose
+        # (``test_a_hospital_consent_can_never_be_stored_without_its_hospital``).
+        assert nullable == {"roles", "audit_logs", "patient_consent_records"}
+
+    def test_a_hospital_consent_can_never_be_stored_without_its_hospital(self) -> None:
+        """Attack: file a hospital consent under no hospital, where every tenant can see it."""
+        from sqlalchemy import CheckConstraint
+
+        checks = {
+            constraint.name: str(constraint.sqltext)
+            for constraint in Base.metadata.tables["patient_consent_records"].constraints
+            if isinstance(constraint, CheckConstraint)
+        }
+
+        scope = next(text for name, text in checks.items() if str(name).endswith("hospital_scope"))
+        assert "hospital_id IS NOT NULL" in scope
+        assert "hospital_record_link" in scope
+        assert "hospital_registration" in scope
 
     @pytest.mark.parametrize("name", sorted(TENANTLESS_AUTH_MODELS))
     def test_the_authentication_throttle_tables_are_deliberately_tenant_less(

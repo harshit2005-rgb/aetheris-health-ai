@@ -49,6 +49,19 @@ MIN_SECRET_KEY_LENGTH: Final = 32
 MIN_AUTH_FAILURE_SECONDS: Final = 0.25
 
 
+#: Shortest acceptable key for the patient OTP keyed hash, in characters.
+MIN_PATIENT_OTP_SECRET_LENGTH: Final = 32
+
+#: SMS adapters that exist. ``dev`` writes the message to standard output and
+#: is refused outside development; there is no vendor adapter yet
+#: (``docs/modules/15-patient-app.md`` §5.9).
+SMS_PROVIDER_DEV: Final = "dev"
+KNOWN_SMS_PROVIDERS: Final[frozenset[str]] = frozenset({SMS_PROVIDER_DEV})
+
+#: A country calling code as it is written in E.164: ``+`` and one to four digits.
+_COUNTRY_CODE_PATTERN = re.compile(r"^\+[1-9]\d{0,3}$")
+
+
 class AppEnv(StrEnum):
     """Valid deployment environments."""
 
@@ -94,6 +107,8 @@ class Settings(BaseSettings):
 
     #: Set when development generated a per-process signing key.
     _secret_key_is_ephemeral: bool = PrivateAttr(default=False)
+    #: Set when development generated a per-process patient OTP key.
+    _patient_otp_secret_is_ephemeral: bool = PrivateAttr(default=False)
 
     # ── App ────────────────────────────────────────────────────────────────
     APP_NAME: str = Field(
@@ -271,6 +286,59 @@ class Settings(BaseSettings):
     FRONTEND_BASE_URL: str = Field(
         default="http://localhost:5173",
         description="Public base URL of the web app, used to build links in emails",
+    )
+
+    # ── SMS (Patient App one-time codes) ───────────────────────────────────
+    # SMS is OFF unless SMS_PROVIDER is set. With no provider the Patient App
+    # cannot send a sign-in code and says so (503); it never pretends one was
+    # sent. No vendor adapter exists yet: the only value is "dev", which
+    # writes the code to this process's standard output and is refused
+    # outside development (`_validate_sms_provider`).
+    SMS_PROVIDER: str | None = Field(
+        default=None, description="SMS adapter name. Unset disables outbound SMS."
+    )
+    SMS_API_KEY: SecretStr | None = Field(
+        default=None, description="Credential for the SMS provider, when one is configured."
+    )
+    SMS_SENDER_ID: str | None = Field(
+        default=None, description="Sender identity, if the SMS provider needs one."
+    )
+    SMS_TIMEOUT_SECONDS: float = Field(
+        default=5.0, gt=0, le=30, description="Deadline for sending one SMS, in seconds."
+    )
+
+    # ── Patient App ────────────────────────────────────────────────────────
+    # Key of the keyed hash a one-time code is stored under. A code has only
+    # a million values, so a plain hash of it protects nothing; this key is
+    # what keeps a stolen `patient_otp_challenges` table useless. It is
+    # separate from APP_SECRET_KEY and has no built-in value. Staging and
+    # production refuse to start without it; development with none gets a
+    # random key for the life of the process — see `_resolve_patient_otp_secret`.
+    PATIENT_OTP_SECRET: SecretStr = Field(
+        default=SecretStr(""),
+        description=(
+            "Private key for the patient OTP keyed hash. Required outside development. "
+            "At least 32 characters."
+        ),
+    )
+    # Only numbers under these country calling codes may be sent a code. Every
+    # code costs money, and numbers abroad are how SMS-pumping fraud is run.
+    PATIENT_OTP_ALLOWED_COUNTRY_CODES: list[str] = Field(
+        default=["+91"],
+        description="Country calling codes a sign-in code may be sent to (JSON array from env).",
+    )
+    # The patient refresh cookie is sent `Secure` with the `__Secure-` name
+    # prefix, and the patient device cookie with `__Host-`. This may be
+    # switched off for plain-HTTP local development and nowhere else.
+    PATIENT_COOKIE_SECURE: bool = Field(
+        default=True,
+        description="Send the Patient App cookies as Secure with their name prefixes.",
+    )
+    # The origins the Patient App is served from. The cookie-authenticated
+    # endpoints (refresh, logout) refuse a request whose Origin is not listed.
+    PATIENT_APP_ORIGINS: list[str] = Field(
+        default=["http://localhost:5174"],
+        description="Origins of the Patient App (JSON array from env).",
     )
 
     # ── Rate Limiting ──────────────────────────────────────────────────────
@@ -487,6 +555,83 @@ class Settings(BaseSettings):
             raise ValueError(msg)
         return parsed
 
+    @field_validator("SMS_PROVIDER", "SMS_SENDER_ID", "SMS_API_KEY", mode="before")
+    @classmethod
+    def _blank_sms_setting_is_unset(cls, value: object) -> object:
+        """Treat an empty or whitespace-only SMS setting as "not configured"."""
+        if isinstance(value, str):
+            stripped = value.strip()
+            return stripped or None
+        return value
+
+    @field_validator("PATIENT_OTP_SECRET", mode="before")
+    @classmethod
+    def _blank_patient_otp_secret_is_unset(cls, value: object) -> object:
+        """Treat a whitespace-only OTP key as "not configured"."""
+        if isinstance(value, str):
+            return value.strip()
+        return value
+
+    @field_validator("PATIENT_OTP_ALLOWED_COUNTRY_CODES", mode="before")
+    @classmethod
+    def _parse_allowed_country_codes(cls, value: object) -> object:
+        """Accept a JSON array from the environment, and insist on real calling codes.
+
+        An empty list is refused rather than read as "any country": the list
+        exists to bound what a sign-in code can cost.
+        """
+        try:
+            parsed = json.loads(value) if isinstance(value, str) else value
+        except json.JSONDecodeError:
+            parsed = None
+        if not isinstance(parsed, list) or not parsed:
+            msg = "PATIENT_OTP_ALLOWED_COUNTRY_CODES must be a non-empty list of calling codes."
+            raise ValueError(msg)  # noqa: TRY004 — pydantic reports ValueError, not TypeError
+        codes = [str(code).strip() for code in parsed]
+        if any(_COUNTRY_CODE_PATTERN.fullmatch(code) is None for code in codes):
+            msg = "PATIENT_OTP_ALLOWED_COUNTRY_CODES entries must look like +91."
+            raise ValueError(msg)
+        return codes
+
+    @field_validator("PATIENT_APP_ORIGINS", mode="before")
+    @classmethod
+    def _parse_patient_app_origins(cls, value: object) -> object:
+        """Accept a JSON array from the environment, and insist on exact origins.
+
+        An origin is a scheme, a host and an optional port — nothing else. A
+        wildcard, a path or a credential would make the Origin check on the
+        cookie endpoints mean something other than what it says.
+        """
+        try:
+            parsed = json.loads(value) if isinstance(value, str) else value
+        except json.JSONDecodeError:
+            parsed = None
+        if not isinstance(parsed, list):
+            msg = "PATIENT_APP_ORIGINS must be a list of origins."
+            raise ValueError(msg)  # noqa: TRY004 — pydantic reports ValueError, not TypeError
+        origins: list[str] = []
+        for entry in parsed:
+            origin = str(entry).strip().rstrip("/").lower()
+            try:
+                parts = urlsplit(origin)
+                valid = (
+                    parts.scheme in {"https", "http"}
+                    and bool(parts.hostname)
+                    and "*" not in origin
+                    and parts.username is None
+                    and parts.password is None
+                    and parts.path == ""
+                    and parts.query == ""
+                    and parts.fragment == ""
+                )
+            except ValueError:
+                valid = False
+            if not valid:
+                msg = "PATIENT_APP_ORIGINS entries must be origins such as https://app.example."
+                raise ValueError(msg)
+            origins.append(origin)
+        return origins
+
     @model_validator(mode="after")
     def _resolve_secret_key(self) -> Self:
         """Make sure tokens are only ever signed with a private key.
@@ -538,10 +683,68 @@ class Settings(BaseSettings):
             raise ValueError(msg)
         return self
 
+    @model_validator(mode="after")
+    def _validate_sms_provider(self) -> Self:
+        """Refuse an SMS adapter that does not exist, or the dev one outside development.
+
+        The dev adapter prints sign-in codes. Anywhere but a developer's own
+        machine that is a credential in a log, so the application does not
+        start with it. An unknown name is refused too: read as "off" it would
+        hide a typo until the first patient could not sign in.
+        """
+        if self.SMS_PROVIDER is None:
+            return self
+        provider = self.SMS_PROVIDER.lower()
+        if provider not in KNOWN_SMS_PROVIDERS:
+            msg = "SMS_PROVIDER names an SMS adapter that does not exist."
+            raise ValueError(msg)
+        if provider == SMS_PROVIDER_DEV and self.APP_ENV is not AppEnv.DEVELOPMENT:
+            msg = f"SMS_PROVIDER must not be 'dev' when APP_ENV is {self.APP_ENV.value}."
+            raise ValueError(msg)
+        self.SMS_PROVIDER = provider
+        return self
+
+    @model_validator(mode="after")
+    def _patient_cookies_are_secure_outside_development(self) -> Self:
+        """Refuse to run outside development with the patient cookies sent in the clear."""
+        if self.APP_ENV != AppEnv.DEVELOPMENT and not self.PATIENT_COOKIE_SECURE:
+            msg = f"PATIENT_COOKIE_SECURE must be true when APP_ENV is {self.APP_ENV.value}."
+            raise ValueError(msg)
+        return self
+
+    @model_validator(mode="after")
+    def _resolve_patient_otp_secret(self) -> Self:
+        """Make sure one-time codes are only ever hashed under a private key.
+
+        The same rule as :meth:`_resolve_secret_key`: staging and production
+        refuse to start without a key; development with none gets a random
+        one for this process, so outstanding codes do not survive a restart.
+        The messages name the setting and never the value.
+
+        :raises ValueError: If the key is unset outside development, or set
+            but too short anywhere.
+        """
+        key = self.PATIENT_OTP_SECRET.get_secret_value()
+        if not key:
+            if self.APP_ENV is not AppEnv.DEVELOPMENT:
+                msg = f"PATIENT_OTP_SECRET is required when APP_ENV is {self.APP_ENV.value}."
+                raise ValueError(msg)
+            self.PATIENT_OTP_SECRET = SecretStr(secrets.token_urlsafe(48))
+            self._patient_otp_secret_is_ephemeral = True
+        elif len(key) < MIN_PATIENT_OTP_SECRET_LENGTH:
+            msg = f"PATIENT_OTP_SECRET must be at least {MIN_PATIENT_OTP_SECRET_LENGTH} characters."
+            raise ValueError(msg)
+        return self
+
     @property
     def secret_key_is_ephemeral(self) -> bool:
         """True if this process generated its own signing key (development only)."""
         return self._secret_key_is_ephemeral
+
+    @property
+    def patient_otp_secret_is_ephemeral(self) -> bool:
+        """True if this process generated its own patient OTP key (development only)."""
+        return self._patient_otp_secret_is_ephemeral
 
     def mfa_encryption_keys(self, name: str = "MFA_ENCRYPTION_KEY") -> list[bytes]:
         """Return the keys held in one MFA key setting, in order.

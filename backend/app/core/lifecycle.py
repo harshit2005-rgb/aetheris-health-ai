@@ -17,6 +17,7 @@ from app.ai.runtime import close_ai_runtime, get_ai_runtime
 from app.core.config import settings
 from app.core.email import email_delivery_configured
 from app.core.redis import close_redis_client
+from app.core.sms import get_sms_sender
 from app.database import create_session_factory, dispose_engine, initialize_database
 
 if TYPE_CHECKING:
@@ -103,6 +104,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:  # noqa: ARG001
             detail=(
                 "SMTP_HOST is not set. Invitation and password-reset links "
                 "cannot be delivered, and none will be issued."
+            ),
+        )
+
+    if settings.patient_otp_secret_is_ephemeral:
+        # Development only — staging and production cannot reach this line.
+        logger.warning(
+            "patient_otp_secret_ephemeral",
+            detail=(
+                "No PATIENT_OTP_SECRET is configured, so a random key was generated for "
+                "this process. Patient sign-in codes already sent stop working when it restarts."
+            ),
+        )
+
+    if get_sms_sender() is None:
+        # Patient App sign-in codes travel by SMS and by no other route.
+        logger.info(
+            "sms_delivery_not_configured",
+            detail=(
+                "SMS_PROVIDER is not set. Patient App sign-in codes cannot be sent, "
+                "and none will be issued."
             ),
         )
 

@@ -39,6 +39,13 @@ from app.repositories.medicine_repository import MedicineRepository
 from app.repositories.mrn_sequence_repository import MrnSequenceRepository
 from app.repositories.notification_repository import NotificationRepository
 from app.repositories.password_reset_token_repository import PasswordResetTokenRepository
+from app.repositories.patient_access_grant_repository import PatientAccessGrantRepository
+from app.repositories.patient_account_link_repository import PatientAccountLinkRepository
+from app.repositories.patient_account_repository import PatientAccountRepository
+from app.repositories.patient_consent_repository import PatientConsentRepository
+from app.repositories.patient_device_repository import PatientDeviceRepository
+from app.repositories.patient_otp_challenge_repository import PatientOtpChallengeRepository
+from app.repositories.patient_refresh_token_repository import PatientRefreshTokenRepository
 from app.repositories.patient_repository import PatientRepository
 from app.repositories.permission_repository import PermissionRepository
 from app.repositories.prescription_repository import PrescriptionRepository
@@ -67,6 +74,13 @@ __all__ = [
     "MedicineRepository",
     "MrnSequenceRepository",
     "NotificationRepository",
+    "PatientAccessGrantRepository",
+    "PatientAccountLinkRepository",
+    "PatientAccountRepository",
+    "PatientConsentRepository",
+    "PatientDeviceRepository",
+    "PatientOtpChallengeRepository",
+    "PatientRefreshTokenRepository",
     "PatientRepository",
     "PasswordResetTokenRepository",
     "PermissionRepository",

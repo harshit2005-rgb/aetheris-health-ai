@@ -7,6 +7,7 @@ Hospitals are the multi-tenant root. They are deactivated via
 from __future__ import annotations
 
 import uuid  # noqa: TC003 — needed at runtime for type hints
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select
@@ -16,6 +17,22 @@ from app.repositories.base import BaseRepository
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+
+@dataclass(frozen=True, slots=True)
+class HospitalSummary:
+    """What identifies a hospital, without its users, roles or contact details.
+
+    :param id: The hospital UUID.
+    :param name: Display name.
+    :param slug: Unique URL-friendly identifier.
+    :param settings: The hospital's settings object (feature flags live here).
+    """
+
+    id: uuid.UUID
+    name: str
+    slug: str
+    settings: dict[str, Any]
 
 
 class HospitalRepository(BaseRepository[Hospital]):
@@ -68,6 +85,37 @@ class HospitalRepository(BaseRepository[Hospital]):
         stmt = select(Hospital).where(Hospital.id == id, Hospital.is_active.is_(True))
         result = await self._session.execute(stmt)
         return result.unique().scalar_one_or_none()
+
+    async def get_active_summary(
+        self, *, id: uuid.UUID | None = None, slug: str | None = None
+    ) -> HospitalSummary | None:
+        """Read the few columns that identify one active hospital.
+
+        Selects columns, not the entity: loading a :class:`Hospital` also
+        loads every user and role it has (``lazy="selectin"``), which a caller
+        that only needs the name and the feature flags must not pay for — and
+        which the Patient App must not pull into a patient's request at all.
+
+        :param id: The hospital UUID. Exactly one of ``id`` and ``slug`` is given.
+        :param slug: The hospital's unique slug.
+        :returns: The summary, or ``None`` if there is no such active hospital.
+        :raises ValueError: If neither or both of ``id`` and ``slug`` are given.
+        """
+        if (id is None) == (slug is None):
+            msg = "get_active_summary() needs exactly one of id and slug."
+            raise ValueError(msg)
+        stmt = select(Hospital.id, Hospital.name, Hospital.slug, Hospital.settings).where(
+            Hospital.is_active.is_(True)
+        )
+        stmt = (
+            stmt.where(Hospital.id == id) if id is not None else stmt.where(Hospital.slug == slug)
+        )
+        row = (await self._session.execute(stmt)).one_or_none()
+        if row is None:
+            return None
+        return HospitalSummary(
+            id=row.id, name=row.name, slug=row.slug, settings=dict(row.settings or {})
+        )
 
     async def deactivate(self, hospital: Hospital) -> Hospital:
         """Deactivate a hospital by setting ``is_active = False``.

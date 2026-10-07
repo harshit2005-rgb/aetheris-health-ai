@@ -258,6 +258,58 @@ class PatientRepository(BaseRepository[Patient]):
         result = await self._session.execute(stmt)
         return result.unique().scalar_one_or_none()
 
+    async def list_by_phone(
+        self,
+        hospital_id: uuid.UUID,
+        phone: str,
+        *,
+        include_deleted: bool = True,
+    ) -> list[Patient]:
+        """Every record in a hospital whose phone is exactly this number.
+
+        For the Patient App's record match
+        (``docs/modules/15-patient-app.md`` §4.5), which must see deactivated
+        records too: a deactivated match is refused rather than silently
+        duplicated. Exact comparison only — never a prefix or a search term.
+
+        :param hospital_id: The tenant to scope to.
+        :param phone: The number, in E.164 form.
+        :param include_deleted: Include soft-deleted records.
+        :returns: The matching patients, oldest first.
+        """
+        stmt = (
+            self._scoped(hospital_id, include_deleted=include_deleted)
+            .where(Patient.phone == phone)
+            .order_by(Patient.created_at, Patient.id)
+        )
+        result = await self._session.execute(stmt)
+        return list(result.unique().scalars().all())
+
+    async def lock_phone_for_link(
+        self, hospital_id: uuid.UUID, patient_id: uuid.UUID
+    ) -> tuple[str | None, bool] | None:
+        """Lock one record's row and read the phone it carries right now.
+
+        For the Patient App, at the one moment a link request is about to end
+        somebody else's link to this record: what the request matched earlier
+        may no longer be true, so the phone is read again, as committed now,
+        under a row lock that holds it still until the transaction ends.
+
+        :param hospital_id: The tenant to scope to.
+        :param patient_id: The record.
+        :returns: ``(phone, is_active)``, or ``None`` if there is no such
+            record in this hospital.
+        """
+        result = await self._session.execute(
+            select(Patient.phone, Patient.deleted_at)
+            .where(Patient.hospital_id == hospital_id, Patient.id == patient_id)
+            .with_for_update()
+        )
+        row = result.one_or_none()
+        if row is None:
+            return None
+        return row.phone, row.deleted_at is None
+
     async def list_patients(
         self,
         hospital_id: uuid.UUID,

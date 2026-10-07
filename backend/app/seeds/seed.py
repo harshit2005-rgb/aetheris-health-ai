@@ -23,7 +23,11 @@ from typing import TYPE_CHECKING
 import structlog
 from sqlalchemy import select
 
-from app.core.feature_flags import AI_SLOT_RECOMMENDATION, with_default_flag
+from app.core.feature_flags import (
+    AI_SLOT_RECOMMENDATION,
+    PATIENT_APP_ENABLED,
+    with_default_flag,
+)
 from app.core.security import hash_password
 from app.database import create_session_factory, initialize_database
 from app.models.hospital import Hospital
@@ -622,6 +626,27 @@ async def ensure_demo_flags(session: AsyncSession, hospital: Hospital) -> bool:
     return True
 
 
+async def ensure_demo_patient_app_flag(session: AsyncSession, hospital: Hospital) -> bool:
+    """Open the demo hospital to the Patient App unless the flag was set explicitly.
+
+    The flag is off for every hospital unless set, so without this a local
+    Patient App could sign in but never link to, or register, a record.
+
+    :param session: The seed session.
+    :param hospital: The demo hospital.
+    :returns: ``True`` when the flag was defaulted, ``False`` when an explicit
+        value (including ``False``) was left alone.
+    """
+    # Reassigned rather than mutated in place so SQLAlchemy sees the JSONB change.
+    updated = with_default_flag(hospital.settings, PATIENT_APP_ENABLED, True)
+    if updated is None:
+        return False
+    hospital.settings = updated
+    await session.flush()
+    logger.info("demo_hospital_flag_defaulted", flag=PATIENT_APP_ENABLED)
+    return True
+
+
 async def seed_database(database_url: str | None = None) -> None:
     """Seed the database with permissions, roles, and demo data.
 
@@ -751,6 +776,7 @@ async def seed_database(database_url: str | None = None) -> None:
         # AI slot suggestions are on for the demo hospital unless the flag was
         # set explicitly. It still needs an AI key on the server to be usable.
         await ensure_demo_flags(session, hospital)
+        await ensure_demo_patient_app_flag(session, hospital)
 
         # ── 4. Create Demo Admin User ────────────────────────────────────────
         admin_email = "admin@demohospital.com"

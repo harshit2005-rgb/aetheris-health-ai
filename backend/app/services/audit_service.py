@@ -23,6 +23,7 @@ import structlog
 from pydantic_core import to_jsonable_python
 
 from app.core.audit import AuditEvent, StructlogAuditSink
+from app.core.constants import AUDIT_ACTOR_TYPE_PATIENT
 from app.core.exceptions import NotFoundError
 from app.schemas.audit import AuditLogResponse
 from app.schemas.common import Page, PaginationParams
@@ -89,12 +90,24 @@ class AuditService:
         # Observability line first — it survives even if persistence fails.
         await _structlog_sink.record(event)
 
+        # A patient is a different kind of principal: never a user id, and
+        # never recorded as the system (which is what a missing user id means
+        # for a staff event).
+        is_patient = event.actor_type == "patient"
+        if is_patient:
+            actor_type = AUDIT_ACTOR_TYPE_PATIENT
+        else:
+            actor_type = "user" if event.actor_id else "system"
+
         try:
             async with self._session.begin_nested():
                 await self._audit_repo.add_entry(
                     hospital_id=event.hospital_id,
-                    actor_user_id=event.actor_id,
-                    actor_type="user" if event.actor_id else "system",
+                    actor_user_id=None if is_patient else event.actor_id,
+                    actor_type=actor_type,
+                    patient_account_id=event.patient_account_id if is_patient else None,
+                    ip_address=event.ip_address,
+                    user_agent=event.user_agent,
                     action=event.action,
                     target_type=event.target_type,
                     target_id=event.target_id,

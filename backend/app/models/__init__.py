@@ -73,6 +73,25 @@ from app.models.notification import (
 )
 from app.models.password_reset_token import PasswordResetToken
 from app.models.patient import BloodGroup, Gender, MrnSequence, Patient, PatientStatus
+from app.models.patient_account import (
+    LinkRelationship,
+    LinkVerification,
+    PatientAccount,
+    PatientAccountLink,
+    PatientAccountStatus,
+    PatientDevice,
+    PatientOtpChallenge,
+    PatientRefreshToken,
+)
+from app.models.patient_consent import (
+    ConsentPurpose,
+    GranteeType,
+    GrantPurposeNote,
+    GrantStatus,
+    PatientAccessGrant,
+    PatientConsentRecord,
+    RecordCategory,
+)
 from app.models.permission import Permission
 from app.models.pharmacy import (
     Dispense,
@@ -121,6 +140,22 @@ __all__ = [
     "MrnSequence",
     "Patient",
     "PatientStatus",
+    # Patient App
+    "ConsentPurpose",
+    "GrantPurposeNote",
+    "GrantStatus",
+    "GranteeType",
+    "LinkRelationship",
+    "LinkVerification",
+    "PatientAccessGrant",
+    "PatientAccount",
+    "PatientAccountLink",
+    "PatientAccountStatus",
+    "PatientConsentRecord",
+    "PatientDevice",
+    "PatientOtpChallenge",
+    "PatientRefreshToken",
+    "RecordCategory",
     # Appointment
     "Appointment",
     "AppointmentStatus",

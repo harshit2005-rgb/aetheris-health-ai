@@ -31,6 +31,9 @@ from app.core.config import (
 from app.core.security import create_access_token, verify_access_token
 
 PRIVATE_KEY = "a-private-signing-key-for-these-tests-0123456789"
+#: Staging and production also require the Patient App's OTP key
+#: (``PATIENT_OTP_SECRET``); its own rules are tested in ``test_patient_config.py``.
+OTP_SECRET = "a-private-otp-key-for-these-tests-0123456789abcdef"
 REPO_ROOT = Path(__file__).resolve().parents[5]
 BACKEND_ENV_EXAMPLE = REPO_ROOT / "backend" / ".env.example"
 
@@ -65,12 +68,14 @@ UNDECLARED: Any = object()
 def _settings(**values: Any) -> Settings:
     """Build settings from explicit values only — no environment, no ``.env``.
 
-    Staging and production also require an MFA encryption key and a statement
-    of whether a proxy stands in front (``RATE_LIMIT_TRUST_PROXY_HEADER``).
-    These tests are mostly about something else, so both are supplied unless
-    a test passes its own — or passes :data:`UNDECLARED` to say nothing.
+    Staging and production also require an MFA encryption key, the Patient
+    App's OTP key and a statement of whether a proxy stands in front
+    (``RATE_LIMIT_TRUST_PROXY_HEADER``). These tests are mostly about
+    something else, so all three are supplied unless a test passes its own —
+    or passes :data:`UNDECLARED` to say nothing.
     """
     values.setdefault("MFA_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    values.setdefault("PATIENT_OTP_SECRET", OTP_SECRET)
     values.setdefault("RATE_LIMIT_TRUST_PROXY_HEADER", False)
     if values["RATE_LIMIT_TRUST_PROXY_HEADER"] is UNDECLARED:
         del values["RATE_LIMIT_TRUST_PROXY_HEADER"]
@@ -675,6 +680,7 @@ class TestProxyTopologyMustBeDeclared:
             "APP_ENV": environment,
             "APP_SECRET_KEY": PRIVATE_KEY,
             "MFA_ENCRYPTION_KEY": Fernet.generate_key().decode(),
+            "PATIENT_OTP_SECRET": OTP_SECRET,
         }
 
         with pytest.raises(
@@ -708,6 +714,7 @@ class TestProxyTopologyMustBeDeclared:
             "APP_ENV": environment,
             "APP_SECRET_KEY": PRIVATE_KEY,
             "MFA_ENCRYPTION_KEY": Fernet.generate_key().decode(),
+            "PATIENT_OTP_SECRET": OTP_SECRET,
         }
 
         if starts_trusting is None:

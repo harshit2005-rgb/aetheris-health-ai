@@ -46,6 +46,13 @@ from app.repositories import (
     MrnSequenceRepository,
     NotificationRepository,
     PasswordResetTokenRepository,
+    PatientAccessGrantRepository,
+    PatientAccountLinkRepository,
+    PatientAccountRepository,
+    PatientConsentRepository,
+    PatientDeviceRepository,
+    PatientOtpChallengeRepository,
+    PatientRefreshTokenRepository,
     PatientRepository,
     PermissionRepository,
     PrescriptionRepository,
@@ -105,6 +112,41 @@ def get_refresh_token_repository(session: DbSession) -> RefreshTokenRepository:
 def get_patient_repository(session: DbSession) -> PatientRepository:
     """Provide a :class:`PatientRepository` bound to the request session."""
     return PatientRepository(session)
+
+
+def get_patient_account_repository(session: DbSession) -> PatientAccountRepository:
+    """Provide a :class:`PatientAccountRepository` bound to the request session."""
+    return PatientAccountRepository(session)
+
+
+def get_patient_otp_challenge_repository(session: DbSession) -> PatientOtpChallengeRepository:
+    """Provide a :class:`PatientOtpChallengeRepository` bound to the request session."""
+    return PatientOtpChallengeRepository(session)
+
+
+def get_patient_refresh_token_repository(session: DbSession) -> PatientRefreshTokenRepository:
+    """Provide a :class:`PatientRefreshTokenRepository` bound to the request session."""
+    return PatientRefreshTokenRepository(session)
+
+
+def get_patient_device_repository(session: DbSession) -> PatientDeviceRepository:
+    """Provide a :class:`PatientDeviceRepository` bound to the request session."""
+    return PatientDeviceRepository(session)
+
+
+def get_patient_account_link_repository(session: DbSession) -> PatientAccountLinkRepository:
+    """Provide a :class:`PatientAccountLinkRepository` bound to the request session."""
+    return PatientAccountLinkRepository(session)
+
+
+def get_patient_consent_repository(session: DbSession) -> PatientConsentRepository:
+    """Provide a :class:`PatientConsentRepository` bound to the request session."""
+    return PatientConsentRepository(session)
+
+
+def get_patient_access_grant_repository(session: DbSession) -> PatientAccessGrantRepository:
+    """Provide a :class:`PatientAccessGrantRepository` bound to the request session."""
+    return PatientAccessGrantRepository(session)
 
 
 def get_mrn_sequence_repository(session: DbSession) -> MrnSequenceRepository:

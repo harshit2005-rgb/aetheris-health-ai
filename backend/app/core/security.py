@@ -232,6 +232,83 @@ def create_mfa_ticket(user_id: uuid.UUID) -> str:
     )
 
 
+# ── Patient access tokens ───────────────────────────────────────────────────
+# A patient is a different kind of principal from a staff user
+# (``docs/modules/15-patient-app.md`` §5.6), and the two kinds of token must
+# never be accepted in each other's place. A patient token therefore carries
+# an audience and its own type, and carries no hospital, role or permission:
+#
+# * :func:`verify_access_token` supplies no audience, and PyJWT refuses a
+#   token that has one — so no staff verifier accepts a patient token;
+# * :func:`verify_patient_access_token` requires the audience — so it refuses
+#   every staff token and MFA ticket, which have none.
+
+#: The ``aud`` claim of every patient access token.
+PATIENT_TOKEN_AUDIENCE = "atheris-patient"  # noqa: S105 — a claim value, not a credential
+#: The ``type`` claim of every patient access token.
+PATIENT_TOKEN_TYPE = "patient_access"  # noqa: S105 — a claim value, not a credential
+#: Lifetime of a patient access token. A constant, not a setting: configuration
+#: cannot lengthen it.
+PATIENT_ACCESS_TTL_SECONDS = 15 * 60
+
+
+def create_patient_access_token(account_id: uuid.UUID) -> str:
+    """Create a short-lived JWT access token for a patient account.
+
+    The token names the account and nothing else: no hospital, no role and no
+    permission. Which hospital a request concerns is resolved on the server,
+    per request, from the account's record links.
+
+    :param account_id: The patient account's UUID (``patient_accounts.id``).
+    :returns: A signed JWT string (15-minute TTL).
+    """
+    now = datetime.now(UTC)
+    payload: dict[str, Any] = {
+        "sub": str(account_id),
+        "iss": settings.JWT_ISSUER,
+        "aud": PATIENT_TOKEN_AUDIENCE,
+        "iat": now,
+        "exp": now + timedelta(seconds=PATIENT_ACCESS_TTL_SECONDS),
+        "type": PATIENT_TOKEN_TYPE,
+    }
+
+    return pyjwt.encode(
+        payload,
+        _get_jwt_signing_key(),
+        algorithm=_get_jwt_algorithm(),
+    )
+
+
+def verify_patient_access_token(token: str) -> dict[str, Any]:
+    """Verify and decode a patient access token.
+
+    Accepts only a token that carries the patient audience **and** the patient
+    type. A staff access token or an MFA ticket has no audience and is refused
+    here; a token with the audience but another type is refused too.
+
+    :param token: The JWT string to verify.
+    :returns: The decoded payload.
+    :raises jwt.ExpiredSignatureError: If the token has expired.
+    :raises jwt.InvalidTokenError: If the token is invalid, is not addressed
+        to the patient audience, or is not a patient access token.
+    """
+    payload: dict[str, Any] = pyjwt.decode(
+        token,
+        _get_jwt_verification_key(),
+        algorithms=[_get_jwt_algorithm()],
+        issuer=settings.JWT_ISSUER,
+        audience=PATIENT_TOKEN_AUDIENCE,
+        leeway=settings.JWT_LEEWAY_SECONDS,
+        options={
+            "require": ["sub", "iss", "aud", "iat", "exp", "type"],
+        },
+    )
+    if payload.get("type") != PATIENT_TOKEN_TYPE:
+        msg = "Not a patient access token."
+        raise pyjwt.InvalidTokenError(msg)
+    return payload
+
+
 # ── Opaque Token Generation ─────────────────────────────────────────────────
 
 

@@ -68,6 +68,8 @@ def _settings(**values: Any) -> Settings:
     # Staging and production also need a private signing key; these tests are
     # about the MFA key, so give them one.
     values.setdefault("APP_SECRET_KEY", "a-private-signing-key-for-these-tests-0123456789")
+    # ...and the Patient App's OTP key, for the same reason.
+    values.setdefault("PATIENT_OTP_SECRET", "a-private-otp-key-for-these-tests-0123456789abcdef")
     # Outside development the proxy topology has to be declared before the
     # application starts at all. These tests are about the MFA key, so they
     # declare it ("no proxy") unless a test says otherwise.
