@@ -1,11 +1,14 @@
 import { screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { fail, noContent, ok, serve } from '@/test/fakeApi'
+import { doctorDirectory } from '@/test/doctorDirectory'
 import {
+  ashaRao,
   cityCare,
   lakesideHospital,
   manyHospitals,
   me,
+  meeraIyer,
   otpRequested,
   PHONE_MASKED,
   PHONE_TYPED,
@@ -65,7 +68,7 @@ describe('web storage', () => {
     expect(window.sessionStorage).toHaveLength(0)
   })
 
-  it('is never touched by hospital discovery: search, filter, pages, a hospital, its doctors page, linking', async () => {
+  it('is never touched by discovery: search, filter, pages, a hospital, its doctors, a doctor, availability, linking', async () => {
     const read = vi.spyOn(Storage.prototype, 'getItem')
     const touched = [
       vi.spyOn(Storage.prototype, 'removeItem'),
@@ -76,6 +79,7 @@ describe('web storage', () => {
       'POST /auth/refresh': ok({ access_token: 'access-secret', expires_in: 900 }),
       'GET /me': ok(me([cityCare])),
       ...hospitalDirectory([lakesideHospital, ...manyHospitals(45)]),
+      ...doctorDirectory('lakeside-clinic', [ashaRao, meeraIyer]),
     })
     // A reload in the middle of a search: the filters come from the URL, not from storage.
     const { user } = loadApp('/hospitals?q=clinic&city=Bengaluru')
@@ -88,7 +92,15 @@ describe('web storage', () => {
     await user.click(await screen.findByRole('link', { name: 'Lakeside Clinic' }))
     await user.click(await screen.findByRole('link', { name: 'View Doctors' }))
     await screen.findByRole('heading', { name: 'Doctors at Lakeside Clinic' })
-    await user.click(screen.getByRole('link', { name: 'Back to Lakeside Clinic' }))
+    // A search and a department filter live in the URL too, and a doctor's pages keep nothing either.
+    await user.type(screen.getByRole('searchbox', { name: 'Search by name or specialisation' }), 'rao{Enter}')
+    await user.selectOptions(await screen.findByRole('combobox', { name: 'Department' }), 'Cardiology')
+    await user.click(await screen.findByRole('link', { name: 'View Profile Asha Rao' }))
+    await user.click(await screen.findByRole('link', { name: 'View Availability' }))
+    await screen.findByRole('heading', { name: 'Availability' })
+    await user.click(screen.getByRole('link', { name: 'Back to Asha Rao' }))
+    await user.click(await screen.findByRole('link', { name: 'Doctors at Lakeside Clinic' }))
+    await user.click(await screen.findByRole('link', { name: 'Back to Lakeside Clinic' }))
     await user.click(await screen.findByRole('link', { name: 'Link my record' }))
     expect(await screen.findByLabelText('Hospital code')).toHaveValue('lakeside-clinic')
 

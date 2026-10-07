@@ -1,4 +1,5 @@
 import type { OtpRequested, VerifiedSession } from '@/api/auth'
+import type { PatientDepartment, PatientDoctor } from '@/api/doctors'
 import type { PatientHospital } from '@/api/hospitals'
 import type { HospitalLink, PatientMe } from '@/api/me'
 
@@ -100,4 +101,66 @@ export const manyHospitals = (count: number): PatientHospital[] =>
   Array.from({ length: count }, (_, index) => {
     const number = String(index + 1).padStart(2, '0')
     return hospital({ ref: `clinic-${number}`, name: `Clinic ${number}`, phone: null, logo_url: null })
+  })
+
+/** Departments as `GET /hospitals/{ref}/departments` describes them. */
+export const cardiology: PatientDepartment = {
+  ref: 'c0000000-0000-4000-8000-000000000001',
+  name: 'Cardiology',
+  description: 'Heart and blood vessels',
+}
+
+export const orthopaedics: PatientDepartment = {
+  ref: 'c0000000-0000-4000-8000-000000000002',
+  name: 'Orthopaedics',
+  description: null,
+}
+
+/** A doctor's public reference: UUID-shaped, and different for every `number`. */
+export const doctorRef = (number: number) => `d0000000-0000-4000-8000-${String(number).padStart(12, '0')}`
+
+/** A doctor as the doctor endpoints describe one: every field present, nothing more. */
+export const doctor = (overrides: Partial<PatientDoctor> = {}): PatientDoctor => ({
+  ref: doctorRef(1),
+  name: 'Asha Rao',
+  specialization: 'Interventional Cardiology',
+  department: { ref: cardiology.ref, name: cardiology.name },
+  qualifications: [
+    { degree: 'MBBS', institution: 'Bangalore Medical College', year: 2008 },
+    { degree: 'MD', institution: null, year: null },
+  ],
+  languages: ['English', 'Kannada'],
+  bio: 'Looks after adults with heart conditions.\nSees patients at the main campus.',
+  ...overrides,
+})
+
+/** Every field present. */
+export const ashaRao = doctor()
+
+/** Only what a doctor must have: no department, qualifications, languages or bio. */
+export const vikramShah = doctor({
+  ref: doctorRef(2),
+  name: 'Vikram Shah',
+  specialization: 'General Medicine',
+  department: null,
+  qualifications: [],
+  languages: [],
+  bio: null,
+})
+
+export const meeraIyer = doctor({
+  ref: doctorRef(3),
+  name: 'Meera Iyer',
+  specialization: 'Joint Replacement',
+  department: { ref: orthopaedics.ref, name: orthopaedics.name },
+  qualifications: [{ degree: 'MS', institution: 'Mysore Medical College', year: null }],
+  languages: ['Hindi'],
+  bio: null,
+})
+
+/** `count` doctors named so that they sort in order: "Doctor 01", "Doctor 02", … */
+export const manyDoctors = (count: number): PatientDoctor[] =>
+  Array.from({ length: count }, (_, index) => {
+    const number = String(index + 1).padStart(2, '0')
+    return doctor({ ref: doctorRef(100 + index), name: `Doctor ${number}`, qualifications: [], languages: [], bio: null })
   })

@@ -14,6 +14,9 @@ describe('route guards', () => {
     '/hospitals?q=care&city=Bengaluru&page=2',
     '/hospitals/city-care',
     '/hospitals/city-care/doctors',
+    '/hospitals/city-care/doctors?q=rao&dept=c0000000-0000-4000-8000-000000000001&page=2',
+    '/hospitals/city-care/doctors/d0000000-0000-4000-8000-000000000001',
+    '/hospitals/city-care/doctors/d0000000-0000-4000-8000-000000000001/availability',
     '/no-such-page',
   ])('sends a visitor at %s to the sign-in page', async (path) => {
     const api = serve({})

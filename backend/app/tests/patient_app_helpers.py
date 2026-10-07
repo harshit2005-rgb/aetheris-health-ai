@@ -19,7 +19,7 @@ from __future__ import annotations
 import re
 import secrets
 import uuid
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import TYPE_CHECKING, Any
 
 from httpx import ASGITransport, AsyncClient
@@ -31,8 +31,11 @@ from app.core.feature_flags import PATIENT_APP_ENABLED
 from app.core.sms import SmsDeliveryError, SmsMessage
 from app.main import create_app
 from app.models.audit_log import AuditLog
+from app.models.department import Department
+from app.models.doctor import Doctor, DoctorAvailability
 from app.models.hospital import Hospital
 from app.models.patient import Gender, Patient
+from app.models.user import User, UserStatus
 from app.repositories.auth_throttle_repository import AuthThrottleRepository
 from app.services.patient_app.policies import DRAFT_VERSION
 
@@ -55,6 +58,8 @@ __all__ = [
     "audit_rows",
     "bearer",
     "build_patient_application",
+    "insert_department",
+    "insert_doctor",
     "insert_hospital",
     "insert_patient_record",
     "new_phone",
@@ -212,6 +217,97 @@ async def insert_hospital(
     return hospital
 
 
+async def insert_doctor(
+    session: AsyncSession,
+    hospital_id: uuid.UUID,
+    *,
+    first_name: str = "Asha",
+    last_name: str = "Menon",
+    specialization: str = "Cardiology",
+    department_id: uuid.UUID | None = None,
+    available: bool = True,
+    deleted: bool = False,
+    user_status: str = "active",
+    user_deleted: bool = False,
+    **columns: Any,
+) -> Doctor:
+    """Insert a doctor as hospital staff would have set one up, for discovery tests.
+
+    :param available: Whether the doctor has an availability window.
+    :param deleted: Whether the doctor is deactivated.
+    :param user_status: The status of the user row behind the doctor.
+    :param user_deleted: Whether that user row is soft-deleted.
+    :param columns: Any other doctor column (``bio``, ``languages``, ``qualifications``, …).
+    """
+    tag = uuid.uuid4().hex[:12]
+    user = User(
+        id=uuid.uuid4(),
+        hospital_id=hospital_id,
+        email=f"doctor-{tag}@staff-secret.test",
+        phone="+919000000001",
+        password_hash="test-placeholder-not-a-hash",
+        first_name=first_name,
+        last_name=last_name,
+        status=UserStatus(user_status),
+    )
+    if user_deleted:
+        user.deleted_at = datetime.now(UTC)
+    session.add(user)
+    await session.flush()
+    doctor = Doctor(
+        id=uuid.uuid4(),
+        hospital_id=hospital_id,
+        user_id=user.id,
+        specialization=specialization,
+        department_id=department_id,
+        license_number=f"LICCANARY-{tag}",
+        **columns,
+    )
+    if deleted:
+        doctor.deleted_at = datetime.now(UTC)
+    session.add(doctor)
+    await session.flush()
+    if available:
+        session.add(
+            DoctorAvailability(
+                id=uuid.uuid4(),
+                doctor_id=doctor.id,
+                hospital_id=hospital_id,
+                day_of_week=0,
+                start_time=time(9, 0),
+                end_time=time(12, 0),
+                slot_duration_minutes=15,
+            )
+        )
+        await session.flush()
+    await session.commit()
+    return doctor
+
+
+async def insert_department(
+    session: AsyncSession,
+    hospital_id: uuid.UUID,
+    *,
+    name: str,
+    deleted: bool = False,
+    **columns: Any,
+) -> Department:
+    """Insert a department, for discovery tests."""
+    department = Department(
+        id=uuid.uuid4(),
+        hospital_id=hospital_id,
+        code=f"D{uuid.uuid4().hex[:8].upper()}",
+        name=name,
+        **columns,
+    )
+    if deleted:
+        department.deleted_at = datetime.now(UTC)
+    session.add(department)
+    await session.flush()
+    await session.commit()
+    return department
+
+
 async def open_hospital(
     session: AsyncSession, hospital_id: uuid.UUID, *, enabled: bool = True
 ) -> Hospital:
@@ -248,8 +344,6 @@ async def insert_patient_record(
         phone=phone,
     )
     if deleted:
-        from datetime import UTC
-
         patient.deleted_at = datetime.now(UTC)
     session.add(patient)
     await session.flush()

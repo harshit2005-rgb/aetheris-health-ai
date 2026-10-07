@@ -4,7 +4,9 @@ import type { PatientHospital } from '@/api/hospitals'
 import { queryClient } from '@/lib/query-client'
 import { SEARCH_DEBOUNCE_MS } from '@/pages/hospitals/HospitalsPage'
 import { fail, headerOf, ok, okPage, serve, unreachable, type Handler, type Outcome } from '@/test/fakeApi'
+import { doctorDirectory } from '@/test/doctorDirectory'
 import {
+  ashaRao,
   cityCare,
   cityCareHospital,
   hospital,
@@ -13,6 +15,7 @@ import {
   me,
   promotedHospital,
   sunriseHospital,
+  vikramShah,
 } from '@/test/fixtures'
 import { hospitalDirectory } from '@/test/hospitalDirectory'
 import { isSignedIn, renderApp, signIn } from '@/test/renderApp'
@@ -62,7 +65,11 @@ async function until(assertion: () => void) {
 const DOCTOR_DATA =
   /\bDr\.?\s|\bMBBS\b|\bMD\b|speciali[sz]|cardiolog|\d+\s+doctors?\b|years? of experience|available today|book now|consultation fee/i
 
-/** A response that has grown doctor data the contract does not carry — as Task 30's might, early. */
+/** The same, for a page that is about doctors and so may say "specialisation" in its own labels. */
+const DOCTOR_RECORD =
+  /\bDr\.?\s|\bMBBS\b|\bMD\b|cardiolog|\d+\s+doctors?\b|years? of experience|available today|book now|consultation fee/i
+
+/** A hospital response that has grown doctor data its contract does not carry. */
 const withDoctors = (base: PatientHospital) => ({
   ...base,
   doctor_count: 12,
@@ -71,7 +78,7 @@ const withDoctors = (base: PatientHospital) => ({
   departments: [{ name: 'Cardiology', doctor_count: 4 }],
 })
 
-describe('NO DOCTOR DATA — before doctor discovery exists, nothing stands in for it', () => {
+describe('NO INVENTED DOCTOR DATA — doctors come from the doctor endpoints and from nowhere else', () => {
   it('the hospital page shows no doctor, count, specialty or placeholder card — loading or loaded, whatever the response carries', async () => {
     let answer: (outcome: Outcome) => void = () => {}
     const pending = new Promise<Outcome>((resolve) => (answer = resolve))
@@ -101,11 +108,12 @@ describe('NO DOCTOR DATA — before doctor discovery exists, nothing stands in f
     expect(api.sent.map(routeOf)).toEqual([CITY_CARE])
   })
 
-  it('the doctors page and the list show none of it either, and no request is ever made for doctors', async () => {
+  it('the list shows none of it either, and the doctors page shows only what the doctor endpoints return — here, nobody', async () => {
     const api = serve({
       [LIST]: okPage([withDoctors(cityCareHospital)]),
       [CITIES]: ok({ cities: ['Bengaluru'] }),
       [CITY_CARE]: ok(withDoctors(cityCareHospital)),
+      ...doctorDirectory('city-care', []),
     })
     const { user } = open()
 
@@ -117,16 +125,19 @@ describe('NO DOCTOR DATA — before doctor discovery exists, nothing stands in f
     await user.click(listed)
     await user.click(await screen.findByRole('link', { name: 'View Doctors' }))
     await title('Doctors at City Care Hospital')
+    expect(await screen.findByText('No doctors listed yet')).toBeInTheDocument()
 
-    expect(main()).not.toHaveTextContent(DOCTOR_DATA)
+    // The hospital's answer carried a doctor; the doctor endpoints listed none, so none is shown.
+    expect(main()).not.toHaveTextContent(DOCTOR_RECORD)
     expect(main().innerHTML).not.toMatch(/Asha|Rao|Cardiology|Orthopaedics|doc-1|500\.00/)
     // Not even the count: the page has no number on it at all.
     expect(main()).not.toHaveTextContent(/\d/)
     expect(main().querySelector('[data-slot="skeleton"]')).toBeNull()
     expect(within(main()).queryByRole('list')).not.toBeInTheDocument()
-    // List, cities, the hospital: the whole journey asks for nothing else.
-    expect(api.sent.map(routeOf)).toEqual([LIST, CITIES, CITY_CARE])
-    expect(api.sent.some((request) => /doctor/i.test(request.url ?? ''))).toBe(false)
+    expect(within(main()).queryByRole('link', { name: /View Profile/ })).not.toBeInTheDocument()
+    // List, cities, the hospital, then its doctors and departments: the whole journey asks for nothing else.
+    expect(api.sent.slice(0, 3).map(routeOf)).toEqual([LIST, CITIES, CITY_CARE])
+    expect(api.sent.slice(3).map(routeOf).sort()).toEqual([`${CITY_CARE}/departments`, `${CITY_CARE}/doctors`])
   })
 })
 
@@ -191,7 +202,7 @@ describe('NO DISTANCE, NO INTERNAL ID — neither is shown, kept in the page, or
   const NEVER = /5f0c2a9e|4\.2|12\.9716|77\.5946|\bkm\b|kilomet|distance|miles?\b|\baway\b|near(by| you| me)|latitude|longitude/i
 
   it('ATTACK — a response carrying an id and a distance: nothing of them in the text, the attributes or the links, on any discovery screen', async () => {
-    serve({ [LIST]: okPage([leaky]), [CITIES]: ok({ cities: ['Mysuru'] }), 'GET /hospitals/lakeside-clinic': ok(leaky) })
+    serve({ [LIST]: okPage([leaky]), [CITIES]: ok({ cities: ['Mysuru'] }), 'GET /hospitals/lakeside-clinic': ok(leaky), ...doctorDirectory('lakeside-clinic', [ashaRao]) })
     const { user, router } = open()
 
     const listed = await card('Lakeside Clinic')
@@ -205,6 +216,7 @@ describe('NO DISTANCE, NO INTERNAL ID — neither is shown, kept in the page, or
 
     await user.click(screen.getByRole('link', { name: 'View Doctors' }))
     await title('Doctors at Lakeside Clinic')
+    await screen.findByRole('heading', { level: 3, name: 'Asha Rao' })
     expect(document.body.innerHTML).not.toMatch(NEVER)
     expect(router.state.location.pathname).toBe('/hospitals/lakeside-clinic/doctors')
   })
@@ -280,7 +292,7 @@ describe('LOGO — an address the app will not load is never in the page', () =>
     ['the doctors page', '/hospitals/city-care/doctors'],
     ['home', '/'],
   ])('%s never loads a logo at all, safe or not', async (_case, path) => {
-    serve({ ...hospitalDirectory([cityCareHospital]), 'GET /me': ok(me([cityCare])) })
+    serve({ ...hospitalDirectory([cityCareHospital]), ...doctorDirectory('city-care', [ashaRao]), 'GET /me': ok(me([cityCare])) })
     open(path)
 
     await screen.findAllByText(/City Care Hospital/)
@@ -334,7 +346,7 @@ describe('SERVER TEXT IS TEXT — markup in any field is shown as the characters
   })
 
   it('ATTACK — the same hospital on a card, on its doctors page and among the cities', async () => {
-    serve({ [LIST]: okPage([hostile]), [CITIES]: ok({ cities: ['<i>Bengaluru</i>', '"><script>window.pwned=1</script>'] }), [CITY_CARE]: ok(hostile) })
+    serve({ [LIST]: okPage([hostile]), [CITIES]: ok({ cities: ['<i>Bengaluru</i>', '"><script>window.pwned=1</script>'] }), [CITY_CARE]: ok(hostile), ...doctorDirectory('city-care', []) })
     const { router } = open()
 
     const listed = await card('Evil<b>bold</b>')
@@ -500,7 +512,7 @@ describe('OFFLINE and SERVER FAILURE — told apart, in the app’s words, and R
     ['a hospital', '/hospitals/city-care', CITY_CARE, 'We could not load this hospital. Please try again.'],
     ['the doctors page', '/hospitals/city-care/doctors', CITY_CARE, 'We could not load this hospital. Please try again.'],
   ])('on %s a gateway’s 503 page is a server failure — not "No connection", and none of it is shown', async (_case, path, route, message) => {
-    const api = serve({ ...hospitalDirectory(THREE), [route]: GATEWAY_PAGE })
+    const api = serve({ ...hospitalDirectory(THREE), ...doctorDirectory('city-care', [ashaRao]), [route]: GATEWAY_PAGE })
     const { user } = open(path)
 
     const alert = await screen.findByRole('alert')
@@ -746,8 +758,10 @@ describe('KEYBOARD and SCREEN READER — the basics of using discovery without a
     ['the list', '/hospitals?q=clinic'],
     ['a hospital', '/hospitals/city-care'],
     ['the doctors page', '/hospitals/city-care/doctors'],
+    ['a doctor', `/hospitals/city-care/doctors/${ashaRao.ref}`],
+    ['the availability page', `/hospitals/city-care/doctors/${ashaRao.ref}/availability`],
   ])('on %s nothing jumps the tab order, every icon is hidden from a screen reader and every control has a name', async (_case, path) => {
-    serve(hospitalDirectory(THREE))
+    serve({ ...hospitalDirectory(THREE), ...doctorDirectory('city-care', [ashaRao, vikramShah]) })
     open(path)
     await screen.findAllByText(/City Care Hospital|Lakeside Clinic/)
     await waitFor(() => expect(main().querySelector('[data-slot="skeleton"]')).toBeNull())

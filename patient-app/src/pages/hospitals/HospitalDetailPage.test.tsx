@@ -3,6 +3,7 @@ import { onlineManager } from '@tanstack/react-query'
 import { afterEach, describe, expect, it } from 'vitest'
 import { bodyOf, deferred, fail, headerOf, ok, serve, unreachable } from '@/test/fakeApi'
 import { cityCare, cityCareHospital, hospital, lakesideHospital, me, promotedHospital, sunriseHospital } from '@/test/fixtures'
+import { doctorDirectory } from '@/test/doctorDirectory'
 import { hospitalDirectory } from '@/test/hospitalDirectory'
 import { renderApp, signIn } from '@/test/renderApp'
 
@@ -320,7 +321,7 @@ describe('hospital discovery — one hospital', () => {
 
   describe('navigation', () => {
     it('goes from the list to a hospital, on to its doctors page and back, with focus on each new heading', async () => {
-      const api = serve(hospitalDirectory([cityCareHospital, lakesideHospital]))
+      const api = serve({ ...hospitalDirectory([cityCareHospital, lakesideHospital]), ...doctorDirectory('city-care', []) })
       const { user, router } = open('/hospitals')
 
       await user.click(await screen.findByRole('link', { name: 'City Care Hospital' }))

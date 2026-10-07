@@ -59,10 +59,22 @@ export const routes: RouteObject[] = [
                 }),
               },
               {
-                // The entry point of doctor discovery; it lists no doctors yet.
                 path: '/hospitals/:hospitalRef/doctors',
                 lazy: async () => ({
                   Component: (await import('@/pages/doctors/HospitalDoctorsPage')).HospitalDoctorsPage,
+                }),
+              },
+              {
+                path: '/hospitals/:hospitalRef/doctors/:doctorRef',
+                lazy: async () => ({
+                  Component: (await import('@/pages/doctors/DoctorProfilePage')).DoctorProfilePage,
+                }),
+              },
+              {
+                // The entry point of availability and booking; it shows no slots yet.
+                path: '/hospitals/:hospitalRef/doctors/:doctorRef/availability',
+                lazy: async () => ({
+                  Component: (await import('@/pages/doctors/DoctorAvailabilityPage')).DoctorAvailabilityPage,
                 }),
               },
               {

@@ -79,6 +79,7 @@ from app.services.auth_throttle import AuthThrottle
 from app.services.patient_app.access_grant_service import AccessGrantService
 from app.services.patient_app.common import ClientContext
 from app.services.patient_app.consent_service import ConsentService
+from app.services.patient_app.doctor_directory_service import HospitalDoctorDirectoryService
 from app.services.patient_app.hospital_directory_service import HospitalDirectoryService
 from app.services.patient_app.hospital_gate import PatientHospitalGate
 from app.services.patient_app.otp_service import OtpService
@@ -93,6 +94,7 @@ __all__ = [
     "get_access_grant_service",
     "get_client_context",
     "get_consent_service",
+    "get_doctor_directory_service",
     "get_hospital_directory_service",
     "get_patient_account",
     "get_patient_account_service",
@@ -281,6 +283,15 @@ def get_hospital_directory_service(
 ) -> HospitalDirectoryService:
     """Provide a :class:`HospitalDirectoryService`."""
     return HospitalDirectoryService(gate, authorization, consent)
+
+
+def get_doctor_directory_service(
+    gate: PatientHospitalGate = Depends(get_patient_hospital_gate),
+    doctors: DoctorRepository = Depends(get_doctor_repository),
+    consent: ConsentService = Depends(get_consent_service),
+) -> HospitalDoctorDirectoryService:
+    """Provide a :class:`HospitalDoctorDirectoryService`."""
+    return HospitalDoctorDirectoryService(gate, doctors, consent)
 
 
 def get_record_link_service(

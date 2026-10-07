@@ -11,6 +11,7 @@ module here imports the staff authentication service or its dependencies.
 - :mod:`~app.services.patient_app.record_link_service` — linking to, or registering, a record
 - :mod:`~app.services.patient_app.hospital_gate` — which hospitals are open to patients
 - :mod:`~app.services.patient_app.hospital_directory_service` — hospital discovery
+- :mod:`~app.services.patient_app.doctor_directory_service` — doctor discovery
 - :mod:`~app.services.patient_app.consent_service` — purpose consent and the policy gate
 - :mod:`~app.services.patient_app.access_grant_service` — record access grants
 - :mod:`~app.services.patient_app.patient_authorization` — the one entry point that turns an

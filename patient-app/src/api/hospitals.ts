@@ -87,7 +87,7 @@ export function useHospitals({ search, city, page }: HospitalQuery) {
  * a browser resolves them as path steps, and a server decodes an escaped `/`
  * back into one — either would leave as a request to a different endpoint.
  */
-const isSendable = (hospitalRef: string) => /^[A-Za-z0-9-]{1,100}$/.test(hospitalRef)
+export const isSendable = (hospitalRef: string) => /^[A-Za-z0-9-]{1,100}$/.test(hospitalRef)
 
 async function fetchHospital(hospitalRef: string): Promise<PatientHospital> {
   // The same answer the server gives for a reference it does not know.

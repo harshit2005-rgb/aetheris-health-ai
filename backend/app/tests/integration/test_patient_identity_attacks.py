@@ -902,10 +902,11 @@ class TestStaffCredentialsAgainstThePatientApi:
                 assert _body(anonymous) == UNAUTHENTICATED, (method, path)
                 protected += 1
 
-        # /me, logout-all, link, register, refresh and the three hospital
-        # discovery routes all refused; request and verify are public (422 with
-        # no body) and logout has nothing to end.
-        assert protected == 8
+        # /me, logout-all, link, register, refresh, the three hospital
+        # discovery routes and the three doctor discovery routes all refused;
+        # request and verify are public (422 with no body) and logout has
+        # nothing to end.
+        assert protected == 11
         assert await _count(db_session, PatientAccount) == 0
         assert await _count(db_session, PatientRefreshToken) == 0
         assert await _count(db_session, PatientAccountLink) == 0
