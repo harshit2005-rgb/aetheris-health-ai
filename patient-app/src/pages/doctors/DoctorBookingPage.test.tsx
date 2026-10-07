@@ -16,6 +16,7 @@ import {
 import { doctorDirectory } from '@/test/doctorDirectory'
 import { deferred, fail, noContent, ok, serve, unreachable, type Routes } from '@/test/fakeApi'
 import { ashaRao, cardiology, cityCareHospital, meeraIyer, orthopaedics, vikramShah } from '@/test/fixtures'
+import { myAppointmentsEndpoints } from '@/test/myAppointments'
 import { renderApp, signIn } from '@/test/renderApp'
 
 /**
@@ -253,8 +254,15 @@ describe('booking — confirming', () => {
     expect(within(details).getByText('Time').nextElementSibling).toHaveTextContent(/^10:15 – 10:30$/)
     expect(within(details).getByText('Times are in the hospital’s local time (Asia/Kolkata)')).toBeInTheDocument()
 
-    expect(screen.getByRole('link', { name: 'Back to home' })).toHaveAttribute('href', '/')
-    expect(screen.getByRole('link', { name: 'Back to the doctor' })).toHaveAttribute('href', ASHA_PATH)
+    // The reference is the way to the appointment's own page, and the list of them is the first way on.
+    expect(within(details).getByRole('link', { name: appointmentRef(1) })).toHaveAttribute('href', `/appointments/${appointmentRef(1)}`)
+    const waysOn = [...main().querySelectorAll('a')].filter((link) => !details.contains(link))
+    expect(waysOn.map((link) => [link.textContent, link.getAttribute('href')])).toEqual([
+      ['View my appointments', '/appointments'],
+      ['Back to home', '/'],
+      ['Back to the doctor', ASHA_PATH],
+    ])
+    expect(waysOn[0]).toHaveAttribute('data-variant', 'default')
 
     // Nothing is left to confirm with, and the spent slot is out of the address.
     expect(main().querySelector('form, textarea, button')).toBeNull()
@@ -911,6 +919,69 @@ describe('booking — after it is booked', () => {
   })
 })
 
+describe('booking — on to the patient’s appointments', () => {
+  /** City Care with Asha Rao's booking endpoint, and the patient's appointments reading what it books. */
+  function setupWithAppointments() {
+    const booking = bookingEndpoint(cityCareHospital, ashaRao)
+    // The slot is on Friday 9 October; "now" is the Wednesday before, as everywhere else.
+    const mine = myAppointmentsEndpoints(booking.appointments, { refs: [appointmentRef(1)] })
+    const api = serve({ ...cityCareWith(), ...booking.routes, ...mine.routes })
+    return { api, booking, mine }
+  }
+
+  it('"View my appointments" opens the list, read from the server, with the appointment just booked in it', async () => {
+    const { api } = setupWithAppointments()
+    const { user, router } = open()
+    await user.click(await confirmButton())
+    await title('Appointment booked')
+
+    await user.click(screen.getByRole('link', { name: 'View my appointments' }))
+
+    expect(await title('My appointments')).toHaveFocus()
+    expect(router.state.location.pathname).toBe('/appointments')
+    const card = (await screen.findByRole('heading', { level: 3, name: 'Asha Rao' })).closest('li')!
+    expect(within(card).getByText('City Care Hospital')).toBeInTheDocument()
+    expect(within(card).getByText('Friday 9 October 2026')).toBeInTheDocument()
+    expect(within(card).getByText('10:15 – 10:30 (Asia/Kolkata)')).toBeInTheDocument()
+    expect(within(card).getByText('Booked')).toBeInTheDocument()
+    expect(api.calls('GET /appointments').map((request) => request.params)).toEqual([{ scope: 'upcoming', page: 1, page_size: 20 }])
+  })
+
+  it('a list read BEFORE the booking is not shown again afterwards: the new appointment is asked for', async () => {
+    const { api } = setupWithAppointments()
+    signIn('access-1')
+    const { user, router } = renderApp('/appointments')
+    expect(await screen.findByText('When you book an appointment, it will be listed here.')).toBeInTheDocument()
+
+    await act(() => router.navigate(`${BOOK_PATH}?${SOUND}`))
+    await user.click(await confirmButton())
+    await title('Appointment booked')
+    await user.click(screen.getByRole('link', { name: 'View my appointments' }))
+
+    expect(await screen.findByRole('heading', { level: 3, name: 'Asha Rao' })).toBeInTheDocument()
+    expect(screen.queryByText('No upcoming appointments')).not.toBeInTheDocument()
+    expect(api.calls('GET /appointments')).toHaveLength(2)
+  })
+
+  it('the reference opens the appointment’s own page, where the server says whether it can be cancelled', async () => {
+    const { mine } = setupWithAppointments()
+    const { user, router } = open()
+    await user.click(await confirmButton())
+    await title('Appointment booked')
+
+    await user.click(screen.getByRole('link', { name: appointmentRef(1) }))
+
+    expect(await title('Appointment')).toHaveFocus()
+    expect(router.state.location.pathname).toBe(`/appointments/${appointmentRef(1)}`)
+    const details = await screen.findByRole('region', { name: 'Appointment details' })
+    expect(within(details).getByText('Status').nextElementSibling).toHaveTextContent(/^Booked$/)
+    expect(within(details).getByText('Reference').nextElementSibling).toHaveTextContent(new RegExp(`^${appointmentRef(1)}$`))
+    expect(mine.wireOf(appointmentRef(1)).can_cancel).toBe(true)
+    expect(within(main()).getByRole('button', { name: 'Cancel appointment' })).toBeEnabled()
+    expect(mine.cancelRequests).toHaveLength(0)
+  })
+})
+
 describe('booking — keyboard and assistive technology', () => {
   it('works from the keyboard alone: availability, review, a reason, confirm, and on from the confirmation', async () => {
     const { booking } = setup()
@@ -948,6 +1019,11 @@ describe('booking — keyboard and assistive technology', () => {
     expect(booking.requests).toHaveLength(1)
     expect(booking.requests[0].body).toEqual({ start: START, end: END, type: 'new', reason: 'Short of breath\non the stairs' })
 
+    // The reference leads to the appointment's own page; then the ways on, the appointments first.
+    await user.tab()
+    expect(screen.getByRole('link', { name: appointmentRef(1) })).toHaveFocus()
+    await user.tab()
+    expect(screen.getByRole('link', { name: 'View my appointments' })).toHaveFocus()
     await user.tab()
     expect(screen.getByRole('link', { name: 'Back to home' })).toHaveFocus()
     await user.tab()

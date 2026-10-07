@@ -15,6 +15,7 @@ module here imports the staff authentication service or its dependencies.
 - :mod:`~app.services.patient_app.availability_service` — when a doctor can be booked
 - :mod:`~app.services.patient_app.booking_policy` — the per-hospital booking policy
 - :mod:`~app.services.patient_app.booking_service` — booking an appointment
+- :mod:`~app.services.patient_app.appointments_service` — the patient's own appointments
 - :mod:`~app.services.patient_app.consent_service` — purpose consent and the policy gate
 - :mod:`~app.services.patient_app.access_grant_service` — record access grants
 - :mod:`~app.services.patient_app.patient_authorization` — the one entry point that turns an

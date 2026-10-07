@@ -85,6 +85,7 @@ from app.repositories import (
 from app.services.appointment_service import AppointmentService
 from app.services.auth_throttle import AuthThrottle
 from app.services.patient_app.access_grant_service import AccessGrantService
+from app.services.patient_app.appointments_service import PatientAppointmentsService
 from app.services.patient_app.availability_service import DoctorAvailabilityService
 from app.services.patient_app.booking_service import PatientBookingService
 from app.services.patient_app.common import ClientContext
@@ -109,6 +110,7 @@ __all__ = [
     "get_hospital_directory_service",
     "get_patient_account",
     "get_patient_account_service",
+    "get_patient_appointments_service",
     "get_patient_auth_service",
     "get_patient_booking_service",
     "get_patient_authorization",
@@ -329,6 +331,16 @@ def get_patient_booking_service(
     return PatientBookingService(
         gate, authorization, doctors, appointments, links, availability, booking
     )
+
+
+def get_patient_appointments_service(
+    authorization: PatientAuthorization = Depends(get_patient_authorization),
+    gate: PatientHospitalGate = Depends(get_patient_hospital_gate),
+    appointments: AppointmentRepository = Depends(get_appointment_repository),
+    lifecycle: AppointmentService = Depends(get_appointment_service),
+) -> PatientAppointmentsService:
+    """Provide a :class:`PatientAppointmentsService` over the hospital's appointment lifecycle."""
+    return PatientAppointmentsService(authorization, gate, appointments, lifecycle)
 
 
 def get_record_link_service(

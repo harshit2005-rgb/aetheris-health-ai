@@ -134,6 +134,27 @@ class PatientAuthorization:
             account_id=account.id, hospital_id=link.hospital_id, patient_id=link.patient_id
         )
 
+    async def own_contexts(self, account: PatientAccount) -> list[PatientContext]:
+        """Every hospital where the account may act on its own record right now.
+
+        The account's active links, each held to exactly the test
+        :meth:`resolve_context` applies — hospital open, record still bound to
+        the verified phone, record-link consent in force. A link that fails it
+        contributes nothing, silently: the caller sees no record there.
+
+        :param account: The authenticated, active account.
+        :returns: One context per hospital that passes, oldest link first.
+        :raises ConsentRequiredError: If a required platform policy is pending.
+        """
+        await self._consent.ensure_policies_accepted(account.id)
+        contexts: list[PatientContext] = []
+        for link in await self._links.list_active_for_account(account.id, _OWN_LINKS):
+            try:
+                contexts.append(await self.resolve_context(account, link.hospital_id))
+            except (NotFoundError, ConsentRequiredError):
+                continue
+        return contexts
+
     async def ensure_policies_accepted(self, account_id: uuid.UUID) -> None:
         """Refuse an account that has a required policy pending.
 

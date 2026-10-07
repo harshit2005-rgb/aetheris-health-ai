@@ -221,7 +221,7 @@ describe('hospital discovery — the list', () => {
     for (const control of controls) expect(control.className).toMatch(touchSized)
 
     const navigation = within(screen.getByRole('navigation', { name: 'Main' })).getAllByRole('link')
-    expect(navigation.map((link) => link.textContent)).toEqual(['Home', 'Hospitals', 'Link hospital'])
+    expect(navigation.map((link) => link.textContent)).toEqual(['Home', 'Hospitals', 'Appointments', 'Link hospital'])
     for (const link of navigation) expect(link).toHaveClass('min-h-14')
     expect(screen.getByRole('link', { name: 'Hospitals' })).toHaveAttribute('aria-current', 'page')
   })

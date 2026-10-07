@@ -705,10 +705,18 @@ class AppointmentService:
         payload: CancelAppointmentRequest,
         *,
         actor_id: uuid.UUID | None = None,
+        precondition: Callable[[Appointment], None] | None = None,
+        audit_event: Callable[[Appointment, AppointmentStatus], AuditEvent] | None = None,
     ) -> AppointmentResponse:
         """Cancel an appointment (module spec §5.4).
 
         :param payload: Carries the required reason.
+        :param precondition: Called with the locked, current appointment before
+            the state machine is consulted; raises to refuse. For a caller with
+            rules narrower than the staff state machine — the Patient App may
+            cancel only its own ``booked`` appointment, before a cut-off.
+        :param audit_event: Builds the audit event from the appointment and the
+            status it left, in place of the staff ``appointment.cancelled`` one.
         """
         return await self._transition(
             hospital_id,
@@ -718,6 +726,8 @@ class AppointmentService:
             action="appointment.cancelled",
             reason=payload.reason,
             extra_fields={"cancelled_reason": payload.reason},
+            precondition=precondition,
+            audit_event=audit_event,
         )
 
     async def mark_no_show(
@@ -1197,11 +1207,19 @@ class AppointmentService:
         stamp: str | None = None,
         reason: str | None = None,
         extra_fields: dict[str, Any] | None = None,
+        precondition: Callable[[Appointment], None] | None = None,
+        audit_event: Callable[[Appointment, AppointmentStatus], AuditEvent] | None = None,
     ) -> AppointmentResponse:
         """Move an appointment along the state machine.
 
         The single place status changes, so business rule 7 — a history row per
         change — cannot be forgotten at a call site.
+
+        The appointment's row is locked for the length of the transaction:
+        two transitions of one appointment — a patient cancelling while
+        reception checks them in — cannot both start from the same status.
+        The second waits, reads what the first committed, and is then judged
+        by the state machine against that.
 
         :param hospital_id: The hospital the appointment belongs to.
         :param appointment_id: The appointment to move.
@@ -1215,8 +1233,13 @@ class AppointmentService:
         :raises AppointmentNotFoundError: If absent from this tenant.
         :raises InvalidTransitionError: If the move is not legal (rule 6).
         """
-        appointment = await self._get_or_raise(hospital_id, appointment_id)
+        locked = await self._appointments.lock_appointment_by_id(hospital_id, appointment_id)
+        if locked is None:
+            raise AppointmentNotFoundError(appointment_id)
+        appointment = locked
         current = appointment.status
+        if precondition is not None:
+            precondition(appointment)
 
         if target not in ALLOWED_TRANSITIONS[current]:
             logger.info(
@@ -1244,7 +1267,9 @@ class AppointmentService:
         )
 
         await self._audit.record(
-            AuditEvent(
+            audit_event(appointment, current)
+            if audit_event is not None
+            else AuditEvent(
                 action=action,
                 hospital_id=hospital_id,
                 target_type="appointment",

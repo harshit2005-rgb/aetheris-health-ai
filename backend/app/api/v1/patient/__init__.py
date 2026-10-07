@@ -18,6 +18,7 @@ from app.api.v1.patient.doctors import router as doctors_router
 from app.api.v1.patient.hospitals import router as hospitals_router
 from app.api.v1.patient.links import router as links_router
 from app.api.v1.patient.me import router as me_router
+from app.api.v1.patient.my_appointments import router as my_appointments_router
 
 router = APIRouter(prefix="/patient")
 router.include_router(auth_router)
@@ -26,6 +27,7 @@ router.include_router(hospitals_router)
 router.include_router(doctors_router)
 router.include_router(availability_router)
 router.include_router(appointments_router)
+router.include_router(my_appointments_router)
 router.include_router(links_router)
 
 __all__ = ["router"]

@@ -4,6 +4,7 @@ import { availabilityKeys } from '@/api/availability'
 import { http } from '@/api/client'
 import { isPublicRef } from '@/api/doctors'
 import { isSendable as isHospitalRef } from '@/api/hospitals'
+import { forgetAppointmentLists } from '@/api/myAppointments'
 import { parseInstant } from '@/lib/format'
 
 /**
@@ -121,7 +122,8 @@ async function bookAppointment(input: BookingInput): Promise<BookedAppointment> 
  * be sent later, behind the patient's back.
  *
  * Whatever the answer, the doctor's availability as it was read is no longer
- * to be trusted: the slot is taken now, or was refused.
+ * to be trusted: the slot is taken now, or was refused. Neither is the list of
+ * the patient's own appointments: there may be one more in it.
  */
 export function useBookAppointment() {
   const queryClient = useQueryClient()
@@ -131,6 +133,7 @@ export function useBookAppointment() {
     retry: false,
     onSettled: (_appointment, _error, input) => {
       void queryClient.invalidateQueries({ queryKey: availabilityKeys.doctor(input.hospitalRef, input.doctorRef) })
+      void forgetAppointmentLists(queryClient)
     },
   })
 }

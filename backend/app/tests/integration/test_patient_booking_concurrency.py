@@ -34,15 +34,23 @@ from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 from app.api.dependencies.db import get_db_session
 from app.api.dependencies.patient import get_sms_sender
+from app.core.audit import StructlogAuditSink
 from app.core.config import settings
+from app.core.exceptions import AetherisError
 from app.core.security import create_patient_access_token
 from app.main import create_app
-from app.models.appointment import Appointment, AppointmentStatus
+from app.models.appointment import Appointment, AppointmentStatus, AppointmentStatusHistory
 from app.models.audit_log import AuditLog
 from app.models.patient_account import PatientAccount
 from app.models.patient_consent import ConsentPurpose
+from app.repositories.appointment_repository import AppointmentRepository
+from app.repositories.doctor_repository import DoctorRepository
+from app.repositories.hospital_repository import HospitalRepository
 from app.repositories.patient_account_link_repository import PatientAccountLinkRepository
 from app.repositories.patient_consent_repository import PatientConsentRepository
+from app.repositories.patient_repository import PatientRepository
+from app.schemas.appointment import CancelAppointmentRequest
+from app.services.appointment_service import AppointmentService, NullInvoiceDraftSink
 from app.tests.conftest import _run_migrations
 from app.tests.patient_app_helpers import (
     PATIENT,
@@ -413,3 +421,155 @@ class TestAcrossHospitals:
 
         assert (first.status_code, second.status_code) == (201, 201)
         assert len(await world.appointments(here)) == len(await world.appointments(there)) == 1
+
+
+# ── Cancelling, against everything else that can change an appointment ───────
+
+
+def _cancel(client: AsyncClient, headers: dict[str, str], ref: str) -> Any:
+    return client.post(
+        f"{PATIENT}/appointments/{ref}/cancel",
+        json={"reason_code": "schedule_conflict"},
+        headers=headers,
+    )
+
+
+async def _staff(engine: AsyncEngine, hospital: Hospital, ref: str, move: str) -> str:
+    """One staff transition on its own connection. Returns "ok" or the refusal's class name."""
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        service = AppointmentService(
+            AppointmentRepository(session),
+            PatientRepository(session),
+            DoctorRepository(session),
+            HospitalRepository(session),
+            session,
+            StructlogAuditSink(),
+            NullInvoiceDraftSink(),
+        )
+        try:
+            if move == "cancel":
+                await service.cancel(
+                    hospital.id, uuid.UUID(ref), CancelAppointmentRequest(reason="staff cancelled")
+                )
+            else:
+                await getattr(service, move)(hospital.id, uuid.UUID(ref))
+        except AetherisError as refusal:
+            await session.rollback()
+            return type(refusal).__name__
+        return "ok"
+
+
+async def _trail(world: _World, ref: str) -> list[tuple[str | None, str]]:
+    """The appointment's status history, in order, as (from, to)."""
+    async with AsyncSession(world.engine) as session:
+        rows = await session.execute(
+            select(AppointmentStatusHistory)
+            .where(AppointmentStatusHistory.appointment_id == uuid.UUID(ref))
+            .order_by(AppointmentStatusHistory.changed_at, AppointmentStatusHistory.id)
+        )
+        return [
+            (row.from_status.value if row.from_status else None, row.to_status.value)
+            for row in rows.scalars()
+        ]
+
+
+async def _status(world: _World, ref: str) -> str:
+    async with AsyncSession(world.engine) as session:
+        row = await session.get(Appointment, uuid.UUID(ref))
+        assert row is not None
+        return row.status.value
+
+
+def _consistent(trail: list[tuple[str | None, str]], final: str) -> None:
+    """Each step starts where the last one ended, and the last one is where the row is."""
+    assert trail[0] == (None, "booked")
+    for (_, reached), (left, _) in zip(trail, trail[1:], strict=False):
+        assert left == reached, trail
+    assert trail[-1][1] == final, (trail, final)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+class TestCancellationRaces:
+    @pytest.mark.parametrize("requests", [2, 10, 30])
+    async def test_many_cancellations_at_once_are_one_transition(
+        self, client: AsyncClient, world: _World, requests: int
+    ) -> None:
+        hospital = await world.hospital()
+        doctor = await world.doctor(hospital)
+        headers = await world.patient(hospital)
+        ref = (await _book(client, headers, hospital, doctor, _slot(10))).json()["data"]["ref"]
+
+        responses = await asyncio.gather(*[_cancel(client, headers, ref) for _ in range(requests)])
+
+        assert {r.status_code for r in responses} == {200}
+        assert {r.json()["data"]["status"] for r in responses} == {"cancelled"}
+        assert await _trail(world, ref) == [(None, "booked"), ("booked", "cancelled")]
+        async with AsyncSession(world.engine) as session:
+            audited = await session.execute(
+                select(func.count())
+                .select_from(AuditLog)
+                .where(AuditLog.target_id == uuid.UUID(ref))
+                .where(AuditLog.action == "patient.appointment.cancelled")
+            )
+            assert audited.scalar_one() == 1
+
+    @pytest.mark.parametrize("move", ["check_in", "start", "cancel", "mark_no_show"])
+    async def test_a_patient_cancelling_while_staff_act_leaves_one_consistent_history(
+        self, client: AsyncClient, world: _World, racing_engine: AsyncEngine, move: str
+    ) -> None:
+        """Attack on the read-then-write gap: both saw `booked`; only one may leave from it."""
+        hospital = await world.hospital()
+        doctor = await world.doctor(hospital)
+        people = [await world.patient(hospital) for _ in range(8)]
+        refs = [
+            (
+                await _book(client, headers, hospital, doctor, _slot(9 + n // 4, 15 * (n % 4)))
+            ).json()["data"]["ref"]
+            for n, headers in enumerate(people)
+        ]
+
+        outcomes = await asyncio.gather(
+            *[_cancel(client, headers, ref) for headers, ref in zip(people, refs, strict=True)],
+            *[_staff(racing_engine, hospital, ref, move) for ref in refs],
+        )
+        patient_side, staff_side = outcomes[:8], outcomes[8:]
+
+        for ref, answer, staff in zip(refs, patient_side, staff_side, strict=True):
+            assert answer.status_code in (200, 409), answer.text
+            final, trail = await _status(world, ref), await _trail(world, ref)
+            _consistent(trail, final)
+            left_booked = [step for step in trail if step[0] == "booked"]
+            assert len(left_booked) == 1, trail
+            if answer.status_code == 200:
+                assert answer.json()["data"]["status"] == "cancelled"
+                assert "cancelled" in final
+            else:
+                assert final != "cancelled" or move == "cancel"
+            # Staff either moved it or were refused by the state machine — never an error.
+            assert staff in ("ok", "InvalidTransitionError"), staff
+            if move == "cancel":
+                assert trail == [(None, "booked"), ("booked", "cancelled")]
+
+    async def test_cancelling_and_rebooking_the_freed_slot_at_once_never_double_books(
+        self, client: AsyncClient, world: _World
+    ) -> None:
+        hospital = await world.hospital()
+        doctor = await world.doctor(hospital)
+        holder = await world.patient(hospital)
+        others = [await world.patient(hospital) for _ in range(10)]
+        ref = (await _book(client, holder, hospital, doctor, _slot(10))).json()["data"]["ref"]
+
+        outcomes = await asyncio.gather(
+            _cancel(client, holder, ref),
+            *[_book(client, headers, hospital, doctor, _slot(10)) for headers in others],
+        )
+
+        _never_a_server_error(list(outcomes))
+        assert outcomes[0].status_code == 200
+        live = [
+            row
+            for row in await world.appointments(hospital)
+            if row.status is not AppointmentStatus.CANCELLED
+        ]
+        assert len(live) <= 1
+        assert sum(r.status_code == 201 for r in outcomes[1:]) == len(live)

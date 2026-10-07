@@ -21,6 +21,7 @@ import { FormField } from '@/components/FormField'
 import { PageHeading } from '@/components/PageHeading'
 import { usePageTitle } from '@/lib/usePageTitle'
 import { formatDay, formatSlotTime, localDateOf, readChosenSlot, type ChosenSlot } from '@/pages/doctors/availability'
+import { appointmentPath, APPOINTMENTS_PATH } from '@/pages/appointments/paths'
 import { DoctorLoader, DoctorNotAvailable } from '@/pages/doctors/DoctorLoader'
 import { doctorAvailabilityPath, doctorPath } from '@/pages/doctors/paths'
 import { doctorStrings as S } from '@/pages/doctors/strings'
@@ -446,7 +447,12 @@ function Confirmation({ appointment, hospital, doctor }: ConfirmationProps) {
         <dl className="space-y-2">
           <div>
             <dt className="text-body-sm text-on-surface-variant">{S.referenceLabel}</dt>
-            <dd className="text-body-lg text-on-surface font-mono break-all select-all">{appointment.ref}</dd>
+            <dd className="text-body-lg text-on-surface font-mono break-all select-all">
+              {/* The reference is also the way to the appointment's own page. */}
+              <Link to={appointmentPath(appointment.ref)} className="text-secondary inline-flex min-h-11 items-center hover:underline">
+                {appointment.ref}
+              </Link>
+            </dd>
           </div>
           <div>
             <dt className="text-body-sm text-on-surface-variant">{S.statusLabel}</dt>
@@ -487,6 +493,9 @@ function Confirmation({ appointment, hospital, doctor }: ConfirmationProps) {
 
       <div className="flex flex-col gap-3">
         <Button asChild size="touch" className="w-full">
+          <Link to={APPOINTMENTS_PATH}>{S.viewMyAppointments}</Link>
+        </Button>
+        <Button asChild variant="outline" size="touch" className="w-full">
           <Link to="/">{S.backToHome}</Link>
         </Button>
         <Button asChild variant="outline" size="touch" className="w-full">

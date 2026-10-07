@@ -1,4 +1,4 @@
-import { Building2, LogOut, Plus, Search } from 'lucide-react'
+import { Building2, CalendarDays, LogOut, Plus, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Alert, Button, EmptyState, Skeleton } from '@atheris/ui'
 import { useSignOut } from '@/api/auth'
@@ -8,7 +8,7 @@ import { usePageTitle } from '@/lib/usePageTitle'
 import { homeStrings as S } from '@/pages/home/strings'
 import { hospitalPath } from '@/pages/hospitals/paths'
 
-/** Home: who is signed in, the way to hospital discovery, and the linked hospital records. */
+/** Home: who is signed in, the ways to hospital discovery and to the patient's appointments, and the linked hospital records. */
 export function HomePage() {
   usePageTitle(S.title)
   const me = useMe()
@@ -38,6 +38,21 @@ export function HomePage() {
           <Link to="/hospitals">
             <Search aria-hidden />
             {S.findCta}
+          </Link>
+        </Button>
+      </section>
+
+      <section aria-labelledby="appointments-heading" className="bg-card space-y-3 rounded-2xl border p-5">
+        <div className="space-y-1">
+          <h2 id="appointments-heading" className="font-display text-title-lg text-primary">
+            {S.appointmentsHeading}
+          </h2>
+          <p className="text-body-sm text-on-surface-variant">{S.appointmentsBody}</p>
+        </div>
+        <Button asChild variant="outline" size="touch" className="w-full">
+          <Link to="/appointments">
+            <CalendarDays aria-hidden />
+            {S.appointmentsCta}
           </Link>
         </Button>
       </section>

@@ -19,7 +19,12 @@ from app.schemas.appointment import MAX_REASON_LENGTH
 
 __all__ = [
     "IDEMPOTENCY_KEY_PATTERN",
+    "MAX_CANCEL_TEXT",
+    "AppointmentScope",
     "BookAppointment",
+    "CancelAppointment",
+    "CancelReason",
+    "PatientAppointmentDetail",
     "PatientAppointment",
     "PatientAppointmentDoctor",
     "PatientAppointmentHospital",
@@ -105,3 +110,57 @@ class PatientAppointment(BaseModel):
     def build(cls, **fields: object) -> Self:
         """Construct from named fields (a seam for the service; no ORM access here)."""
         return cls.model_validate(fields)
+
+
+class AppointmentScope(StrEnum):
+    """Which of a patient's two appointment lists."""
+
+    UPCOMING = "upcoming"
+    PAST = "past"
+
+
+class CancelReason(StrEnum):
+    """Why a patient cancels: a fixed list (§14), so nothing free-form is required."""
+
+    SCHEDULE_CONFLICT = "schedule_conflict"
+    FEELING_BETTER = "feeling_better"
+    BOOKED_BY_MISTAKE = "booked_by_mistake"
+    OTHER = "other"
+
+
+#: The longest free text a patient may add to a cancellation.
+MAX_CANCEL_TEXT: Final = 200
+
+
+class CancelAppointment(BaseModel):
+    """Body of ``POST /patient/appointments/{appointment_ref}/cancel``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    reason_code: CancelReason
+    reason_text: (
+        Annotated[str, StringConstraints(strip_whitespace=True, max_length=MAX_CANCEL_TEXT)] | None
+    ) = Field(default=None, description="Optional detail, plain text.")
+
+    @field_validator("reason_text")
+    @classmethod
+    def _storable(cls, value: str | None) -> str | None:
+        """Blank is absent; the one character PostgreSQL text cannot hold is refused."""
+        if value is not None and "\x00" in value:
+            msg = "Contains a character that is not allowed."
+            raise ValueError(msg)
+        return value or None
+
+
+class PatientAppointmentDetail(PatientAppointment):
+    """A patient's own appointment, with what they may still do about it.
+
+    ``can_cancel`` is the server's decision — status, ownership and the
+    hospital's cut-off, as of this answer. A client shows a cancel action when
+    it is true and never works it out for itself.
+    """
+
+    can_cancel: bool = Field(description="Whether the patient may cancel it themself right now.")
+    cancel_until: datetime | None = Field(
+        description="The last instant self-cancellation is allowed; null unless it is booked."
+    )

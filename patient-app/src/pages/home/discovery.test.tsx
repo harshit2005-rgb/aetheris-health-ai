@@ -4,6 +4,7 @@ import type { HospitalLink } from '@/api/me'
 import { ok, serve } from '@/test/fakeApi'
 import { cityCare, cityCareHospital, lakeside, me } from '@/test/fixtures'
 import { hospitalDirectory } from '@/test/hospitalDirectory'
+import { anAppointment, myAppointmentRef, myAppointmentsEndpoints } from '@/test/myAppointments'
 import { renderApp, signIn } from '@/test/renderApp'
 
 const ME = 'GET /me'
@@ -34,7 +35,7 @@ describe('home — the way into hospital discovery', () => {
     await screen.findByRole('heading', { name: 'Welcome' })
 
     const navigation = within(screen.getByRole('navigation', { name: 'Main' }))
-    expect(navigation.getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Hospitals', 'Link hospital'])
+    expect(navigation.getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Hospitals', 'Appointments', 'Link hospital'])
     expect(navigation.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page')
     expect(navigation.getByRole('link', { name: 'Hospitals' })).not.toHaveAttribute('aria-current')
 
@@ -44,6 +45,44 @@ describe('home — the way into hospital discovery', () => {
     expect(router.state.location.pathname).toBe('/hospitals')
     expect(navigation.getByRole('link', { name: 'Hospitals' })).toHaveAttribute('aria-current', 'page')
     expect(navigation.getByRole('link', { name: 'Home' })).not.toHaveAttribute('aria-current')
+  })
+
+  it('offers "My appointments", which opens the patient’s appointments — and home itself asks for none of them', async () => {
+    signIn()
+    const mine = myAppointmentsEndpoints([anAppointment()])
+    const api = serve({ [ME]: ok(me()), ...mine.routes })
+    const { user, router } = renderApp('/')
+    await screen.findByText('No hospital linked yet')
+    expect(screen.getByRole('heading', { level: 2, name: 'Your appointments' })).toBeInTheDocument()
+    expect(api.sent.map((request) => request.url)).toEqual(['/me'])
+
+    await user.click(screen.getByRole('link', { name: 'My appointments' }))
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'My appointments' })).toHaveFocus()
+    expect(router.state.location.pathname).toBe('/appointments')
+    expect(await screen.findByRole('heading', { level: 3, name: 'Asha Menon' })).toBeInTheDocument()
+  })
+
+  it('has "Appointments" in the navigation, current on the list and on one appointment’s page', async () => {
+    signIn()
+    const mine = myAppointmentsEndpoints([anAppointment()])
+    serve({ [ME]: ok(me()), ...mine.routes })
+    const { user, router } = renderApp('/')
+    await screen.findByRole('heading', { name: 'Welcome' })
+
+    const navigation = within(screen.getByRole('navigation', { name: 'Main' }))
+    expect(navigation.getByRole('link', { name: 'Appointments' })).toHaveAttribute('href', '/appointments')
+    expect(navigation.getByRole('link', { name: 'Appointments' })).not.toHaveAttribute('aria-current')
+
+    await user.click(navigation.getByRole('link', { name: 'Appointments' }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'My appointments' })).toBeInTheDocument()
+    expect(navigation.getByRole('link', { name: 'Appointments' })).toHaveAttribute('aria-current', 'page')
+    expect(navigation.getByRole('link', { name: 'Home' })).not.toHaveAttribute('aria-current')
+
+    await user.click(await screen.findByRole('link', { name: /^View appointment Asha Menon/ }))
+    expect(await screen.findByRole('heading', { level: 1, name: 'Appointment' })).toHaveFocus()
+    expect(router.state.location.pathname).toBe(`/appointments/${myAppointmentRef(1)}`)
+    expect(navigation.getByRole('link', { name: 'Appointments' })).toHaveAttribute('aria-current', 'page')
   })
 
   it('opens a linked hospital’s page from its card, by the reference /me gives', async () => {

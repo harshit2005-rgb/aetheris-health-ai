@@ -84,6 +84,20 @@ export const routes: RouteObject[] = [
                 }),
               },
               {
+                // The patient's own appointments: upcoming and past.
+                path: '/appointments',
+                lazy: async () => ({
+                  Component: (await import('@/pages/appointments/AppointmentsPage')).AppointmentsPage,
+                }),
+              },
+              {
+                // One appointment, and the only place it can be cancelled from.
+                path: '/appointments/:appointmentRef',
+                lazy: async () => ({
+                  Component: (await import('@/pages/appointments/AppointmentDetailPage')).AppointmentDetailPage,
+                }),
+              },
+              {
                 path: '/link-patient',
                 lazy: async () => ({
                   Component: (await import('@/pages/hospitals/LinkPatientPage')).LinkPatientPage,

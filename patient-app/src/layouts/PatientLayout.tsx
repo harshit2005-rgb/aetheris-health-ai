@@ -1,12 +1,13 @@
-import { Building2, Hospital, House, type LucideIcon } from 'lucide-react'
+import { Building2, CalendarDays, Hospital, House, type LucideIcon } from 'lucide-react'
 import { NavLink, Outlet } from 'react-router-dom'
 import { cn } from '@atheris/ui'
 import { Brand } from '@/components/Brand'
 
-/** `end`: current only on that exact path. Hospitals stays current on a hospital's own pages. */
+/** `end`: current only on that exact path. Hospitals and Appointments stay current on the pages under them. */
 const NAV: { to: string; label: string; icon: LucideIcon; end: boolean }[] = [
   { to: '/', label: 'Home', icon: House, end: true },
   { to: '/hospitals', label: 'Hospitals', icon: Hospital, end: false },
+  { to: '/appointments', label: 'Appointments', icon: CalendarDays, end: false },
   { to: '/link-patient', label: 'Link hospital', icon: Building2, end: true },
 ]
 
@@ -39,7 +40,7 @@ export function PatientLayout() {
                 end={end}
                 className={({ isActive }) =>
                   cn(
-                    'text-body-sm flex min-h-14 flex-col items-center justify-center gap-0.5 font-medium',
+                    'text-body-sm flex min-h-14 flex-col items-center justify-center gap-0.5 px-1 text-center leading-tight font-medium',
                     isActive ? 'text-secondary' : 'text-on-surface-variant hover:text-on-surface',
                   )
                 }

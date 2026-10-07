@@ -14,7 +14,7 @@ from __future__ import annotations
 import uuid  # noqa: TC003 — needed at runtime for type hints
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, and_, func, not_, select, tuple_
 
 from app.models.appointment import (
     SLOT_FREEING_STATUSES,
@@ -26,10 +26,18 @@ from app.models.appointment import (
 )
 from app.repositories.base import BaseRepository
 
+#: Statuses of an appointment that is still to happen or is happening.
+_OCCUPYING_AHEAD: frozenset[AppointmentStatus] = frozenset(
+    {AppointmentStatus.BOOKED, AppointmentStatus.CHECKED_IN, AppointmentStatus.IN_PROGRESS}
+)
+
 if TYPE_CHECKING:
     from datetime import datetime
 
     from sqlalchemy.ext.asyncio import AsyncSession
+    from sqlalchemy.sql import ColumnElement
+
+    from app.core.tenancy import CrossTenant
 
 
 class AppointmentRepository(BaseRepository[Appointment]):
@@ -208,6 +216,106 @@ class AppointmentRepository(BaseRepository[Appointment]):
         )
         result = await self._session.execute(stmt)
         return result.unique().scalar_one_or_none()
+
+    async def lock_appointment_by_id(
+        self, hospital_id: uuid.UUID, appointment_id: uuid.UUID
+    ) -> Appointment | None:
+        """Read one appointment as it is now and lock its row until the transaction ends.
+
+        For a status change: two transitions of one appointment must not both
+        read the same starting status. The second waits here, then sees what
+        the first committed.
+
+        :param hospital_id: The tenant to scope to.
+        :param appointment_id: The appointment to lock.
+        :returns: The appointment with its current values, or ``None``.
+        """
+        stmt = (
+            self._scoped(hospital_id)
+            .where(Appointment.id == appointment_id)
+            # Only the appointment row: the eager-loaded patient and doctor are
+            # outer joins, which ``FOR UPDATE`` cannot lock and need not.
+            .with_for_update(of=Appointment)
+            .execution_options(populate_existing=True)
+        )
+        result = await self._session.execute(stmt)
+        return result.unique().scalar_one_or_none()
+
+    async def list_for_patient_records(
+        self,
+        records: list[tuple[uuid.UUID, uuid.UUID]],
+        scope: uuid.UUID | CrossTenant,
+        *,
+        upcoming: bool,
+        now: datetime,
+        skip: int = 0,
+        limit: int = 20,
+    ) -> tuple[list[Appointment], int]:
+        """One page of the appointments of some patient records, and their total.
+
+        For a patient's own list across the hospitals they are linked at: each
+        record is named together with its hospital, so a row is returned only
+        where both match.
+
+        *Upcoming* is an appointment that still occupies time ahead: not
+        finished, cancelled or missed, and not yet ended — soonest first.
+        *Past* is every other one, most recent first.
+
+        :param records: ``(hospital_id, patient_id)`` pairs. Empty means none.
+        :param scope: A hospital id, or a ``cross_tenant(...)`` marker for a
+            list that spans the caller's own hospitals.
+        :param upcoming: Which of the two lists.
+        :param now: The current instant (UTC).
+        :param skip: Rows to skip.
+        :param limit: Maximum rows to return.
+        :returns: The page, and how many appointments the list holds in all.
+        """
+        if not records:
+            return [], 0
+        ahead = and_(
+            Appointment.status.in_(tuple(_OCCUPYING_AHEAD)), Appointment.scheduled_end > now
+        )
+        stmt = self._confine_to_tenant(
+            self._query().where(self._owned_by(records), ahead if upcoming else not_(ahead)),
+            scope,
+            "list_for_patient_records",
+        )
+        total = await self._session.execute(select(func.count()).select_from(stmt.subquery()))
+        order = (
+            (Appointment.scheduled_start.asc(), Appointment.id.asc())
+            if upcoming
+            else (Appointment.scheduled_start.desc(), Appointment.id.desc())
+        )
+        rows = await self._session.execute(stmt.order_by(*order).offset(skip).limit(limit))
+        return list(rows.unique().scalars().all()), total.scalar_one()
+
+    async def get_for_patient_records(
+        self,
+        records: list[tuple[uuid.UUID, uuid.UUID]],
+        scope: uuid.UUID | CrossTenant,
+        appointment_id: uuid.UUID,
+    ) -> Appointment | None:
+        """Read one appointment if it belongs to one of some patient records.
+
+        :param records: ``(hospital_id, patient_id)`` pairs. Empty means none.
+        :param scope: A hospital id, or a ``cross_tenant(...)`` marker.
+        :param appointment_id: The appointment.
+        :returns: The appointment, or ``None`` — also when it is somebody else's.
+        """
+        if not records:
+            return None
+        stmt = self._confine_to_tenant(
+            self._query().where(Appointment.id == appointment_id, self._owned_by(records)),
+            scope,
+            "get_for_patient_records",
+        ).execution_options(populate_existing=True)
+        result = await self._session.execute(stmt)
+        return result.unique().scalar_one_or_none()
+
+    @staticmethod
+    def _owned_by(records: list[tuple[uuid.UUID, uuid.UUID]]) -> ColumnElement[bool]:
+        """The appointment is at one of the hospitals, for that hospital's record."""
+        return tuple_(Appointment.hospital_id, Appointment.patient_id).in_(records)
 
     async def get_by_idempotency_key(
         self, hospital_id: uuid.UUID, idempotency_key: str

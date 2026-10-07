@@ -904,9 +904,10 @@ class TestStaffCredentialsAgainstThePatientApi:
 
         # /me, logout-all, link, register, refresh, the three hospital
         # discovery routes, the three doctor discovery routes, doctor
-        # availability and booking all refused; request and verify are public
-        # (422 with no body) and logout has nothing to end.
-        assert protected == 13
+        # availability, booking and the three own-appointment routes all
+        # refused; request and verify are public (422 with no body) and logout
+        # has nothing to end.
+        assert protected == 16
         assert await _count(db_session, PatientAccount) == 0
         assert await _count(db_session, PatientRefreshToken) == 0
         assert await _count(db_session, PatientAccountLink) == 0

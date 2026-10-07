@@ -19,6 +19,11 @@ describe('route guards', () => {
     '/hospitals/city-care/doctors/d0000000-0000-4000-8000-000000000001/availability',
     '/hospitals/city-care/doctors/d0000000-0000-4000-8000-000000000001/availability?date=2026-10-14&slot=2026-10-14T09%3A00%3A00%2B05%3A30',
     '/hospitals/city-care/doctors/d0000000-0000-4000-8000-000000000001/book?date=2026-10-14&start=2026-10-14T09%3A00%3A00%2B05%3A30&end=2026-10-14T09%3A15%3A00%2B05%3A30',
+    '/appointments',
+    '/appointments?view=past&page=2',
+    '/appointments/e0000000-0000-4000-8000-000000000001',
+    '/appointments/e0000000-0000-4000-8000-000000000001?cancel=1',
+    '/appointments/not-a-reference',
     '/no-such-page',
   ])('sends a visitor at %s to the sign-in page', async (path) => {
     const api = serve({})

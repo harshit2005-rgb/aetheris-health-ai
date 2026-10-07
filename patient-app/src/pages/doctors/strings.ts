@@ -158,6 +158,7 @@ export const doctorStrings = {
   referenceLabel: 'Reference',
   statusLabel: 'Status',
   statusBooked: 'Booked',
+  viewMyAppointments: 'View my appointments',
   backToHome: 'Back to home',
   backToTheDoctor: 'Back to the doctor',
 

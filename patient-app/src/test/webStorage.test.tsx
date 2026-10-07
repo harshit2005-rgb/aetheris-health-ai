@@ -1,7 +1,7 @@
-import { screen } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { fail, noContent, ok, serve } from '@/test/fakeApi'
-import { bookingEndpoint, LOST } from '@/test/booking'
+import { appointmentRef, bookingEndpoint, LOST } from '@/test/booking'
 import { doctorDirectory } from '@/test/doctorDirectory'
 import {
   ashaRao,
@@ -16,6 +16,7 @@ import {
   verifiedSession,
 } from '@/test/fixtures'
 import { hospitalDirectory } from '@/test/hospitalDirectory'
+import { myAppointmentsEndpoints } from '@/test/myAppointments'
 import { loadApp } from '@/test/renderApp'
 
 /**
@@ -69,7 +70,7 @@ describe('web storage', () => {
     expect(window.sessionStorage).toHaveLength(0)
   })
 
-  it('is never touched by discovery and booking: search, filter, pages, a hospital, its doctors, a doctor, availability, a booking, linking', async () => {
+  it('is never touched by discovery, booking and the patient’s appointments: search, filter, pages, a hospital, its doctors, a doctor, availability, a booking, the appointments, one of them, cancelling it, linking', async () => {
     const read = vi.spyOn(Storage.prototype, 'getItem')
     const touched = [
       vi.spyOn(Storage.prototype, 'removeItem'),
@@ -77,12 +78,15 @@ describe('web storage', () => {
       vi.spyOn(Storage.prototype, 'key'),
     ]
     const booking = bookingEndpoint(lakesideHospital, ashaRao)
+    // The patient's appointments are whatever that endpoint has booked.
+    const mine = myAppointmentsEndpoints(booking.appointments, { refs: [appointmentRef(1)] })
     serve({
       'POST /auth/refresh': ok({ access_token: 'access-secret', expires_in: 900 }),
       'GET /me': ok(me([cityCare])),
       ...hospitalDirectory([lakesideHospital, ...manyHospitals(45)]),
       ...doctorDirectory('lakeside-clinic', [ashaRao, meeraIyer]),
       ...booking.routes,
+      ...mine.routes,
     })
     // A reload in the middle of a search: the filters come from the URL, not from storage.
     const { user } = loadApp('/hospitals?q=clinic&city=Bengaluru')
@@ -127,6 +131,32 @@ describe('web storage', () => {
     await user.click(screen.getByRole('link', { name: 'Back to the doctor' }))
     await user.click(await screen.findByRole('link', { name: 'Doctors at Lakeside Clinic' }))
     await user.click(await screen.findByRole('link', { name: 'Back to Lakeside Clinic' }))
+    // On to the patient's own appointments: the two views and the page live in the URL, and so does
+    // the request to cancel; the reason, the details and the outcome live in memory only.
+    await user.click(screen.getByRole('link', { name: 'Appointments' }))
+    await screen.findByRole('heading', { level: 1, name: 'My appointments' })
+    await screen.findByRole('heading', { level: 3, name: 'Asha Rao' })
+    await user.click(screen.getByRole('tab', { name: 'Past' }))
+    await screen.findByText('No past appointments', { selector: 'p.font-display' })
+    await user.click(screen.getByRole('tab', { name: 'Upcoming' }))
+    await user.click(await screen.findByRole('link', { name: /^View appointment Asha Rao/ }))
+    await screen.findByRole('region', { name: 'Appointment details' })
+    await user.click(screen.getByRole('button', { name: 'Cancel appointment' }))
+    await user.click(await screen.findByRole('button', { name: 'Keep appointment' }))
+    await user.click(screen.getByRole('link', { name: 'My appointments' }))
+    await user.click(await screen.findByRole('link', { name: /^Cancel Asha Rao/ }))
+    const question = within(await screen.findByRole('dialog', { name: 'Cancel this appointment?' }))
+    await user.click(question.getByRole('radio', { name: 'Another reason' }))
+    await user.type(question.getByRole('textbox', { name: 'More details (optional)' }), 'Feeling better')
+    mine.next(LOST)
+    await user.click(question.getByRole('button', { name: 'Cancel appointment' }))
+    await user.click(await question.findByRole('button', { name: 'Try again' }))
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Appointment cancelled'))
+    expect(mine.cancelRequests).toHaveLength(2)
+    expect(mine.cancelRequests[1].rawBody).toBe(mine.cancelRequests[0].rawBody)
+    expect(mine.cancellations).toHaveLength(1)
+    expect(window.history.state).toBeNull()
+    await user.click(screen.getByRole('link', { name: 'Lakeside Clinic' }))
     await user.click(await screen.findByRole('link', { name: 'Link my record' }))
     expect(await screen.findByLabelText('Hospital code')).toHaveValue('lakeside-clinic')
 
