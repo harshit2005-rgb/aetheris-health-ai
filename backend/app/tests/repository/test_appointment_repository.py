@@ -633,3 +633,97 @@ class TestListingAndQueue:
         ids = {a.id for a in candidates}
         assert overdue.id in ids
         assert finished.id not in ids
+
+
+class TestThePatientsOwnCalendar:
+    """The two queries patient booking decides the patient's own rules with."""
+
+    async def test_overlap_and_count_are_scoped_to_the_patient_and_the_hospital(
+        self,
+        repository: AppointmentRepository,
+        db_session: AsyncSession,
+        hospital_id: uuid.UUID,
+        other_hospital_id: uuid.UUID,
+    ) -> None:
+        patient_id, doctor_id = await _fixtures(db_session, hospital_id)
+        other_patient, other_doctor = await _fixtures(db_session, hospital_id)
+        foreign_patient, foreign_doctor = await _fixtures(db_session, other_hospital_id)
+        mine = await _book(repository, hospital_id, patient_id, doctor_id)
+        await _book(repository, hospital_id, other_patient, other_doctor)
+        await _book(repository, other_hospital_id, foreign_patient, foreign_doctor)
+        window = (BASE, BASE + timedelta(minutes=15))
+        before = BASE - timedelta(days=1)
+
+        found = await repository.find_overlapping_for_patient(hospital_id, patient_id, *window)
+
+        assert [row.id for row in found] == [mine.id]
+        assert (
+            await repository.find_overlapping_for_patient(other_hospital_id, patient_id, *window)
+            == []
+        )
+        assert (
+            await repository.find_overlapping_for_patient(hospital_id, foreign_patient, *window)
+            == []
+        )
+        assert (
+            await repository.count_upcoming_booked_for_patient(
+                hospital_id, patient_id, after=before
+            )
+            == 1
+        )
+        assert (
+            await repository.count_upcoming_booked_for_patient(
+                other_hospital_id, patient_id, after=before
+            )
+            == 0
+        )
+        assert (
+            await repository.count_upcoming_booked_for_patient(
+                hospital_id, foreign_patient, after=before
+            )
+            == 0
+        )
+
+    async def test_overlap_is_half_open_and_ignores_appointments_that_freed_their_slot(
+        self, repository: AppointmentRepository, db_session: AsyncSession, hospital_id: uuid.UUID
+    ) -> None:
+        patient_id, doctor_id = await _fixtures(db_session, hospital_id)
+        held = await _book(repository, hospital_id, patient_id, doctor_id)
+        end = BASE + timedelta(minutes=15)
+
+        async def overlapping(start: datetime, stop: datetime) -> int:
+            return len(
+                await repository.find_overlapping_for_patient(hospital_id, patient_id, start, stop)
+            )
+
+        assert await overlapping(BASE + timedelta(minutes=10), end + timedelta(minutes=10)) == 1
+        assert await overlapping(end, end + timedelta(minutes=15)) == 0
+        assert await overlapping(BASE - timedelta(minutes=15), BASE) == 0
+        for status in (AppointmentStatus.CANCELLED, AppointmentStatus.NO_SHOW):
+            await repository.update_appointment(held, status=status)
+            assert await overlapping(BASE, end) == 0
+        for status in (
+            AppointmentStatus.CHECKED_IN,
+            AppointmentStatus.IN_PROGRESS,
+            AppointmentStatus.COMPLETED,
+        ):
+            await repository.update_appointment(held, status=status)
+            assert await overlapping(BASE, end) == 1
+
+    async def test_the_count_is_of_booked_appointments_that_have_not_started(
+        self, repository: AppointmentRepository, db_session: AsyncSession, hospital_id: uuid.UUID
+    ) -> None:
+        patient_id, doctor_id = await _fixtures(db_session, hospital_id)
+        first = await _book(repository, hospital_id, patient_id, doctor_id)
+        await _book(repository, hospital_id, patient_id, doctor_id, offset_minutes=60)
+
+        async def held(after: datetime) -> int:
+            return await repository.count_upcoming_booked_for_patient(
+                hospital_id, patient_id, after=after
+            )
+
+        assert await held(BASE - timedelta(minutes=1)) == 2
+        assert await held(BASE) == 1
+        assert await held(BASE + timedelta(hours=2)) == 0
+        await repository.update_appointment(first, status=AppointmentStatus.CANCELLED)
+        assert await held(BASE - timedelta(minutes=1)) == 1

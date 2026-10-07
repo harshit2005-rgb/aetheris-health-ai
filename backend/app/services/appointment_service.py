@@ -63,7 +63,7 @@ from app.schemas.appointment import (
 from app.schemas.common import Page, PaginationParams
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -445,6 +445,7 @@ class AppointmentService:
         idempotency_key: str,
         actor_id: uuid.UUID | None = None,
         allow_override: bool = False,
+        audit_event: Callable[[Appointment], AuditEvent] | None = None,
     ) -> tuple[AppointmentResponse, bool]:
         """Book an appointment (module spec §5.2).
 
@@ -458,6 +459,10 @@ class AppointmentService:
         :param actor_id: UUID of the acting user.
         :param allow_override: Caller holds ``appointment.book_override``, so
             availability is advisory rather than binding (rule 4).
+        :param audit_event: Builds the audit event recorded for the booking, in
+            place of the staff ``appointment.booked`` one. For a caller that is
+            not a staff user — the Patient App — so the one audit row of the
+            booking names its real actor and commits with the appointment.
         :returns: The appointment and whether it was newly created.
         :raises ValidationError: If patient or doctor is unusable.
         :raises DoubleBookingError: If the doctor is already busy.
@@ -513,7 +518,9 @@ class AppointmentService:
             raise
 
         await self._audit.record(
-            AuditEvent(
+            audit_event(appointment)
+            if audit_event is not None
+            else AuditEvent(
                 action="appointment.booked",
                 hospital_id=hospital_id,
                 target_type="appointment",

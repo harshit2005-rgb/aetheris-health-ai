@@ -134,6 +134,14 @@ class PatientAuthorization:
             account_id=account.id, hospital_id=link.hospital_id, patient_id=link.patient_id
         )
 
+    async def ensure_policies_accepted(self, account_id: uuid.UUID) -> None:
+        """Refuse an account that has a required policy pending.
+
+        :param account_id: The authenticated account.
+        :raises ConsentRequiredError: If a required policy is pending.
+        """
+        await self._consent.ensure_policies_accepted(account_id)
+
     async def describe_links(self, account: PatientAccount) -> list[PatientLink]:
         """The account's active links, each with whether it is honoured right now.
 

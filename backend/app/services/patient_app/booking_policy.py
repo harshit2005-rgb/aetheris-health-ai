@@ -21,12 +21,15 @@ __all__ = ["BookingPolicy"]
 #: Settings keys, flat in the JSONB object.
 HORIZON_KEY: Final = "patient_app.booking_horizon_days"
 MIN_LEAD_KEY: Final = "patient_app.min_lead_minutes"
+MAX_ACTIVE_KEY: Final = "patient_app.max_active_bookings"
 
 #: Documented defaults and the bounds a stored value must lie within.
 DEFAULT_HORIZON_DAYS: Final = 30
 DEFAULT_MIN_LEAD_MINUTES: Final = 60
+DEFAULT_MAX_ACTIVE_BOOKINGS: Final = 3
 HORIZON_BOUNDS: Final = (1, 365)
 MIN_LEAD_BOUNDS: Final = (0, 7 * 24 * 60)
+MAX_ACTIVE_BOUNDS: Final = (1, 50)
 
 
 @dataclass(frozen=True, slots=True)
@@ -35,10 +38,13 @@ class BookingPolicy:
 
     :param horizon_days: The furthest bookable date, in days from today.
     :param min_lead_minutes: The earliest bookable start, in minutes from now.
+    :param max_active_bookings: How many upcoming ``booked`` appointments one
+        patient may hold at the hospital.
     """
 
     horizon_days: int = DEFAULT_HORIZON_DAYS
     min_lead_minutes: int = DEFAULT_MIN_LEAD_MINUTES
+    max_active_bookings: int = DEFAULT_MAX_ACTIVE_BOOKINGS
 
     @classmethod
     def from_settings(cls, settings: object) -> BookingPolicy:
@@ -53,6 +59,9 @@ class BookingPolicy:
             horizon_days=_bounded(stored.get(HORIZON_KEY), HORIZON_BOUNDS, DEFAULT_HORIZON_DAYS),
             min_lead_minutes=_bounded(
                 stored.get(MIN_LEAD_KEY), MIN_LEAD_BOUNDS, DEFAULT_MIN_LEAD_MINUTES
+            ),
+            max_active_bookings=_bounded(
+                stored.get(MAX_ACTIVE_KEY), MAX_ACTIVE_BOUNDS, DEFAULT_MAX_ACTIVE_BOOKINGS
             ),
         )
 

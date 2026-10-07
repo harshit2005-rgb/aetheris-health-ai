@@ -306,6 +306,52 @@ class AppointmentRepository(BaseRepository[Appointment]):
         result = await self._session.execute(self._ordered(stmt))
         return list(result.unique().scalars().all())
 
+    async def find_overlapping_for_patient(
+        self,
+        hospital_id: uuid.UUID,
+        patient_id: uuid.UUID,
+        scheduled_start: datetime,
+        scheduled_end: datetime,
+    ) -> list[Appointment]:
+        """Find a patient's own appointments that overlap a proposed window.
+
+        The patient-side twin of :meth:`find_overlapping`: the same half-open
+        comparison and the same statuses — an appointment that freed its slot
+        no longer occupies the patient's time either.
+
+        :param hospital_id: The tenant to scope to.
+        :param patient_id: The patient whose calendar to check.
+        :param scheduled_start: Proposed start (UTC).
+        :param scheduled_end: Proposed end (UTC).
+        :returns: Overlapping appointments, earliest first.
+        """
+        stmt = self._scoped(hospital_id).where(
+            Appointment.patient_id == patient_id,
+            Appointment.status.not_in(tuple(SLOT_FREEING_STATUSES)),
+            Appointment.scheduled_start < scheduled_end,
+            Appointment.scheduled_end > scheduled_start,
+        )
+        result = await self._session.execute(self._ordered(stmt))
+        return list(result.unique().scalars().all())
+
+    async def count_upcoming_booked_for_patient(
+        self, hospital_id: uuid.UUID, patient_id: uuid.UUID, *, after: datetime
+    ) -> int:
+        """Count a patient's ``booked`` appointments that have not started yet.
+
+        :param hospital_id: The tenant to scope to.
+        :param patient_id: The patient to count for.
+        :param after: Only appointments starting after this instant (UTC).
+        :returns: The number of upcoming booked appointments.
+        """
+        stmt = self._scoped(hospital_id).where(
+            Appointment.patient_id == patient_id,
+            Appointment.status == AppointmentStatus.BOOKED,
+            Appointment.scheduled_start > after,
+        )
+        result = await self._session.execute(select(func.count()).select_from(stmt.subquery()))
+        return result.scalar_one()
+
     async def booked_intervals_for_doctor(
         self,
         hospital_id: uuid.UUID,

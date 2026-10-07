@@ -77,10 +77,10 @@ export const routes: RouteObject[] = [
                 }),
               },
               {
-                // Where "Continue to booking" leads; it shows the chosen slot and books nothing yet.
+                // Where "Continue to booking" leads: the chosen slot is reviewed, and booked only on confirmation.
                 path: '/hospitals/:hospitalRef/doctors/:doctorRef/book',
                 lazy: async () => ({
-                  Component: (await import('@/pages/doctors/DoctorBookingPlaceholderPage')).DoctorBookingPlaceholderPage,
+                  Component: (await import('@/pages/doctors/DoctorBookingPage')).DoctorBookingPage,
                 }),
               },
               {

@@ -1,6 +1,7 @@
 import { screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { fail, noContent, ok, serve } from '@/test/fakeApi'
+import { bookingEndpoint, LOST } from '@/test/booking'
 import { doctorDirectory } from '@/test/doctorDirectory'
 import {
   ashaRao,
@@ -68,18 +69,20 @@ describe('web storage', () => {
     expect(window.sessionStorage).toHaveLength(0)
   })
 
-  it('is never touched by discovery: search, filter, pages, a hospital, its doctors, a doctor, availability, linking', async () => {
+  it('is never touched by discovery and booking: search, filter, pages, a hospital, its doctors, a doctor, availability, a booking, linking', async () => {
     const read = vi.spyOn(Storage.prototype, 'getItem')
     const touched = [
       vi.spyOn(Storage.prototype, 'removeItem'),
       vi.spyOn(Storage.prototype, 'clear'),
       vi.spyOn(Storage.prototype, 'key'),
     ]
+    const booking = bookingEndpoint(lakesideHospital, ashaRao)
     serve({
       'POST /auth/refresh': ok({ access_token: 'access-secret', expires_in: 900 }),
       'GET /me': ok(me([cityCare])),
       ...hospitalDirectory([lakesideHospital, ...manyHospitals(45)]),
       ...doctorDirectory('lakeside-clinic', [ashaRao, meeraIyer]),
+      ...booking.routes,
     })
     // A reload in the middle of a search: the filters come from the URL, not from storage.
     const { user } = loadApp('/hospitals?q=clinic&city=Bengaluru')
@@ -108,9 +111,20 @@ describe('web storage', () => {
     await user.click(screen.getByRole('button', { name: /^10:00 to 10:15, Friday 9 October 2026$/ }))
     await user.click(screen.getByRole('link', { name: 'Continue to booking' }))
     await screen.findByRole('heading', { name: 'Booking' })
-    await user.click(screen.getAllByRole('link', { name: 'Back to availability' })[0])
+    await user.click(screen.getByRole('link', { name: 'Back to availability' }))
     await screen.findByRole('heading', { name: 'Availability' })
-    await user.click(screen.getByRole('link', { name: 'Back to Asha Rao' }))
+    // The booking itself: the reason, the idempotency key and the confirmation live in memory only.
+    await user.click(await screen.findByRole('link', { name: 'Continue to booking' }))
+    await screen.findByRole('heading', { name: 'Booking' })
+    booking.next(LOST)
+    await user.type(screen.getByRole('textbox', { name: 'Reason for visit (optional)' }), 'Chest pain')
+    await user.click(screen.getByRole('button', { name: 'Confirm appointment' }))
+    await user.click(await screen.findByRole('button', { name: 'Try again' }))
+    await screen.findByRole('heading', { name: 'Appointment booked' })
+    expect(booking.requests).toHaveLength(2)
+    expect(booking.requests[1].key).toBe(booking.requests[0].key)
+    expect(window.history.state).toBeNull()
+    await user.click(screen.getByRole('link', { name: 'Back to the doctor' }))
     await user.click(await screen.findByRole('link', { name: 'Doctors at Lakeside Clinic' }))
     await user.click(await screen.findByRole('link', { name: 'Back to Lakeside Clinic' }))
     await user.click(await screen.findByRole('link', { name: 'Link my record' }))

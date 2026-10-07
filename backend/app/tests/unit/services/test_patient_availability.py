@@ -13,6 +13,7 @@ from datetime import UTC, date, datetime, time, timedelta
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -28,6 +29,7 @@ from app.repositories.doctor_repository import DoctorDirectoryEntry
 from app.repositories.hospital_repository import HospitalDirectoryEntry
 from app.services.patient_app.availability_service import (
     DoctorAvailabilityService,
+    SlotState,
     _bounded_range,
 )
 from app.services.patient_app.errors import ConsentRequiredError
@@ -405,3 +407,102 @@ class TestWhatIsShown:
         instants = [slot.start.astimezone(UTC) for slot in day.slots]
         assert instants == sorted(instants) and len(set(instants)) == len(instants)
         assert all(slot.end > slot.start for slot in day.slots)
+
+
+class TestSlotState:
+    """What booking asks before it writes: is exactly this slot bookable right now."""
+
+    async def _state(
+        self, start: datetime, end: datetime, *, now: datetime = NOW, **setup: Any
+    ) -> Any:
+        hospital = _hospital(settings=setup.get("settings"))
+        availability = _Availability(hospital, _doctor())
+        availability.windows(_window(0, time(9), time(12)))
+        if "leave" in setup:
+            leave = setup["leave"]
+            availability._reading(
+                "doctors", "list_leaves", [SimpleNamespace(starts_at=leave[0], ends_at=leave[1])]
+            )
+        if "booked" in setup:
+            booked = setup["booked"]
+            availability._reading(
+                "appointments",
+                "booked_intervals_for_doctor",
+                [
+                    SimpleNamespace(
+                        id=uuid.uuid4(), scheduled_start=booked[0], scheduled_end=booked[1]
+                    )
+                ],
+            )
+        return await availability.service.slot_state(hospital, uuid.uuid4(), start, end, now=now)
+
+    @staticmethod
+    def _ist(hour: int, minute: int = 0, day: date = D) -> datetime:
+        return datetime.combine(day, time(hour, minute), tzinfo=ZoneInfo("Asia/Kolkata"))
+
+    async def test_a_real_free_slot_past_the_lead_is_bookable(self) -> None:
+        assert await self._state(self._ist(10), self._ist(10, 15)) is SlotState.BOOKABLE
+        # The same instants in another offset are the same slot.
+        assert (
+            await self._state(self._ist(10).astimezone(UTC), self._ist(10, 15).astimezone(UTC))
+            is SlotState.BOOKABLE
+        )
+
+    async def test_a_slot_under_a_booking_or_a_leave_is_taken(self) -> None:
+        booked = (self._ist(10, 5), self._ist(10, 10))
+        leave = (self._ist(10), self._ist(11))
+        assert await self._state(self._ist(10), self._ist(10, 15), booked=booked) is SlotState.TAKEN
+        assert await self._state(self._ist(10), self._ist(10, 15), leave=leave) is SlotState.TAKEN
+        assert (
+            await self._state(self._ist(11), self._ist(11, 15), leave=leave) is SlotState.BOOKABLE
+        )
+
+    @pytest.mark.parametrize(
+        ("start", "end"),
+        [
+            ((10, 5), (10, 20)),
+            ((10, 0), (10, 30)),
+            ((10, 0), (10, 10)),
+            ((8, 45), (9, 0)),
+            ((12, 0), (12, 15)),
+            ((10, 15), (10, 0)),
+        ],
+    )
+    async def test_bounds_that_are_not_a_slot_of_the_engine(
+        self, start: tuple[int, int], end: tuple[int, int]
+    ) -> None:
+        assert await self._state(self._ist(*start), self._ist(*end)) is SlotState.NOT_A_SLOT
+
+    async def test_the_lead_time_and_the_horizon_bound_it(self) -> None:
+        ten = (self._ist(10), self._ist(10, 15))
+        assert await self._state(*ten, now=self._ist(9)) is SlotState.BOOKABLE
+        assert (
+            await self._state(*ten, now=self._ist(9, 0) + timedelta(seconds=1))
+            is SlotState.NOT_A_SLOT
+        )
+        assert await self._state(*ten, now=self._ist(10, 30)) is SlotState.NOT_A_SLOT
+        assert (
+            await self._state(*ten, now=self._ist(9, day=D - timedelta(days=30)))
+            is SlotState.BOOKABLE
+        )
+        assert (
+            await self._state(*ten, now=self._ist(9, day=D - timedelta(days=31)))
+            is SlotState.NOT_A_SLOT
+        )
+        assert (
+            await self._state(*ten, now=self._ist(9, day=D + timedelta(days=1)))
+            is SlotState.NOT_A_SLOT
+        )
+        strict = {"patient_app.booking_horizon_days": 2, "patient_app.min_lead_minutes": 0}
+        assert await self._state(*ten, now=self._ist(9, 59), settings=strict) is SlotState.BOOKABLE
+        assert (
+            await self._state(*ten, now=self._ist(9, day=D - timedelta(days=3)), settings=strict)
+            is SlotState.NOT_A_SLOT
+        )
+
+    async def test_a_day_without_a_window_reads_as_no_slot_without_error(self) -> None:
+        tuesday = D + timedelta(days=1)
+        assert (
+            await self._state(self._ist(10, day=tuesday), self._ist(10, 15, day=tuesday))
+            is SlotState.NOT_A_SLOT
+        )

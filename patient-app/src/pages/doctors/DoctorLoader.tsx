@@ -65,7 +65,7 @@ export function DoctorLoader({ hospitalRef, doctorRef, title, children }: Doctor
 
     if (doctor.isError) {
       const failure = loadFailureOf(doctor.error)
-      return failure === 'not_found' ? <NotAvailable hospital={found} /> : problem(found, failure)
+      return failure === 'not_found' ? <DoctorNotAvailable hospital={found} /> : problem(found, failure)
     }
 
     return children(doctor.data, found)
@@ -78,15 +78,21 @@ export function DoctorLoader({ hospitalRef, doctorRef, title, children }: Doctor
   )
 }
 
-/** Unknown, not listed, at another hospital: the server says one thing and so does the app. */
-function NotAvailable({ hospital }: { hospital: PatientHospital }) {
+/**
+ * Unknown, not listed, at another hospital: the server says one thing and so
+ * does the app. `focusOnMount` is for a page that learns it only after the
+ * patient acted on it.
+ */
+export function DoctorNotAvailable({ hospital, focusOnMount }: { hospital: PatientHospital; focusOnMount?: boolean }) {
   return (
     <div className="bg-card flex flex-col items-center gap-4 rounded-2xl border px-6 py-10 text-center">
       <span className="bg-surface-container text-outline flex size-14 items-center justify-center rounded-2xl">
         <Stethoscope className="size-7" aria-hidden />
       </span>
       <div className="space-y-1">
-        <PageHeading className="text-title-lg">{S.notFoundTitle}</PageHeading>
+        <PageHeading className="text-title-lg" focusOnMount={focusOnMount}>
+          {S.notFoundTitle}
+        </PageHeading>
         <p className="text-body-sm text-on-surface-variant mx-auto max-w-sm">{S.notFoundBody}</p>
       </div>
       <Button asChild size="touch">

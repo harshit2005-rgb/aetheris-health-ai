@@ -52,7 +52,12 @@ from app.api.dependencies.repositories import (
     get_patient_refresh_token_repository,
     get_patient_repository,
 )
-from app.api.dependencies.services import get_audit_sink, get_patient_service, get_unit_of_work
+from app.api.dependencies.services import (
+    get_appointment_service,
+    get_audit_sink,
+    get_patient_service,
+    get_unit_of_work,
+)
 from app.core.audit import AuditSink
 from app.core.client_ip import client_ip
 from app.core.config import settings
@@ -77,9 +82,11 @@ from app.repositories import (
     PatientRefreshTokenRepository,
     PatientRepository,
 )
+from app.services.appointment_service import AppointmentService
 from app.services.auth_throttle import AuthThrottle
 from app.services.patient_app.access_grant_service import AccessGrantService
 from app.services.patient_app.availability_service import DoctorAvailabilityService
+from app.services.patient_app.booking_service import PatientBookingService
 from app.services.patient_app.common import ClientContext
 from app.services.patient_app.consent_service import ConsentService
 from app.services.patient_app.doctor_directory_service import HospitalDoctorDirectoryService
@@ -103,6 +110,7 @@ __all__ = [
     "get_patient_account",
     "get_patient_account_service",
     "get_patient_auth_service",
+    "get_patient_booking_service",
     "get_patient_authorization",
     "get_patient_context",
     "get_record_link_service",
@@ -306,6 +314,21 @@ def get_doctor_directory_service(
 ) -> HospitalDoctorDirectoryService:
     """Provide a :class:`HospitalDoctorDirectoryService`."""
     return HospitalDoctorDirectoryService(gate, doctors, consent)
+
+
+def get_patient_booking_service(
+    gate: PatientHospitalGate = Depends(get_patient_hospital_gate),
+    authorization: PatientAuthorization = Depends(get_patient_authorization),
+    doctors: DoctorRepository = Depends(get_doctor_repository),
+    appointments: AppointmentRepository = Depends(get_appointment_repository),
+    links: PatientAccountLinkRepository = Depends(get_patient_account_link_repository),
+    availability: DoctorAvailabilityService = Depends(get_doctor_availability_service),
+    booking: AppointmentService = Depends(get_appointment_service),
+) -> PatientBookingService:
+    """Provide a :class:`PatientBookingService` over the hospital's own booking service."""
+    return PatientBookingService(
+        gate, authorization, doctors, appointments, links, availability, booking
+    )
 
 
 def get_record_link_service(

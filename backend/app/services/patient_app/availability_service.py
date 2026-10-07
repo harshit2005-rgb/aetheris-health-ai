@@ -27,6 +27,7 @@ from __future__ import annotations
 import re
 import uuid
 from datetime import UTC, date, datetime, time, timedelta
+from enum import StrEnum
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Final
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -58,11 +59,12 @@ if TYPE_CHECKING:
     from app.models.patient_account import PatientAccount
     from app.repositories.appointment_repository import AppointmentRepository
     from app.repositories.doctor_repository import DoctorRepository
+    from app.repositories.hospital_repository import HospitalDirectoryEntry
     from app.schemas.doctor import SlotResponse
     from app.services.patient_app.consent_service import ConsentService
     from app.services.patient_app.hospital_gate import PatientHospitalGate
 
-__all__ = ["DoctorAvailabilityService"]
+__all__ = ["DoctorAvailabilityService", "SlotState"]
 
 logger = structlog.get_logger(__name__)
 
@@ -73,6 +75,14 @@ _OUTSIDE_WINDOW: Final = "Outside the bookable window."
 
 #: A doctor reference exactly as ``str(uuid)`` writes it.
 _UUID_TEXT: Final = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
+
+
+class SlotState(StrEnum):
+    """What a requested slot is, to a patient, at this moment."""
+
+    BOOKABLE = "bookable"
+    TAKEN = "taken"
+    NOT_A_SLOT = "not_a_slot"
 
 
 class DoctorAvailabilityService:
@@ -142,47 +152,20 @@ class DoctorAvailabilityService:
             horizon_end = today + timedelta(days=policy.horizon_days)
             first, last = _bounded_range(start_date, end_date, today=today, horizon_end=horizon_end)
 
-            # The whole range is read at once: one query for the weekly windows,
-            # one for the leaves and one for the appointments that could touch
-            # any of its days. The number of days changes nothing below.
-            window_start = datetime.combine(first, time.min, tzinfo=zone)
-            window_end = datetime.combine(last + timedelta(days=1), time.min, tzinfo=zone)
-            windows = await self._doctors.get_availability(hospital.id, doctor.id)
-            leave_rows = await self._doctors.list_leaves(
-                hospital.id, doctor.id, starts_before=window_end, ends_after=window_start
-            )
-            booked_rows = await self._appointments.booked_intervals_for_doctor(
-                hospital.id, doctor.id, window_start, window_end
-            )
+            by_day = await self._engine_slots(hospital, doctor.id, first, last, zone)
 
-        leaves = [(row.starts_at, row.ends_at) for row in leave_rows]
-        booked = [
-            BookedInterval(
-                starts_at=row.scheduled_start, ends_at=row.scheduled_end, appointment_id=row.id
-            )
-            for row in booked_rows
-        ]
         earliest = now + timedelta(minutes=policy.min_lead_minutes)
-
-        days: list[PatientAvailabilityDay] = []
-        for offset in range((last - first).days + 1):
-            day = first + timedelta(days=offset)
-            slots = generate_slots(
-                target_date=day,
-                availability=[
-                    (row.start_time, row.end_time, row.slot_duration_minutes)
-                    for row in windows
-                    if row.day_of_week == day.weekday()
+        days = [
+            PatientAvailabilityDay(
+                date=day,
+                slots=[
+                    PatientSlot(start=start, end=end)
+                    for status, start, end in _real(slots, zone)
+                    if status is SlotStatus.AVAILABLE and start >= earliest
                 ],
-                leaves=leaves,
-                booked=booked,
-                timezone=hospital.timezone,
             )
-            days.append(
-                PatientAvailabilityDay(
-                    date=day, slots=_bookable(slots, earliest=earliest, zone=zone)
-                )
-            )
+            for day, slots in by_day.items()
+        ]
 
         return PatientDoctorAvailability(
             timezone=hospital.timezone,
@@ -194,30 +177,112 @@ class DoctorAvailabilityService:
             days=days,
         )
 
+    async def slot_state(
+        self,
+        hospital: HospitalDirectoryEntry,
+        doctor_id: uuid.UUID,
+        start: datetime,
+        end: datetime,
+        *,
+        now: datetime,
+    ) -> SlotState:
+        """Whether a patient may book exactly this slot, right now.
 
-def _bookable(
-    slots: list[SlotResponse], *, earliest: datetime, zone: ZoneInfo
-) -> list[PatientSlot]:
-    """The slots a patient may book: available, no earlier than the lead, and real.
+        The question booking asks before it writes, answered by the same code
+        that lists the slots: the day is recomputed from current rows, and the
+        requested bounds must be one of its real slots. Must be called inside
+        the hospital's tenant scope.
+
+        :param hospital: The hospital, as the gate described it.
+        :param doctor_id: A doctor the directory lists at that hospital.
+        :param start: Requested start, timezone-aware.
+        :param end: Requested end, timezone-aware.
+        :param now: The current instant.
+        :returns: ``BOOKABLE``; ``TAKEN`` if it is a slot but booked or on
+            leave; ``NOT_A_SLOT`` for anything else — no such slot, a past
+            one, one inside the lead time or beyond the horizon.
+        :raises ServiceUnavailableError: If the hospital's timezone cannot be used.
+        """
+        zone = _zone_of(hospital.timezone, hospital.id)
+        policy = BookingPolicy.from_settings(hospital.settings)
+        today = now.astimezone(zone).date()
+        day = start.astimezone(zone).date()
+        if not today <= day <= today + timedelta(days=policy.horizon_days):
+            return SlotState.NOT_A_SLOT
+        if start < now + timedelta(minutes=policy.min_lead_minutes):
+            return SlotState.NOT_A_SLOT
+
+        by_day = await self._engine_slots(hospital, doctor_id, day, day, zone)
+        for status, slot_start, slot_end in _real(by_day[day], zone):
+            if slot_start == start and slot_end == end:
+                return SlotState.BOOKABLE if status is SlotStatus.AVAILABLE else SlotState.TAKEN
+        return SlotState.NOT_A_SLOT
+
+    async def _engine_slots(
+        self,
+        hospital: HospitalDirectoryEntry,
+        doctor_id: uuid.UUID,
+        first: date,
+        last: date,
+        zone: ZoneInfo,
+    ) -> dict[date, list[SlotResponse]]:
+        """The hospital slot engine's answer for each date of a range.
+
+        The whole range is read at once: one query for the weekly windows, one
+        for the leaves and one for the appointments that could touch any of
+        its days. The number of days changes nothing about the reads.
+        """
+        window_start = datetime.combine(first, time.min, tzinfo=zone)
+        window_end = datetime.combine(last + timedelta(days=1), time.min, tzinfo=zone)
+        windows = await self._doctors.get_availability(hospital.id, doctor_id)
+        leave_rows = await self._doctors.list_leaves(
+            hospital.id, doctor_id, starts_before=window_end, ends_after=window_start
+        )
+        booked_rows = await self._appointments.booked_intervals_for_doctor(
+            hospital.id, doctor_id, window_start, window_end
+        )
+        leaves = [(row.starts_at, row.ends_at) for row in leave_rows]
+        booked = [
+            BookedInterval(
+                starts_at=row.scheduled_start, ends_at=row.scheduled_end, appointment_id=row.id
+            )
+            for row in booked_rows
+        ]
+        return {
+            day: generate_slots(
+                target_date=day,
+                availability=[
+                    (row.start_time, row.end_time, row.slot_duration_minutes)
+                    for row in windows
+                    if row.day_of_week == day.weekday()
+                ],
+                leaves=leaves,
+                booked=booked,
+                timezone=hospital.timezone,
+            )
+            for day in (first + timedelta(days=n) for n in range((last - first).days + 1))
+        }
+
+
+def _real(slots: list[SlotResponse], zone: ZoneInfo) -> list[tuple[SlotStatus, datetime, datetime]]:
+    """The engine's slots that name real time, each instant once, as the clock shows them.
 
     On a spring-forward day the engine labels slots inside the skipped hour
     with wall-clock times that never happen (02:00 when the clock went from
     01:59 straight to 03:00); such a slot names the same instants as a later,
-    real one. A slot whose start is not a time the zone's clock shows is not
-    offered, no instant is offered twice — as the slot ranker already does for
-    the same engine — and every bound is written as the clock really shows it.
+    real one. A slot whose start is not a time the zone's clock shows is left
+    out, no instant appears twice — as the slot ranker already does for the
+    same engine — and every bound is written as the clock really shows it.
     """
-    shown: list[PatientSlot] = []
+    real: list[tuple[SlotStatus, datetime, datetime]] = []
     seen: set[datetime] = set()
     for slot in slots:
-        if slot.status is not SlotStatus.AVAILABLE or slot.start < earliest:
-            continue
         start, end = _as_shown(slot.start, zone), _as_shown(slot.end, zone)
         if start.replace(tzinfo=None) != slot.start.replace(tzinfo=None) or start in seen:
             continue
         seen.add(start)
-        shown.append(PatientSlot(start=start, end=end))
-    return shown
+        real.append((slot.status, start, end))
+    return real
 
 
 def _as_shown(moment: datetime, zone: ZoneInfo) -> datetime:

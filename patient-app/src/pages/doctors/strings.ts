@@ -112,14 +112,55 @@ export const doctorStrings = {
   clearSelection: 'Clear selection',
   continueToBooking: 'Continue to booking',
 
-  // The booking step itself is not in the app yet: the chosen slot is shown back, and nothing is reserved.
+  // Booking: the chosen slot is reviewed, then booked by one explicit confirmation. Nothing here says
+  // "booked" or "confirmed" before the server has.
   bookingTitle: 'Booking',
   bookingHeading: 'Booking',
-  chosenTimeHeading: 'Your chosen time',
+  reviewHeading: 'Review your appointment',
+  reviewHospitalLabel: 'Hospital',
+  reviewDoctorLabel: 'Doctor',
   chosenDayLabel: 'Day',
   chosenTimeLabel: 'Time',
-  bookingUnavailableTitle: 'Booking is not available in the app yet',
-  bookingUnavailableBody: 'This slot is not reserved. For now, please contact the hospital to book an appointment.',
+  reasonLabel: 'Reason for visit (optional)',
+  reasonHint: 'A few words for the doctor about why you are coming.',
+  reasonCount: (count: number, max: number) => `${count} of ${max} characters`,
+  reasonTooLong: (max: number) => `Keep the reason to ${max} characters or fewer.`,
+  // Once a request has gone out, a retry must be the same request.
+  reasonLocked: 'The reason cannot be changed while this request is being tried again.',
+  emergencyNotice:
+    'This app is not for emergencies. In an emergency, call your local emergency number or go to the nearest emergency department.',
+  notHeld: 'This time is not held for you. It can still be taken until you confirm and the hospital accepts it.',
+  confirmAppointment: 'Confirm appointment',
+  chooseAnotherTime: 'Choose another time',
+  bookingInProgress: 'Booking your appointment…',
+  tryBookingAgain: 'Try again',
+
+  // Refusals. Each is the app's own wording for one answer of the server; the server's text is never shown.
+  slotTaken: 'This time is no longer available.',
+  notBookable: 'This time can no longer be booked.',
+  ownOverlap: 'You already have an appointment at this time.',
+  limitReached: 'You have reached the limit of upcoming appointments at this hospital.',
+  linkRequired: 'Link your record at this hospital before booking.',
+  linkRecord: 'Link my record',
+  bookingOfflineTitle: 'No connection',
+  bookingOfflineBody: 'We could not reach the server. Check your internet connection and try again — you will not be booked twice.',
+  bookingFailedTitle: 'We could not book the appointment',
+  bookingFailedBody: 'Something went wrong on our side. Try again — you will not be booked twice.',
+  bookingUnconfirmedTitle: 'We could not confirm the booking',
+  bookingUnconfirmedBody: 'Try again — you will not be booked twice.',
+  bookingPoliciesPending: 'We cannot book this in the app right now. Please try again later.',
+
+  // Shown only after the server has answered with the appointment.
+  bookedTitle: 'Appointment booked',
+  bookedHeading: 'Appointment booked',
+  bookedBody: 'Your appointment is booked. Keep the reference below.',
+  bookedDetailsHeading: 'Appointment details',
+  referenceLabel: 'Reference',
+  statusLabel: 'Status',
+  statusBooked: 'Booked',
+  backToHome: 'Back to home',
+  backToTheDoctor: 'Back to the doctor',
+
   invalidLinkTitle: 'This booking link is not valid',
   invalidLinkBody: 'Choose a day and a time from the doctor’s availability to continue.',
   backToAvailability: 'Back to availability',
