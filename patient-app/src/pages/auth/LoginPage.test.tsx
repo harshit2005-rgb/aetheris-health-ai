@@ -19,7 +19,7 @@ describe('login — phone entry', () => {
     expect(field).toHaveAttribute('type', 'tel')
     expect(field).toHaveAttribute('autocomplete', 'tel')
     expect(field).toHaveAttribute('inputmode', 'tel')
-    expect(field).toHaveAccessibleDescription(/country code/)
+    expect(field).toHaveAccessibleDescription(/98765 43210/)
   })
 
   it('asks for a number before sending anything', async () => {
@@ -36,8 +36,8 @@ describe('login — phone entry', () => {
     expect(api.sent).toHaveLength(0)
   })
 
-  it.each(['98765 43210', '+91 12', 'not a number', '+0 9876543210'])(
-    'refuses "%s" without guessing a country code',
+  it.each(['+91 12', 'not a number', '+0 9876543210', '12345 67890', '98765 4321'])(
+    'refuses "%s" without guessing',
     async (typed) => {
       const api = serve({})
       const { user } = renderApp('/login')
@@ -45,8 +45,22 @@ describe('login — phone entry', () => {
       await user.type(await phoneField(), typed)
       await user.click(submit())
 
-      expect(await screen.findByText(/starting with the country code/)).toBeInTheDocument()
+      expect(await screen.findByText(/Enter your 10-digit mobile number/)).toBeInTheDocument()
       expect(api.sent).toHaveLength(0)
+    },
+  )
+
+  it.each(['98765 43210', '098765 43210', '91 98765 43210', '+91 98765 43210'])(
+    'reads "%s" as an Indian mobile and sends it as E.164',
+    async (typed) => {
+      const api = serve({ [REQUEST]: ok(otpRequested('challenge-in'), 202) })
+      const { user } = renderApp('/login')
+
+      await user.type(await phoneField(), typed)
+      await user.click(submit())
+
+      await screen.findByRole('heading', { name: 'Enter the 6-digit code' })
+      expect(bodyOf(api.sent[0])).toMatchObject({ phone: '+919876543210' })
     },
   )
 
