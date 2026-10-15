@@ -50,7 +50,7 @@ function StatusNote({ order }: { order: InventoryOrder }) {
   if (order.status === 'sent') {
     return (
       <Alert variant="info" title="Marked as sent">
-        “Sent” only records the status and the time. Aetheris does not transmit anything to the
+        “Sent” only records the status and the time. Atheris does not transmit anything to the
         vendor, so the order has to reach them some other way. {cannotEdit}
         {canReceive
           ? ' Receive it when the delivery arrives — an order is received once, in one go.'

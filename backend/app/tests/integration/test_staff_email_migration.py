@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 
 pytestmark = pytest.mark.database
 
-SCRATCH_PREFIX = "aetheris_scratch_mig_"
+SCRATCH_PREFIX = "atheris_scratch_mig_"
 INDEX = "uq_users_email_normalized_active"
 BEFORE = "0018"
 #: The revision under test. Later migrations have their own tests.

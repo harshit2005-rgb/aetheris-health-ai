@@ -22,7 +22,7 @@ from __future__ import annotations
 from typing import ClassVar
 
 from app.core.error_codes import ErrorCode
-from app.core.exceptions import AetherisError
+from app.core.exceptions import AtherisError
 
 __all__ = [
     "AIError",
@@ -36,7 +36,7 @@ __all__ = [
 ]
 
 
-class AIError(AetherisError):
+class AIError(AtherisError):
     """Base for every AI runtime failure. Maps to HTTP 503.
 
     The class attributes are deliberately not named ``message`` and

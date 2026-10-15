@@ -8,7 +8,7 @@
 
 ## 1. Purpose
 
-Turn hospital services into money. Own the services catalog, invoice lifecycle, payments, refunds, and discounts. Every financial action in Aetheris is traceable, idempotent, and audited.
+Turn hospital services into money. Own the services catalog, invoice lifecycle, payments, refunds, and discounts. Every financial action in Atheris is traceable, idempotent, and audited.
 
 ## 2. Scope
 

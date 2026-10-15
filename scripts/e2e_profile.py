@@ -19,7 +19,7 @@ endpoints the profile screen calls — module spec ``02-user-management.md`` §1
 
 Configuration (environment):
 
-``AETHERIS_API_BASE``
+``ATHERIS_API_BASE``
     Base URL of the running backend. Default ``http://127.0.0.1:8000/api/v1``.
 
 ``E2E_DB_URL``
@@ -28,7 +28,7 @@ Configuration (environment):
     read-only query: the body of the invitation email queued for the address
     this run just invited. The script refuses to connect when it is unset,
     when it is not a plain ``postgresql://`` URL, or when the database is
-    named ``aetheris`` or ``aetheris_test``: point the backend and this
+    named ``atheris`` or ``atheris_test``: point the backend and this
     variable at a disposable end-to-end database.
 
 The backend must have a mail transport configured (``SMTP_HOST``), otherwise
@@ -50,12 +50,12 @@ import urllib.request
 import uuid
 
 # Overridable so `make e2e` can follow a non-default BACKEND_PORT.
-BASE = os.environ.get("AETHERIS_API_BASE", "http://127.0.0.1:8000/api/v1")
+BASE = os.environ.get("ATHERIS_API_BASE", "http://127.0.0.1:8000/api/v1")
 failures: list[str] = []
 
 #: Databases this script must never connect to: the developer's working data
 #: and the shared test database.
-FORBIDDEN_DATABASES = frozenset({"aetheris", "aetheris_test"})
+FORBIDDEN_DATABASES = frozenset({"atheris", "atheris_test"})
 _ACTIVATION_LINK = re.compile(r"/reset-password#token=([A-Za-z0-9_\-]+)")
 
 
@@ -74,8 +74,8 @@ def e2e_database_url() -> str:
         raise DatabaseStepRefusedError(
             "E2E_DB_URL is not set. The activation link is no longer returned by the API; "
             "this step reads it from the email queued in the backend's database. Set "
-            "E2E_DB_URL=postgresql://user@host:5432/<e2e database> (never 'aetheris' or "
-            "'aetheris_test')."
+            "E2E_DB_URL=postgresql://user@host:5432/<e2e database> (never 'atheris' or "
+            "'atheris_test')."
         )
     parts = urllib.parse.urlsplit(raw)
     if parts.scheme != "postgresql":
@@ -96,7 +96,7 @@ def e2e_database_url() -> str:
     if database.lower() in FORBIDDEN_DATABASES:
         raise DatabaseStepRefusedError(
             f"E2E_DB_URL points at {database!r}. This script refuses to connect to "
-            "'aetheris' or 'aetheris_test'; use a disposable end-to-end database."
+            "'atheris' or 'atheris_test'; use a disposable end-to-end database."
         )
     return raw
 
@@ -116,7 +116,7 @@ async def _read_emailed_token(url: str, email: str) -> str:
         actual = await connection.fetchval("SELECT current_database()")
         if str(actual).lower() in FORBIDDEN_DATABASES:
             raise DatabaseStepRefusedError(
-                f"Connected to {actual!r}; refusing to read from 'aetheris' or 'aetheris_test'."
+                f"Connected to {actual!r}; refusing to read from 'atheris' or 'atheris_test'."
             )
         async with connection.transaction(readonly=True):
             bodies = await connection.fetch(

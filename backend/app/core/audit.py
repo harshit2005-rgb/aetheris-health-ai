@@ -32,7 +32,7 @@ from app.core.logging import get_logger
 
 __all__ = ["AuditEvent", "AuditSink", "StructlogAuditSink"]
 
-_logger = get_logger("aetheris.audit")
+_logger = get_logger("atheris.audit")
 
 
 @dataclass(frozen=True, slots=True)

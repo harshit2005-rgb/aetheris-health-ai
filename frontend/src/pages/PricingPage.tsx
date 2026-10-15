@@ -41,7 +41,7 @@ export default function PricingPage() {
         <div className="mb-14 text-center">
           <h1 className="font-display text-headline-xl text-primary mb-3">Pricing</h1>
           <p className="font-body text-body-md text-on-surface-variant mx-auto max-w-2xl">
-            Aetheris does not have published plans yet. Tell us about your hospital and we will
+            Atheris does not have published plans yet. Tell us about your hospital and we will
             talk through what fits.
           </p>
         </div>

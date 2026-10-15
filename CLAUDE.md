@@ -1,6 +1,6 @@
-# Aetheris Health AI — Project Context
+# Atheris Health AI — Project Context
 
-You are working on **Aetheris Health AI**, an enterprise AI-first Hospital Management Platform. This file is loaded automatically at the start of every session. Read the sections below before doing anything else.
+You are working on **Atheris Health AI**, an enterprise AI-first Hospital Management Platform. This file is loaded automatically at the start of every session. Read the sections below before doing anything else.
 
 ---
 

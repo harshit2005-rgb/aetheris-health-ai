@@ -1,6 +1,6 @@
 # 01 — Product Requirements Document (PRD)
 
-**Product:** Aetheris Health AI
+**Product:** Atheris Health AI
 **Version:** v2.0
 **Status:** Approved for engineering kickoff
 **Owners:** Founding team
@@ -29,7 +29,7 @@ The result: doctors and nurses spend hours on data entry, receptionists reconcil
 
 ## 4. Solution
 
-Aetheris Health AI is a single unified platform where:
+Atheris Health AI is a single unified platform where:
 
 - Every hospital workflow — registration, appointments, clinical documentation, billing, lab, pharmacy, inventory, reporting — lives in one system with one data model.
 - AI is a **platform capability**, not a feature. Every module can call the AI layer to summarize records, draft notes, recommend appointments, forecast inventory, interpret lab reports, or automate administrative work.

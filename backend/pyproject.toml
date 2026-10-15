@@ -1,12 +1,12 @@
 [project]
-name = "aetheris"
+name = "atheris"
 version = "0.1.0"
-description = "Aetheris Health AI — Enterprise Hospital Management Platform"
+description = "Atheris Health AI — Enterprise Hospital Management Platform"
 readme = "README.md"
 requires-python = ">=3.13"
 license = { text = "Proprietary" }
 authors = [
-    { name = "Aetheris Health", email = "dev@aetheris.health" },
+    { name = "Atheris Health", email = "dev@atheris.health" },
 ]
 
 dependencies = [

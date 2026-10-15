@@ -30,7 +30,7 @@ import urllib.error
 import urllib.request
 
 # Overridable so `make e2e` can follow a non-default BACKEND_PORT.
-BASE = os.environ.get("AETHERIS_API_BASE", "http://127.0.0.1:8000/api/v1")
+BASE = os.environ.get("ATHERIS_API_BASE", "http://127.0.0.1:8000/api/v1")
 failures: list[str] = []
 
 

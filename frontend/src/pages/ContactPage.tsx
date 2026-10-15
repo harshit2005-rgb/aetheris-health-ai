@@ -16,12 +16,12 @@ const contactSchema = z.object({
 
 type ContactValues = z.infer<typeof contactSchema>
 
-const SALES_EMAIL = 'sales@aetheris.health'
+const SALES_EMAIL = 'sales@atheris.health'
 
 const CHANNELS = [
   { icon: Mail, label: 'Sales', value: SALES_EMAIL },
-  { icon: Headset, label: 'Support', value: 'support@aetheris.health' },
-  { icon: ShieldCheck, label: 'Privacy', value: 'privacy@aetheris.health' },
+  { icon: Headset, label: 'Support', value: 'support@atheris.health' },
+  { icon: ShieldCheck, label: 'Privacy', value: 'privacy@atheris.health' },
 ]
 
 export default function ContactPage() {
@@ -40,7 +40,7 @@ export default function ContactPage() {
    * send it — no success is reported for something that did not happen.
    */
   function onSubmit(values: ContactValues) {
-    const subject = `Aetheris enquiry from ${values.organization}`
+    const subject = `Atheris enquiry from ${values.organization}`
     const body = `${values.message}\n\n${values.name}\n${values.organization}\n${values.email}`
     openEmailApp(mailtoUrl({ to: SALES_EMAIL, subject, body }))
   }

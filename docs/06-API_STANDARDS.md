@@ -1,6 +1,6 @@
 # 06 — API Design Standards
 
-Every REST endpoint in Aetheris Health AI follows these conventions. No exceptions.
+Every REST endpoint in Atheris Health AI follows these conventions. No exceptions.
 
 ---
 

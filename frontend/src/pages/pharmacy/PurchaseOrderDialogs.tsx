@@ -486,7 +486,7 @@ export function SendPurchaseOrderDialog({ order }: { order: PurchaseOrder }) {
       title="Mark this order as sent?"
       description={
         <>
-          Records that {order.po_number} has gone to <LongName>{order.vendor_name}</LongName>, and when. Aetheris does
+          Records that {order.po_number} has gone to <LongName>{order.vendor_name}</LongName>, and when. Atheris does
           not transmit the order — send it to the vendor yourself. Once sent it can be received or
           cancelled.
         </>
@@ -527,7 +527,7 @@ export function CancelPurchaseOrderDialog({ order }: { order: PurchaseOrder }) {
           {order.po_number} to <LongName>{order.vendor_name}</LongName> is cancelled for good: a cancelled order cannot
           be reopened, sent or received. No reason is asked for, because the order has nowhere to
           keep one.
-          {order.status === 'sent' ? ' Aetheris does not tell the vendor — let them know yourself.' : ''}
+          {order.status === 'sent' ? ' Atheris does not tell the vendor — let them know yourself.' : ''}
         </>
       }
       resolver={zodResolver(confirmSchema)}

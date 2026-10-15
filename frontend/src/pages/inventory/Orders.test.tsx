@@ -1210,7 +1210,7 @@ describe('inventory purchase order detail', () => {
     await screen.findByRole('heading', { level: 1, name: NUMBER })
     const note = screen.getByRole('alert')
     expect(note).toHaveTextContent('“Sent” only records the status and the time')
-    expect(note).toHaveTextContent('Aetheris does not transmit anything to the vendor')
+    expect(note).toHaveTextContent('Atheris does not transmit anything to the vendor')
     expect(note).toHaveTextContent('An order cannot be edited')
     expect(note).toHaveTextContent('an order is received once, in one go')
   })
@@ -1308,7 +1308,7 @@ describe('sending and cancelling an inventory purchase order', () => {
     const d = await dialog()
 
     expect(d).toHaveTextContent(`Records that ${NUMBER} has gone to Sanjeevani Pharma Distributors`)
-    expect(d).toHaveTextContent('Aetheris does not transmit the order — send it to the vendor yourself')
+    expect(d).toHaveTextContent('Atheris does not transmit the order — send it to the vendor yourself')
     // Opening the dialog sends nothing.
     expect(fake.sent.filter((c) => c.method === 'post')).toHaveLength(0)
 
@@ -1332,7 +1332,7 @@ describe('sending and cancelling an inventory purchase order', () => {
     let d = await dialog()
     expect(d).toHaveTextContent('a cancelled order cannot be reopened, sent or received')
     expect(d).toHaveTextContent('No reason is asked for')
-    expect(d).toHaveTextContent('Aetheris does not tell the vendor')
+    expect(d).toHaveTextContent('Atheris does not tell the vendor')
     expect(within(d).queryByRole('textbox')).not.toBeInTheDocument()
 
     await user.click(within(d).getByRole('button', { name: 'Keep order' }))

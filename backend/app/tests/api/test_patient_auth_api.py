@@ -164,7 +164,7 @@ class TestRequestOtp:
 
         assert (
             body
-            == f"{sms.code_for(phone)} is your Aetheris verification code. It expires in 5 minutes."
+            == f"{sms.code_for(phone)} is your Atheris verification code. It expires in 5 minutes."
         )
 
     async def test_the_number_is_normalised_before_anything_is_sent(

@@ -1,6 +1,6 @@
 # 11 — Testing Strategy
 
-Aetheris ships critical healthcare workflows. Tests are not optional. This document defines what we test, how, and how much.
+Atheris ships critical healthcare workflows. Tests are not optional. This document defines what we test, how, and how much.
 
 ---
 

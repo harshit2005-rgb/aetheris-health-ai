@@ -95,7 +95,7 @@ KINDS: dict[str, NotificationKind] = {
             email_subject="You have been invited to ${hospital_name}",
             email_body=(
                 "Hello ${first_name},\n\n"
-                "${actor_name} has invited you to join ${hospital_name} on Aetheris.\n\n"
+                "${actor_name} has invited you to join ${hospital_name} on Atheris.\n\n"
                 "Set your password to activate your account:\n"
                 "${action_url}\n\n"
                 "This link can be used once and expires in ${expires_in}.\n\n"
@@ -114,10 +114,10 @@ KINDS: dict[str, NotificationKind] = {
             link=None,
             default_channels=frozenset({_IN_APP, _EMAIL}),
             critical=True,
-            email_subject="Reset your Aetheris password",
+            email_subject="Reset your Atheris password",
             email_body=(
                 "Hello ${first_name},\n\n"
-                "We received a request to reset the password for your Aetheris account.\n\n"
+                "We received a request to reset the password for your Atheris account.\n\n"
                 "Choose a new password here:\n"
                 "${action_url}\n\n"
                 "This link can be used once and expires in ${expires_in}.\n\n"

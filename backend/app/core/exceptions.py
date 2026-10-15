@@ -1,6 +1,6 @@
 """Application-wide exception hierarchy.
 
-Every custom exception inherits from :class:`AetherisError`.
+Every custom exception inherits from :class:`AtherisError`.
 The global exception handler in the middleware layer maps these
 to the standard HTTP response envelope.
 """
@@ -27,7 +27,7 @@ def _to_iso_utc(value: datetime) -> str:
     return aware.astimezone(UTC).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 
-class AetherisError(Exception):
+class AtherisError(Exception):
     """Base exception for all application-level errors.
 
     Every custom exception in the codebase inherits from this.
@@ -54,7 +54,7 @@ class AetherisError(Exception):
         super().__init__(self.message)
 
 
-class ConfigurationError(AetherisError):
+class ConfigurationError(AtherisError):
     """Raised when the application is misconfigured.
 
     This is a startup-time error. It should never surface in production
@@ -75,7 +75,7 @@ class ConfigurationError(AetherisError):
         )
 
 
-class NotFoundError(AetherisError):
+class NotFoundError(AtherisError):
     """Raised when a requested resource does not exist.
 
     Maps to HTTP 404.
@@ -89,7 +89,7 @@ class NotFoundError(AetherisError):
         )
 
 
-class ValidationError(AetherisError):
+class ValidationError(AtherisError):
     """Raised when input validation fails at the business-rule level.
 
     Maps to HTTP 422. (Pydantic validation errors are handled separately
@@ -104,7 +104,7 @@ class ValidationError(AetherisError):
         )
 
 
-class BusinessRuleError(AetherisError):
+class BusinessRuleError(AtherisError):
     """Raised when a business rule is violated.
 
     Maps to HTTP 400. Examples:
@@ -124,7 +124,7 @@ class BusinessRuleError(AetherisError):
         )
 
 
-class PermissionDeniedError(AetherisError):
+class PermissionDeniedError(AtherisError):
     """Raised when the authenticated user lacks the required permission.
 
     Maps to HTTP 403.
@@ -138,7 +138,7 @@ class PermissionDeniedError(AetherisError):
         )
 
 
-class FeatureDisabledError(AetherisError):
+class FeatureDisabledError(AtherisError):
     """Raised when a hospital has not been given a feature.
 
     Maps to HTTP 403.
@@ -154,7 +154,7 @@ class FeatureDisabledError(AetherisError):
         )
 
 
-class AuthenticationError(AetherisError):
+class AuthenticationError(AtherisError):
     """Raised when authentication fails.
 
     Maps to HTTP 401. Used by the auth module (Sprint 2+).
@@ -171,7 +171,7 @@ class AuthenticationError(AetherisError):
         )
 
 
-class AccountLockedError(AetherisError):
+class AccountLockedError(AtherisError):
     """Raised when login is attempted against a temporarily locked account.
 
     .. note::
@@ -204,7 +204,7 @@ class AccountLockedError(AetherisError):
         )
 
 
-class AccountSuspendedError(AetherisError):
+class AccountSuspendedError(AtherisError):
     """Raised when login is attempted against a suspended account.
 
     .. note::
@@ -229,7 +229,7 @@ class AccountSuspendedError(AetherisError):
         )
 
 
-class ConflictError(AetherisError):
+class ConflictError(AtherisError):
     """Raised when the request conflicts with the current state.
 
     Maps to HTTP 409. Examples:
@@ -246,7 +246,7 @@ class ConflictError(AetherisError):
         )
 
 
-class RateLimitError(AetherisError):
+class RateLimitError(AtherisError):
     """Raised when the rate limit is exceeded.
 
     Maps to HTTP 429.
@@ -262,7 +262,7 @@ class RateLimitError(AetherisError):
         )
 
 
-class ServiceUnavailableError(AetherisError):
+class ServiceUnavailableError(AtherisError):
     """Raised when a downstream dependency is unavailable.
 
     Maps to HTTP 503.

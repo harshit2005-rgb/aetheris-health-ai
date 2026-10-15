@@ -36,7 +36,7 @@ from app.api.dependencies.db import get_db_session
 from app.api.dependencies.patient import get_sms_sender
 from app.core.audit import StructlogAuditSink
 from app.core.config import settings
-from app.core.exceptions import AetherisError
+from app.core.exceptions import AtherisError
 from app.core.security import create_patient_access_token
 from app.main import create_app
 from app.models.appointment import Appointment, AppointmentStatus, AppointmentStatusHistory
@@ -453,7 +453,7 @@ async def _staff(engine: AsyncEngine, hospital: Hospital, ref: str, move: str) -
                 )
             else:
                 await getattr(service, move)(hospital.id, uuid.UUID(ref))
-        except AetherisError as refusal:
+        except AtherisError as refusal:
             await session.rollback()
             return type(refusal).__name__
         return "ok"

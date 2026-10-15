@@ -1,7 +1,7 @@
 """Global exception handler middleware.
 
 Catches unhandled exceptions at the middleware level and returns structured
-JSON error responses. Also handles :class:`AetherisError` subclasses that may
+JSON error responses. Also handles :class:`AtherisError` subclasses that may
 surface outside the registered route-level exception handlers.
 
 The route-level handlers registered in :func:`app.main._register_exception_handlers`
@@ -18,7 +18,7 @@ from starlette.responses import JSONResponse, Response
 
 from app.core.envelope import error_envelope
 from app.core.error_codes import ErrorCode
-from app.core.exceptions import AetherisError
+from app.core.exceptions import AtherisError
 
 logger = structlog.get_logger(__name__)
 
@@ -39,7 +39,7 @@ class ExceptionHandlerMiddleware(BaseHTTPMiddleware):
         """
         try:
             return await call_next(request)
-        except AetherisError as exc:
+        except AtherisError as exc:
             logger.warning(
                 "middleware_caught_application_error",
                 error_code=exc.error_code,

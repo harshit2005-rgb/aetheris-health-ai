@@ -49,7 +49,7 @@ OTP_LIFETIME: Final = timedelta(minutes=5)
 #: Verification attempts one challenge allows before it is dead.
 OTP_MAX_ATTEMPTS: Final = 5
 
-_HASH_CONTEXT: Final = b"aetheris:patient-otp:v1"
+_HASH_CONTEXT: Final = b"atheris:patient-otp:v1"
 
 
 @dataclass(frozen=True, slots=True)

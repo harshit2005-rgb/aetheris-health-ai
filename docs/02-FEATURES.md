@@ -1,6 +1,6 @@
 # 02 — Feature Catalog
 
-Complete list of Aetheris Health AI features, prioritized by release phase.
+Complete list of Atheris Health AI features, prioritized by release phase.
 
 **Legend**
 - 🟢 **MVP (v2.0)** — must ship for kickoff release

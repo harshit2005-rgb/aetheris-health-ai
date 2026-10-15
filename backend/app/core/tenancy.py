@@ -202,7 +202,7 @@ class TenantScope:
         return self.hospital_id is None
 
 
-_current_scope: ContextVar[TenantScope | None] = ContextVar("aetheris_tenant_scope", default=None)
+_current_scope: ContextVar[TenantScope | None] = ContextVar("atheris_tenant_scope", default=None)
 
 
 def current_tenant_scope() -> TenantScope | None:

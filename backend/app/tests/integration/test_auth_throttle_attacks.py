@@ -102,7 +102,7 @@ GENERIC_LOGIN_FAILURE = {
     "errors": None,
 }
 GENERIC_MFA_FAILURE = {**GENERIC_LOGIN_FAILURE, "message": "Invalid MFA code."}
-DEVICE_COOKIE = "aetheris-device"
+DEVICE_COOKIE = "atheris-device"
 
 # The documented numbers (the module docstring and POLICIES of
 # app/services/auth_throttle.py), restated here on purpose: if somebody loosens

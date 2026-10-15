@@ -114,7 +114,7 @@ GENERIC_SERVER_ERROR = {
     "error_code": "INTERNAL_ERROR",
     "errors": None,
 }
-DEVICE_COOKIE = "aetheris-device"
+DEVICE_COOKIE = "atheris-device"
 
 # The documented numbers (POLICIES of app/services/auth_throttle.py and
 # _RESET_EMAILS_PER_TOKEN_LIFETIME of app/services/auth_service.py), restated

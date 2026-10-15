@@ -16,7 +16,7 @@ export default function LegalPage({ doc }: { doc: LegalDoc }) {
           <p className="font-body text-body-md text-on-surface-variant mt-4">{doc.intro}</p>
           {/* Remove once final language is issued by legal counsel. */}
           <p className="neo-pressed bg-surface text-on-surface-variant font-body mt-6 rounded-xl px-4 py-3 text-xs">
-            This page is a working template. Final legal language will be issued by Aetheris counsel.
+            This page is a working template. Final legal language will be issued by Atheris counsel.
           </p>
         </header>
 

@@ -8,7 +8,7 @@
 
 ## 1. Purpose
 
-Manage the humans (and future service accounts) who log into Aetheris. Own user identity, role assignments, permission grants, and the lifecycle from invitation through deactivation. Every module reads user context; this module writes it.
+Manage the humans (and future service accounts) who log into Atheris. Own user identity, role assignments, permission grants, and the lifecycle from invitation through deactivation. Every module reads user context; this module writes it.
 
 ## 2. Scope
 

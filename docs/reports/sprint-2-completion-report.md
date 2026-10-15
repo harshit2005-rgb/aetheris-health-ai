@@ -1,6 +1,6 @@
 # Sprint 2 — User Management & RBAC — Completion Report
 
-**Sprint:** Aetheris Sprint 2 — Karthik — User Management & RBAC
+**Sprint:** Atheris Sprint 2 — Karthik — User Management & RBAC
 **Branch:** `feat/auth-frontend-sprint`
 **Date:** September 16, 2026
 
@@ -34,7 +34,7 @@ The root `CLAUDE.md` marks `docs/` as a *prohibited area*: "Any file in `docs/` 
 `POST /users` returns the single-use `invite_token` in the response body; the Notifications module does not exist yet, so the admin UI surfaces the token in a toast ("deliver through your secure channel"). The invited user cannot yet receive an email. This matches the module spec's B6 seam but means AC-2 ("The invited user receives an email") is not end-to-end satisfiable until Sprint's Notifications module ships.
 
 ### 2.3 `docs/` per-file prohibitions on `backend/.env` and local infra
-**Status: environment-only.** To run the verification locally, `backend/.env` was created (gitignored) pointing at a local Postgres (`aetheris`/`aetheris` role + `aetheris`/`aetheris_test` DBs created locally) and `TEST_DATABASE_URL` set. No secrets committed. Docker/Redis are not installed on this machine; the backend degrades gracefully (in-memory rate-limit counters, Redis circuit breaker logs a warning).
+**Status: environment-only.** To run the verification locally, `backend/.env` was created (gitignored) pointing at a local Postgres (`atheris`/`atheris` role + `atheris`/`atheris_test` DBs created locally) and `TEST_DATABASE_URL` set. No secrets committed. Docker/Redis are not installed on this machine; the backend degrades gracefully (in-memory rate-limit counters, Redis circuit breaker logs a warning).
 
 ### 2.4 Self-service "change own password / MFA" profile page (module spec §12 "Own profile page")
 **Status: NOT DONE — consciously deferred.** The sprint file's scope is admin user management + RBAC; the backend endpoints (`POST /auth/password/change`, `/mfa/*`) already exist and Sprint 1 covered the auth frontend. A dedicated profile settings screen is frontend-only work not listed in the sprint document's §3 Scope, so it was left out rather than half-built. The "limited fields" self-profile endpoints (`PATCH /users/me`) are wired and tested on the backend.

@@ -1,6 +1,6 @@
 # 07 — Security Architecture
 
-Healthcare data is one of the most sensitive categories of data. Aetheris Health AI treats security as a first-class product requirement, not a compliance checklist.
+Healthcare data is one of the most sensitive categories of data. Atheris Health AI treats security as a first-class product requirement, not a compliance checklist.
 
 ---
 
@@ -258,7 +258,7 @@ We do not claim certifications we don't have. When we're audit-ready, we say so.
 
 ## 18. Reporting Vulnerabilities
 
-- `security@aetheris.health` (once mailbox exists)
+- `security@atheris.health` (once mailbox exists)
 - Bug bounty program from v2.2 onwards
 - Responsible disclosure policy publicly posted
 

@@ -1,6 +1,6 @@
 # 10 — Development Guide
 
-Everything an engineer (or an AI coding assistant) needs to work on Aetheris Health AI.
+Everything an engineer (or an AI coding assistant) needs to work on Atheris Health AI.
 
 ---
 
@@ -25,8 +25,8 @@ Recommended:
 ## 2. First-Time Setup
 
 ```
-git clone git@github.com:<org>/aetheris.git
-cd aetheris
+git clone git@github.com:<org>/atheris.git
+cd atheris
 cp .env.example .env
 # fill in the values that don't have defaults (AI provider keys, JWT secret, etc.)
 

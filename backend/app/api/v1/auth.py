@@ -65,7 +65,7 @@ _DEVICE_TOKENS_READ = 8 * DEVICE_TOKENS_PER_COOKIE
 
 def _device_cookie_name() -> str:
     """The cookie's name: ``__Host-`` prefixed whenever it is sent as Secure."""
-    return "__Host-aetheris-device" if settings.AUTH_DEVICE_COOKIE_SECURE else "aetheris-device"
+    return "__Host-atheris-device" if settings.AUTH_DEVICE_COOKIE_SECURE else "atheris-device"
 
 
 def _get_device_tokens(request: Request) -> tuple[str, ...]:

@@ -1413,7 +1413,7 @@ class AuthService:
         someone who has just proved they know that password.
         """
         return hashlib.sha256(
-            b"aetheris:mfa-ticket:v1\0" + user.password_hash.encode("utf-8")
+            b"atheris:mfa-ticket:v1\0" + user.password_hash.encode("utf-8")
         ).hexdigest()[:32]
 
     def _issue_mfa_ticket(self, user: User) -> str:

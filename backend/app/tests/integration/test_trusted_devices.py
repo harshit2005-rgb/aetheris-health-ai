@@ -84,8 +84,8 @@ WRONG_PASSWORD = "Wr0ng!Passw0rd999"  # noqa: S105
 NEW_PASSWORD = "An0ther!Passw0rd456"  # noqa: S105
 AUTH = "/api/v1/auth"
 USERS = "/api/v1/users"
-DEV_COOKIE = "aetheris-device"
-PRODUCTION_COOKIE = "__Host-aetheris-device"
+DEV_COOKIE = "atheris-device"
+PRODUCTION_COOKIE = "__Host-atheris-device"
 
 # Documented numbers, restated on purpose (see test_auth_throttle_attacks.py).
 ACCOUNT_BURST = 20

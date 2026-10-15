@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Aetheris Health AI — Backend Makefile
+# Atheris Health AI — Backend Makefile
 #
 # Common development commands. Run from the backend/ directory.
 # ──────────────────────────────────────────────────────────────────────────────
@@ -122,13 +122,13 @@ clean: ## Clean up cache, build artifacts, and virtual environments
 
 # ── Docker ───────────────────────────────────────────────────────────────────
 docker-build: ## Build the Docker image
-	docker build -t aetheris-backend:latest .
+	docker build -t atheris-backend:latest .
 
 docker-run: ## Run the Docker image locally
 	docker run --rm -p 8000:8000 \
 		--env-file .env \
-		--name aetheris-backend \
-		aetheris-backend:latest
+		--name atheris-backend \
+		atheris-backend:latest
 
 # ── Extras ───────────────────────────────────────────────────────────────────
 requirements: ## Export frozen requirements.txt from uv.lock

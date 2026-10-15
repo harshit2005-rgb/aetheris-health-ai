@@ -859,7 +859,7 @@ class TestBucketKeys:
     def test_the_key_is_pinned_so_a_deploy_cannot_silently_reset_every_counter(self) -> None:
         import hashlib
 
-        digest = hashlib.sha256(b"aetheris:auth-throttle:v1")
+        digest = hashlib.sha256(b"atheris:auth-throttle:v1")
         for part in (b"pw_account", b"a@hospital.example"):
             digest.update(len(part).to_bytes(4, "big"))
             digest.update(part)

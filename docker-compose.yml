@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Aetheris Health AI — Local Development Stack
+# Atheris Health AI — Local Development Stack
 #
 # Provides PostgreSQL, Redis, the backend API, and the frontend dev server.
 # All four services are orchestrated via Docker Compose.
@@ -18,13 +18,13 @@ services:
     ports:
       - "5432:5432"
     environment:
-      POSTGRES_USER: aetheris
-      POSTGRES_PASSWORD: aetheris
-      POSTGRES_DB: aetheris
+      POSTGRES_USER: atheris
+      POSTGRES_PASSWORD: atheris
+      POSTGRES_DB: atheris
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U aetheris -d aetheris"]
+      test: ["CMD-SHELL", "pg_isready -U atheris -d atheris"]
       interval: 5s
       timeout: 5s
       retries: 5
@@ -55,7 +55,7 @@ services:
       redis:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+asyncpg://aetheris:aetheris@postgres:5432/aetheris
+      DATABASE_URL: postgresql+asyncpg://atheris:atheris@postgres:5432/atheris
       REDIS_URL: redis://redis:6379/0
       APP_ENV: development
       APP_DEBUG: "true"

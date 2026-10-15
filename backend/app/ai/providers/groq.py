@@ -289,7 +289,7 @@ class GroqProvider(AIProvider):
                 transport=self._transport,
                 follow_redirects=False,
                 trust_env=False,
-                headers={"Accept": "application/json", "User-Agent": "aetheris-health-ai"},
+                headers={"Accept": "application/json", "User-Agent": "atheris-health-ai"},
             )
         return self._client
 

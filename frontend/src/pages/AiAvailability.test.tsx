@@ -20,7 +20,7 @@ import PatientsPage from './patients/PatientsPage'
 /** Wording that would describe an AI capability as something the product does today. */
 const AI_CLAIMS = [
   /copilot/i,
-  /ask aetheris/i,
+  /ask atheris/i,
   /how can i help/i,
   /context-aware/i,
   /summari[sz]e patient/i,
@@ -163,7 +163,7 @@ describe('the public pages', () => {
     expect(roadmap).toHaveTextContent(
       'More AI assistance is planned. Today the only AI feature is an optional slot suggestion when booking, where it has been enabled.',
     )
-    expect(screen.getByText('Does Aetheris include AI features today?')).toBeInTheDocument()
+    expect(screen.getByText('Does Atheris include AI features today?')).toBeInTheDocument()
     expect(screen.queryByText(/intelligent platform/i)).not.toBeInTheDocument()
   })
 
@@ -171,7 +171,7 @@ describe('the public pages', () => {
     const user = userEvent.setup()
     renderPublic(<LandingPage />)
 
-    await user.click(screen.getByRole('button', { name: 'Does Aetheris include AI features today?' }))
+    await user.click(screen.getByRole('button', { name: 'Does Atheris include AI features today?' }))
     expect(
       await screen.findByText(
         /^One, and it is optional\. When booking an appointment, staff can ask for an AI-suggested time slot/,

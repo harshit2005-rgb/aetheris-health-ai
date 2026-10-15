@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 
 __all__ = ["AuditService"]
 
-logger = structlog.get_logger("aetheris.audit")
+logger = structlog.get_logger("atheris.audit")
 
 #: Shared structlog sink — values are redacted there (see its docstring).
 _structlog_sink = StructlogAuditSink()
