@@ -1,7 +1,7 @@
 import { screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { HospitalLink } from '@/api/me'
-import { ok, serve } from '@/test/fakeApi'
+import { ok, okPage, serve } from '@/test/fakeApi'
 import { cityCare, cityCareHospital, lakeside, me } from '@/test/fixtures'
 import { hospitalDirectory } from '@/test/hospitalDirectory'
 import { anAppointment, myAppointmentRef, myAppointmentsEndpoints } from '@/test/myAppointments'
@@ -35,7 +35,7 @@ describe('home — the way into hospital discovery', () => {
     await screen.findByRole('heading', { name: 'Welcome' })
 
     const navigation = within(screen.getByRole('navigation', { name: 'Main' }))
-    expect(navigation.getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Hospitals', 'Appointments', 'Link hospital'])
+    expect(navigation.getAllByRole('link').map((link) => link.textContent)).toEqual(['Home', 'Hospitals', 'Appointments', 'Account'])
     expect(navigation.getByRole('link', { name: 'Home' })).toHaveAttribute('aria-current', 'page')
     expect(navigation.getByRole('link', { name: 'Hospitals' })).not.toHaveAttribute('aria-current')
 
@@ -87,7 +87,7 @@ describe('home — the way into hospital discovery', () => {
 
   it('opens a linked hospital’s page from its card, by the reference /me gives', async () => {
     signIn()
-    const api = serve({ [ME]: ok(me([cityCare, lakeside])), 'GET /hospitals/city-care': ok(cityCareHospital) })
+    const api = serve({ [ME]: ok(me([cityCare, lakeside])), 'GET /appointments': okPage([]), 'GET /hospitals/city-care': ok(cityCareHospital) })
     const { user, router } = renderApp('/')
 
     const card = await screen.findByRole('link', { name: 'City Care Hospital' })
@@ -100,13 +100,13 @@ describe('home — the way into hospital discovery', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'City Care Hospital' })).toHaveFocus()
     expect(router.state.location.pathname).toBe('/hospitals/city-care')
     // The path is the public reference — the internal id from /me is never put in a URL.
-    expect(api.sent.map((request) => request.url)).toEqual(['/me', '/hospitals/city-care'])
+    expect(api.sent.map((request) => request.url)).toEqual(['/me', '/appointments', '/hospitals/city-care'])
     expect(JSON.stringify(api.sent.map((request) => [request.url, request.params]))).not.toContain('hosp-1')
   })
 
   it('escapes the reference, so a link’s hospital cannot point the card anywhere else', async () => {
     signIn()
-    serve({ [ME]: ok(me([{ ...cityCare, hospital_ref: '../../login?next=//evil.example' }])) })
+    serve({ [ME]: ok(me([{ ...cityCare, hospital_ref: '../../login?next=//evil.example' }])), 'GET /appointments': okPage([]) })
     renderApp('/')
 
     expect(await screen.findByRole('link', { name: 'City Care Hospital' })).toHaveAttribute(
@@ -118,7 +118,7 @@ describe('home — the way into hospital discovery', () => {
   it('shows a linked hospital as plain text when the server sends no reference for it', async () => {
     signIn()
     const { hospital_ref: _omitted, ...withoutRef } = cityCare
-    serve({ [ME]: ok(me([withoutRef as HospitalLink, { ...lakeside, hospital_ref: '' }])) })
+    serve({ [ME]: ok(me([withoutRef as HospitalLink, { ...lakeside, hospital_ref: '' }])), 'GET /appointments': okPage([]) })
     renderApp('/')
 
     const list = await screen.findByRole('list', { name: 'Your hospitals' })

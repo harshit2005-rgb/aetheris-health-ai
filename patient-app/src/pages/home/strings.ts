@@ -2,7 +2,6 @@
 export const homeStrings = {
   title: 'Home',
   heading: 'Welcome',
-  signedInAs: 'Signed in as',
   findHeading: 'Looking for a hospital?',
   findBody: 'See the hospitals that are available in this app and how to reach them.',
   findCta: 'Find a hospital',
@@ -22,7 +21,11 @@ export const homeStrings = {
   loading: 'Loading your details…',
   loadFailed: 'We could not load your details. Check your connection and try again.',
   retry: 'Try again',
-  signOut: 'Sign out',
-  signingOut: 'Signing out…',
-  signOutFailed: 'We could not sign you out. Check your connection and try again.',
+  nextHeading: 'Next appointment',
+  nextLoading: 'Loading your next appointment…',
+  nextLoadFailed: 'We could not load your next appointment. Check your connection and try again.',
+  noUpcomingTitle: 'No upcoming appointments',
+  noUpcomingBody: 'Find a doctor at one of your hospitals and book a time that suits you.',
+  bookCta: 'Find a doctor',
+  allAppointments: 'All my appointments',
 } as const

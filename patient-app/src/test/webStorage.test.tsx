@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { fail, noContent, ok, serve } from '@/test/fakeApi'
+import { fail, noContent, ok, okPage, serve } from '@/test/fakeApi'
 import { appointmentRef, bookingEndpoint, LOST } from '@/test/booking'
 import { doctorDirectory } from '@/test/doctorDirectory'
 import {
@@ -11,7 +11,6 @@ import {
   me,
   meeraIyer,
   otpRequested,
-  PHONE_MASKED,
   PHONE_TYPED,
   verifiedSession,
 } from '@/test/fixtures'
@@ -41,6 +40,7 @@ describe('web storage', () => {
       'POST /auth/otp/request': ok(otpRequested(), 202),
       'POST /auth/otp/verify': ok(verifiedSession('access-secret')),
       'GET /me': ok(me([cityCare])),
+      'GET /appointments': okPage([]),
       'POST /auth/logout': noContent(),
     })
     const { user } = loadApp('/')
@@ -49,7 +49,7 @@ describe('web storage', () => {
     await user.click(screen.getByRole('button', { name: 'Send code' }))
     await user.type(await screen.findByLabelText('6-digit code'), '482913')
     await user.click(screen.getByRole('button', { name: 'Verify and continue' }))
-    expect(await screen.findByText(PHONE_MASKED)).toBeInTheDocument()
+    expect(await screen.findByText('City Care Hospital')).toBeInTheDocument()
 
     // Signed in, with a token in memory — and nowhere else.
     expect(window.localStorage).toHaveLength(0)
@@ -57,7 +57,8 @@ describe('web storage', () => {
     expect(document.cookie).toBe('')
     expect(window.history.state).toBeNull()
 
-    await user.click(screen.getByRole('button', { name: 'Sign out' }))
+    await user.click(screen.getByRole('link', { name: 'Account' }))
+    await user.click(await screen.findByRole('button', { name: 'Sign out' }))
     await screen.findByLabelText('Mobile number')
 
     for (const access of touched) expect(access).not.toHaveBeenCalled()

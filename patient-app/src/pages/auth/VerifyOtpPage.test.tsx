@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { useOtpChallengeStore } from '@/store/otp-challenge-store'
 import { usePatientAuthStore } from '@/store/patient-auth-store'
 import { bodyOf, fail, headerOf, ok, serve } from '@/test/fakeApi'
-import { me, otpRequested, PHONE_E164, PHONE_MASKED, verifiedSession } from '@/test/fixtures'
+import { me, otpRequested, PHONE_E164, verifiedSession } from '@/test/fixtures'
 import { isSignedIn, renderApp } from '@/test/renderApp'
 
 const VERIFY = 'POST /auth/otp/verify'
@@ -63,7 +63,7 @@ describe('verify — code entry', () => {
     await user.type(await codeField(), '482913')
     await user.click(submit())
 
-    expect(await screen.findByText(PHONE_MASKED)).toBeInTheDocument()
+    expect(await screen.findByText('No hospital linked yet')).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/')
 
     const [request] = api.calls(VERIFY)

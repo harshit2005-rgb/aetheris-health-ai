@@ -98,6 +98,11 @@ export const routes: RouteObject[] = [
                 }),
               },
               {
+                // The patient's own account: the number they sign in with, linking a record, signing out.
+                path: '/account',
+                lazy: async () => ({ Component: (await import('@/pages/account/AccountPage')).AccountPage }),
+              },
+              {
                 path: '/link-patient',
                 lazy: async () => ({
                   Component: (await import('@/pages/hospitals/LinkPatientPage')).LinkPatientPage,

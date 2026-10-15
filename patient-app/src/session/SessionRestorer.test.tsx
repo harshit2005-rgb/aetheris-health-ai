@@ -1,8 +1,8 @@
 import { screen, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { usePatientAuthStore } from '@/store/patient-auth-store'
-import { fail, headerOf, ok, serve, type Outcome } from '@/test/fakeApi'
-import { cityCare, me, PHONE_MASKED } from '@/test/fixtures'
+import { fail, headerOf, ok, okPage, serve, type Outcome } from '@/test/fakeApi'
+import { cityCare, me } from '@/test/fixtures'
 import { isSignedIn, loadApp } from '@/test/renderApp'
 
 const REFRESH = 'POST /auth/refresh'
@@ -24,10 +24,10 @@ describe('session restore on load', () => {
   })
 
   it('restores the session from the refresh cookie with exactly one CSRF-protected request', async () => {
-    const api = serve({ [REFRESH]: refreshed('access-restored'), [ME]: ok(me([cityCare])) })
+    const api = serve({ [REFRESH]: refreshed('access-restored'), [ME]: ok(me([cityCare])), 'GET /appointments': okPage([]) })
     const { router } = loadApp('/')
 
-    expect(await screen.findByText(PHONE_MASKED)).toBeInTheDocument()
+    expect(await screen.findByText('City Care Hospital')).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/')
 
     // One request even though StrictMode runs the effect twice: a second use
@@ -75,7 +75,7 @@ describe('session restore on load', () => {
     const api = serve({ [ME]: ok(me()) })
     loadApp('/', 'access-1')
 
-    expect(await screen.findByText(PHONE_MASKED)).toBeInTheDocument()
+    expect(await screen.findByText('No hospital linked yet')).toBeInTheDocument()
     await waitFor(() => expect(api.calls(ME)).toHaveLength(1))
     expect(api.calls(REFRESH)).toHaveLength(0)
   })
