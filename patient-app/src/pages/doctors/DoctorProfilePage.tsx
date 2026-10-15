@@ -1,10 +1,10 @@
-import type { ReactNode } from 'react'
-import { Building2, CalendarClock, GraduationCap, Languages, Layers, Stethoscope, type LucideIcon } from 'lucide-react'
+import { Building2, CalendarClock, GraduationCap, Languages, Layers, Stethoscope } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { Button } from '@atheris/ui'
 import type { PatientDoctor } from '@/api/doctors'
 import type { PatientHospital } from '@/api/hospitals'
 import { BackLink } from '@/components/BackLink'
+import { DetailRow } from '@/components/DetailRow'
 import { PageHeading } from '@/components/PageHeading'
 import { DoctorLoader } from '@/pages/doctors/DoctorLoader'
 import { doctorAvailabilityPath } from '@/pages/doctors/paths'
@@ -104,18 +104,6 @@ function DoctorProfile({ doctor, hospital }: { doctor: PatientDoctor; hospital: 
           {S.viewAvailability}
         </Link>
       </Button>
-    </div>
-  )
-}
-
-function DetailRow({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-start gap-3 p-4">
-      <Icon className="text-secondary mt-0.5 size-5 shrink-0" aria-hidden />
-      <div className="min-w-0 flex-1">
-        <dt className="text-body-sm text-on-surface-variant">{label}</dt>
-        <dd className="text-body-lg text-on-surface break-words">{children}</dd>
-      </div>
     </div>
   )
 }
