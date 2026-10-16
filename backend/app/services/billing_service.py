@@ -50,6 +50,7 @@ it was and ``amount_refunded`` grows beside it, capped by the database at
 
 from __future__ import annotations
 
+import asyncio
 import uuid  # noqa: TC003 — needed at runtime for type hints
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal, InvalidOperation
@@ -91,6 +92,11 @@ from app.schemas.billing import (
     VoidInvoiceRequest,
 )
 from app.schemas.common import Page, PaginationParams
+from app.services.invoice_pdf import (
+    build_invoice_document,
+    letterhead_from,
+    render_invoice_pdf,
+)
 from app.utils.invoice_math import ZERO, compute_invoice_totals, compute_line
 from app.utils.mrn import InvalidMrnTemplateError, format_mrn
 
@@ -291,6 +297,11 @@ def _field_error(field: str, message: str) -> ValidationError:
 
 
 # ── Service ─────────────────────────────────────────────────────────────────
+
+
+def _safe_filename(text: str) -> str:
+    """``text`` with anything but letters, digits, ``-`` and ``_`` replaced, for a download name."""
+    return "".join(ch if ch.isalnum() or ch in "-_" else "-" for ch in text) or "invoice"
 
 
 class BillingService:
@@ -1360,6 +1371,59 @@ class BillingService:
         await self._get_or_raise(hospital_id, invoice_id, own_visits_of=own_visits_of)
         rows = await self._invoices.list_payments(hospital_id, invoice_id)
         return [PaymentResponse.from_model(row) for row in rows]
+
+    async def invoice_pdf(
+        self,
+        hospital_id: uuid.UUID,
+        invoice_id: uuid.UUID,
+        *,
+        own_visits_of: uuid.UUID | None = None,
+    ) -> tuple[str, bytes]:
+        """Render an invoice as a PDF (module spec §9 ``GET /invoices/{id}/pdf``).
+
+        The PDF shows the invoice exactly as :meth:`get_invoice` returns it,
+        with its payments and refunds (AC-5). A draft has no number and may
+        still change, so it has no PDF; a void invoice does, stamped VOID, for
+        the record.
+
+        :param hospital_id: The hospital the invoice belongs to.
+        :param invoice_id: The invoice to render.
+        :param own_visits_of: Restrict to invoices for appointments where this
+            user is the doctor. ``None`` means no restriction.
+        :returns: ``(file name, PDF bytes)``.
+        :raises InvoiceNotFoundError: If absent from this tenant, or outside
+            the caller's own visits.
+        :raises InvalidInvoiceStateError: If the invoice is a draft.
+        """
+        invoice = await self._get_or_raise(hospital_id, invoice_id, own_visits_of=own_visits_of)
+        if invoice.status is InvoiceStatus.DRAFT:
+            raise InvalidInvoiceStateError(
+                "download a PDF of", invoice.status, hint="Issue it first."
+            )
+        hospital = await self._hospitals.get_by_id(hospital_id)
+        if hospital is None:  # pragma: no cover — the invoice proved the tenant exists
+            raise InvoiceNotFoundError(invoice_id)
+        currency, _, _ = await self._hospital_billing_context(hospital_id)
+        response = InvoiceResponse.from_model(invoice, currency=currency)
+        payments = [
+            PaymentResponse.from_model(row)
+            for row in await self._invoices.list_payments(hospital_id, invoice_id)
+        ]
+        refunds = [
+            RefundResponse.from_model(row)
+            for row in await self._invoices.list_refunds(hospital_id, invoice_id)
+        ]
+        document = build_invoice_document(
+            response,
+            letterhead=letterhead_from(hospital),
+            patient_mrn=invoice.patient.mrn,
+            payments=payments,
+            refunds=refunds,
+            generated_at=datetime.now(UTC),
+        )
+        # Laying out a PDF is CPU work: keep it off the event loop.
+        content = await asyncio.to_thread(render_invoice_pdf, document)
+        return f"invoice-{_safe_filename(document.invoice_number)}.pdf", content
 
     async def list_refunds(
         self,
