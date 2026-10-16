@@ -300,14 +300,15 @@ class AccessGrantService:
     ) -> Page[AccessGrantView]:
         """One page of the grants the account has given, newest first (§27.5).
 
-        Across the hospitals where the account's own record is honoured right
-        now — the same rule every record endpoint uses. A grant given while a
-        link was honoured stays listed here; it just cannot be used unless
-        the link comes back, which the status of a *read* shows separately.
+        Every grant the account gave, at any hospital, whatever has happened
+        to its link there since: revoking is the grantor's alone to do and
+        needs no link (:meth:`revoke`), so a grant the patient cannot see
+        would be one they cannot take back. A grant at a link that is not
+        honoured right now cannot be used — the gate checks the link on every
+        read — but it still belongs in this list.
 
-        The pages are small and a patient's grants are few, so the merge is
-        in memory: one scoped read per hospital, then a sorted slice. There
-        is no query that spans hospitals for patients.
+        A patient's grants are few, so the status filter and the page are
+        applied in memory to one read keyed by the account.
 
         :param account: The authenticated, active account.
         :param status: Only grants in this derived state, or all of them.
@@ -316,17 +317,12 @@ class AccessGrantService:
         :returns: The page and the total.
         :raises ConsentRequiredError: If a required policy is pending.
         """
-        contexts = await self._authorization.own_contexts(account)
+        await self._authorization.ensure_policies_accepted(account.id)
         now = datetime.now(UTC)
-        views: list[AccessGrantView] = []
-        for context in contexts:
-            grants = await self._grants.list_for_grantor(
-                context.hospital_id, grantor_account_id=account.id
-            )
-            views.extend(self._view(grant, now) for grant in grants)
+        grants = await self._grants.list_of_grantor(grantor_account_id=account.id)
+        views = [self._view(grant, now) for grant in grants]
         if status is not None:
             views = [view for view in views if view.status is status]
-        views.sort(key=lambda view: (view.granted_at, view.id), reverse=True)
         start = (page - 1) * page_size
         return Page[AccessGrantView](
             items=views[start : start + page_size],

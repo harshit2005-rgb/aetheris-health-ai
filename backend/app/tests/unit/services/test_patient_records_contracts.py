@@ -403,21 +403,44 @@ class TestDetailHospitalResolution:
 
 
 class TestGrantListing:
-    async def test_grants_are_merged_newest_first_across_the_honoured_links(self) -> None:
+    async def test_every_grant_the_account_gave_is_listed_in_one_read_by_the_account(
+        self,
+    ) -> None:
         first = _stub_grant_row(granted_at=NOW - timedelta(days=1))
         second = _stub_grant_row(granted_at=NOW - timedelta(days=9), hospital_id=SECOND_HOSPITAL_ID)
         grants_repo = AsyncMock()
-
-        async def _side_effect(hospital_id: Any, **kwargs: Any) -> list[Any]:
-            return [first] if hospital_id == HOSPITAL_ID else [second]
-
-        grants_repo.list_for_grantor.side_effect = _side_effect
+        grants_repo.list_of_grantor.return_value = [first, second]
+        account = _account()
         service = _grant_service(grants_repo, contexts=[_context(), _context(SECOND_HOSPITAL_ID)])
 
-        page = await service.list_grants(_account())
+        page = await service.list_grants(account)
 
         assert [item.id for item in page.items] == [first.id, second.id]
         assert page.total_records == 2
+        grants_repo.list_of_grantor.assert_awaited_once_with(grantor_account_id=account.id)
+        grants_repo.list_for_grantor.assert_not_awaited()
+
+    async def test_a_grant_at_a_link_no_longer_honoured_is_still_listed(self) -> None:
+        # The patient can revoke it without a link, so they must be able to see it.
+        row = _stub_grant_row(granted_at=NOW - timedelta(days=1), hospital_id=SECOND_HOSPITAL_ID)
+        grants_repo = AsyncMock()
+        grants_repo.list_of_grantor.return_value = [row]
+        service = _grant_service(grants_repo, contexts=[])
+
+        page = await service.list_grants(_account())
+
+        assert [item.id for item in page.items] == [row.id]
+
+    async def test_a_required_policy_is_still_enforced(self) -> None:
+        grants_repo = AsyncMock()
+        service = _grant_service(grants_repo)
+        authorization = cast("Any", service._authorization)  # noqa: SLF001
+        authorization.ensure_policies_accepted.side_effect = ConsentRequiredError
+
+        with pytest.raises(ConsentRequiredError):
+            await service.list_grants(_account())
+
+        grants_repo.list_of_grantor.assert_not_awaited()
 
     async def test_a_status_filter_keeps_only_that_state(self) -> None:
         active_row = _stub_grant_row(granted_at=NOW - timedelta(days=1))
@@ -425,11 +448,7 @@ class TestGrantListing:
             granted_at=NOW - timedelta(days=2), revoked_at=NOW - timedelta(hours=1)
         )
         grants_repo = AsyncMock()
-
-        async def _two(hospital_id: Any, **kwargs: Any) -> list[Any]:
-            return [active_row, revoked_row]
-
-        grants_repo.list_for_grantor.side_effect = _two
+        grants_repo.list_of_grantor.return_value = [active_row, revoked_row]
         service = _grant_service(grants_repo)
 
         everything = await service.list_grants(_account())
@@ -439,17 +458,12 @@ class TestGrantListing:
         assert revoked_only.total_records == 1
         assert revoked_only.items[0].status is GrantStatus.REVOKED
 
-    async def test_paging_slices_after_the_merge(self) -> None:
+    async def test_paging_slices_the_list(self) -> None:
         grants_repo = AsyncMock()
-        rows = [
+        grants_repo.list_of_grantor.return_value = [
             _stub_grant_row(granted_at=NOW - timedelta(days=index), hospital_id=SECOND_HOSPITAL_ID)
             for index in range(1, 4)
         ]
-
-        async def _three(hospital_id: Any, **kwargs: Any) -> list[Any]:
-            return rows
-
-        grants_repo.list_for_grantor.side_effect = _three
         service = _grant_service(grants_repo, contexts=[_context()])
 
         page_one = await service.list_grants(_account(), page=1, page_size=2)

@@ -182,15 +182,19 @@ async def _seed_lab_order(
     *,
     status: LabOrderStatus = LabOrderStatus.RELEASED,
     days_ago: float = 1,
+    ordered_days_ago: float | None = None,
 ) -> LabOrder:
-    """Plant one lab order in a chosen lifecycle state (§16)."""
+    """Plant one lab order in a chosen lifecycle state (§16).
+
+    Released ``days_ago``; ordered a day before that unless ``ordered_days_ago`` says when.
+    """
     assert for_patient is not None, "the record to seed against is missing"
     released = status is LabOrderStatus.RELEASED
     order = LabOrder(
         hospital_id=db_hospital.id,
         patient_id=for_patient,
         doctor_id=db_doctor.id,
-        ordered_at=_ago(days_ago + 1),
+        ordered_at=_ago(days_ago + 1 if ordered_days_ago is None else ordered_days_ago),
         status=status,
         notes="TECHNOTE internal",
         cancel_reason="cancelled at the counter" if status is LabOrderStatus.CANCELLED else None,
@@ -397,6 +401,22 @@ class TestLabResultList:
         page = await _list(patient, MYLAB)
 
         assert [item["ref"] for item in page["data"]] == [str(newer.id), str(older.id)]
+
+    async def test_the_latest_released_comes_first_whenever_it_was_ordered(
+        self, patient: _Patient, hospital: Hospital, doctor: Doctor, db_session: AsyncSession
+    ) -> None:
+        # A culture ordered ten days ago and released today, and a blood count
+        # ordered two days ago and released yesterday: the newest result leads.
+        slow = await _seed_lab_order(
+            db_session, hospital, doctor, patient.record_id, days_ago=0.1, ordered_days_ago=10
+        )
+        quick = await _seed_lab_order(
+            db_session, hospital, doctor, patient.record_id, days_ago=1, ordered_days_ago=2
+        )
+
+        page = await _list(patient, MYLAB)
+
+        assert [item["ref"] for item in page["data"]] == [str(slow.id), str(quick.id)]
 
 
 class TestLabResultDetail:

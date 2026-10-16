@@ -47,7 +47,8 @@ class CreateAccessGrant(BaseModel):
         description="Why, from the fixed list: consultation, second_opinion or continuity_of_care."
     )
     expires_at: datetime | None = Field(
-        description="When the grant ends. Thirty days from now if absent; never beyond 365."
+        default=None,
+        description="When the grant ends. Thirty days from now if absent; never beyond 365.",
     )
     records_from: date | None = Field(
         default=None, description="Earliest record date shared, or null for unbounded."

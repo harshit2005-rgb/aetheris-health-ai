@@ -302,7 +302,7 @@ class PatientRecordsService:
         :param account: The authenticated, active account.
         :param page: 1-based page number.
         :param page_size: Orders per page.
-        :returns: The page and the total, newest first.
+        :returns: The page and the total, most recently released first.
         :raises ConsentRequiredError: If a required policy is pending.
         """
         hospitals = await self._own_hospitals(account)

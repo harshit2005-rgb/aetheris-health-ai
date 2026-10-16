@@ -112,7 +112,7 @@ async def get_my_prescription(
     response_model=PaginatedResponse[PatientLabResult],
     summary="My released lab results",
     description=(
-        "The signed-in patient's own released lab results, newest first. Only "
+        "The signed-in patient's own released lab results, most recently released first. Only "
         "released orders exist here: nothing pending, entered or cancelled is "
         "returned, and results carry no interpretation."
     ),
