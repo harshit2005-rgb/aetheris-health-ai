@@ -23,6 +23,7 @@ import {
 import { usePermissions } from '@/hooks/usePermissions'
 import { formatMoney } from '@/lib/format'
 import { EditChargesDialog } from './EditChargesDialog'
+import { InvoicePdfButton } from './InvoicePdfButton'
 import {
   MONEY_PATTERN,
   PAYMENT_METHODS,
@@ -436,6 +437,7 @@ export function InvoiceActions({ invoice }: { invoice: Invoice }) {
     takesPayment && <RecordPaymentDialog key="pay" invoice={invoice} methods={methods} />,
     refundable && <RefundDialog key="refund" invoice={invoice} />,
     voidable && <VoidInvoiceDialog key="void" invoice={invoice} />,
+    !isDraft && can('invoice.pdf.download') && <InvoicePdfButton key="pdf" invoice={invoice} />,
   ].filter(Boolean)
 
   if (actions.length === 0) return null
