@@ -524,6 +524,9 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "invoice.update",
             "invoice.issue",
             "invoice.payment.record",
+            # The cashier prints the bill at the counter (founder's decision,
+            # 2026-10-16): GET /invoices/{id}/pdf.
+            "invoice.pdf.download",
             # docs/modules/10-reports-dashboard.md §10: the billing dashboard,
             # the revenue and outstanding reports, and their export.
             "report.billing.read",

@@ -17,6 +17,7 @@ export const ADMIN = [
   'invoice.refund',
   'invoice.payment.record',
   'invoice.payment.record.cash',
+  'invoice.pdf.download',
 ]
 export const BILLING_STAFF = [
   'patient.read',
@@ -26,6 +27,7 @@ export const BILLING_STAFF = [
   'invoice.update',
   'invoice.issue',
   'invoice.payment.record',
+  'invoice.pdf.download',
 ]
 export const RECEPTIONIST = [
   'patient.read',
