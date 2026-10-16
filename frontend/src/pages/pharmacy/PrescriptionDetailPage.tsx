@@ -4,7 +4,9 @@ import { Alert } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Detail, InfoCard } from '@/components/ui/detail-card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { PdfDownloadButton } from '@/components/PdfDownloadButton'
 import {
+  fetchPrescriptionPdf,
   usePrescription,
   usePrescriptionDispenses,
   type Dispense,
@@ -253,12 +255,15 @@ export default function PrescriptionDetailPage() {
             <span className="text-outline font-mono text-sm">· {prescription.patient_mrn}</span>
           </p>
         </div>
-        {(canDispense || canCancel) && (
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            {canDispense && <DispenseDialog prescription={prescription} />}
-            {canCancel && <CancelPrescriptionDialog prescription={prescription} />}
-          </div>
-        )}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <PdfDownloadButton
+            fetchFile={() => fetchPrescriptionPdf(prescription.id)}
+            label="Print prescription"
+            forbiddenMessage="You don't have permission to print prescriptions."
+          />
+          {canDispense && <DispenseDialog prescription={prescription} />}
+          {canCancel && <CancelPrescriptionDialog prescription={prescription} />}
+        </div>
       </header>
 
       {prescription.status === 'cancelled' && (

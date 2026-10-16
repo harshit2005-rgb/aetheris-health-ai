@@ -2310,3 +2310,68 @@ describe('prescriptions in the rest of the app', () => {
     expect(sent('get', '/prescriptions')).toHaveLength(0)
   })
 })
+
+describe('printing a prescription', () => {
+  let downloads: { filename: string; blob: Blob }[]
+  const realCreate = URL.createObjectURL
+  const realRevoke = URL.revokeObjectURL
+
+  beforeEach(() => {
+    downloads = []
+    const held = new Map<string, Blob>()
+    URL.createObjectURL = vi.fn((blob: Blob) => {
+      const url = `blob:test/${held.size}`
+      held.set(url, blob)
+      return url
+    }) as typeof URL.createObjectURL
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      const blob = held.get(this.href)
+      if (blob) downloads.push({ filename: this.download, blob })
+    })
+    intercept = (c) =>
+      c.url === '/prescriptions/rx1/pdf'
+        ? {
+            status: 200,
+            data: new Blob(['%PDF-1.4 test'], { type: 'application/pdf' }),
+            headers: { 'content-disposition': 'attachment; filename="prescription-MRN-2026-00007-RX-1.pdf"' },
+          }
+        : undefined
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    URL.createObjectURL = realCreate
+    URL.revokeObjectURL = realRevoke
+  })
+
+  it.each([
+    ['an admin', ADMIN],
+    ['a doctor', DOCTOR],
+    ['a pharmacist', PHARMACIST],
+  ])('%s can print the prescription on screen', async (_who, permissions) => {
+    prescriptions = [rx('rx1', [line('l1', PARA, 10)])]
+    const user = userEvent.setup()
+    renderAt('/pharmacy/prescriptions/rx1', permissions)
+
+    await user.click(await screen.findByRole('button', { name: 'Print prescription' }))
+
+    await waitFor(() => expect(downloads).toHaveLength(1))
+    expect(downloads[0].filename).toBe('prescription-MRN-2026-00007-RX-1.pdf')
+    expect(toastSuccess).toHaveBeenCalledWith('Downloaded prescription-MRN-2026-00007-RX-1.pdf')
+  })
+
+  it('shows the reason when the server refuses', async () => {
+    prescriptions = [rx('rx1', [line('l1', PARA, 10)])]
+    intercept = (c) => (c.url === '/prescriptions/rx1/pdf' ? fail(403, 'Forbidden') : undefined)
+    const user = userEvent.setup()
+    renderAt('/pharmacy/prescriptions/rx1', ADMIN)
+
+    await user.click(await screen.findByRole('button', { name: 'Print prescription' }))
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith("You don't have permission to print prescriptions."),
+    )
+    expect(downloads).toHaveLength(0)
+  })
+})

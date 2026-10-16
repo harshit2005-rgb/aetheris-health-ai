@@ -30,6 +30,7 @@ application log.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
@@ -59,6 +60,8 @@ from app.schemas.lab import (
     LabOrderResponse,
     UpdateLabOrderRequest,
 )
+from app.services.lab_report_pdf import build_lab_report, render_lab_report_pdf
+from app.services.pdf_layout import letterhead_from, safe_filename
 from app.utils.lab_ranges import age_in_years, flag_value, parse_numeric, select_range
 
 if TYPE_CHECKING:
@@ -69,6 +72,7 @@ if TYPE_CHECKING:
     from app.core.audit import AuditSink
     from app.models.lab import LabOrder, LabOrderItem, LabTest
     from app.repositories.appointment_repository import AppointmentRepository
+    from app.repositories.hospital_repository import HospitalRepository
     from app.repositories.lab_order_repository import LabOrderRepository
     from app.repositories.lab_test_repository import LabTestRepository
 
@@ -172,6 +176,8 @@ class LabService:
     :param charges: Where ordered tests are charged. Optional; a service built
         without one charges nothing.
     :param notifier: Where the ordering doctor is told about results. Optional.
+    :param hospitals: Hospital lookups, for the report letterhead. Optional; a
+        service built without one cannot render reports.
     """
 
     def __init__(
@@ -183,8 +189,10 @@ class LabService:
         audit: AuditSink,
         charges: ChargeSink | None = None,
         notifier: Notifier | None = None,
+        hospitals: HospitalRepository | None = None,
     ) -> None:
         self._orders = orders
+        self._hospitals = hospitals
         self._tests = tests
         self._appointments = appointments
         self._session = session
@@ -758,6 +766,43 @@ class LabService:
         if order is None:
             raise LabOrderNotFoundError(order_id)
         return LabOrderResponse.from_model(order)
+
+    async def report_pdf(self, hospital_id: uuid.UUID, order_id: uuid.UUID) -> tuple[str, bytes]:
+        """Render a released order as a lab report PDF (§9 ``report.pdf``, FR-5).
+
+        The report shows the order exactly as :meth:`get_order` returns it
+        (AC-4). Only released results leave the lab, so an order that is not
+        released has no report (rule 3).
+
+        :param hospital_id: The hospital the order belongs to.
+        :param order_id: The order to render.
+        :returns: ``(file name, PDF bytes)``.
+        :raises LabOrderNotFoundError: If absent from this tenant.
+        :raises LabOrderStateError: If the order is not released.
+        """
+        order = await self._orders.get_order_by_id(hospital_id, order_id)
+        if order is None:
+            raise LabOrderNotFoundError(order_id)
+        if order.status is not LabOrderStatus.RELEASED:
+            raise LabOrderStateError("download a report of", order.status)
+        if self._hospitals is None:  # pragma: no cover — wired in deps
+            msg = "LabService was built without a hospital repository."
+            raise RuntimeError(msg)
+        hospital = await self._hospitals.get_by_id(hospital_id)
+        if hospital is None:  # pragma: no cover — the order proved the tenant exists
+            raise LabOrderNotFoundError(order_id)
+        patient = order.patient
+        document = build_lab_report(
+            LabOrderResponse.from_model(order),
+            letterhead=letterhead_from(hospital),
+            date_of_birth=patient.date_of_birth,
+            sex=getattr(patient.gender, "value", None),
+            generated_at=datetime.now(UTC),
+        )
+        # Laying out a PDF is CPU work: keep it off the event loop.
+        content = await asyncio.to_thread(render_lab_report_pdf, document)
+        name = safe_filename(f"{document.patient_mrn}-{document.report_number}", "lab-report")
+        return f"lab-report-{name}.pdf", content
 
     async def list_orders(
         self,

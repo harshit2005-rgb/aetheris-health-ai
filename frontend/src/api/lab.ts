@@ -3,13 +3,15 @@ import { http } from '@/api/http'
 import { billingKeys } from '@/api/billing'
 import { notificationKeys } from '@/api/notifications'
 import { ApiError, type ListQueryOptions, type Paginated } from '@/api/types'
+import { api } from '@/lib/api'
+import { blobApiError, filenameFromContentDisposition } from '@/lib/download'
 
 /**
  * Laboratory API — typed hooks over the real backend contract
  * (`backend/app/api/v1/tests_catalog.py`, `backend/app/api/v1/lab_orders.py`,
  * `backend/app/schemas/lab.py`; docs/18-API_CONTRACTS.md §8).
  *
- * Not built on the server, so not here: the PDF report and AI explain (§8.8).
+ * Not built on the server, so not here: AI explain (§8.8).
  */
 
 export type LabResultType = 'numeric' | 'text'
@@ -324,4 +326,27 @@ export function useAmendLabResult(orderId: string) {
       http.post<LabOrder>(`/lab-orders/${orderId}/items/${itemId}/amend`, body),
     () => qc.invalidateQueries({ queryKey: notificationKeys.unreadCount }),
   )
+}
+
+// ── Report PDF ───────────────────────────────────────────────────────────────
+
+/**
+ * Download a released order's lab report (`GET /lab-orders/{id}/report.pdf`,
+ * which needs `lab.report.download`). The server names the file; where that
+ * header is not readable, a name is built from the order id.
+ *
+ * A failure is thrown as an `ApiError` with the server's message: a 400 for an
+ * order not yet released, a 403 without the permission.
+ */
+export async function fetchLabReportPdf(id: string): Promise<{ blob: Blob; filename: string }> {
+  try {
+    const res = await api.get<Blob>(`/lab-orders/${id}/report.pdf`, { responseType: 'blob' })
+    const headers = res.headers as Record<string, unknown> | undefined
+    return {
+      blob: res.data,
+      filename: filenameFromContentDisposition(headers?.['content-disposition']) ?? `lab-report-${id.slice(0, 8)}.pdf`,
+    }
+  } catch (err) {
+    throw await blobApiError(err)
+  }
 }

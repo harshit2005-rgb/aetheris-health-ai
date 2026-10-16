@@ -2,6 +2,8 @@ import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tansta
 import { http } from '@/api/http'
 import { billingKeys } from '@/api/billing'
 import { ApiError, type ListQueryOptions, type Paginated } from '@/api/types'
+import { api } from '@/lib/api'
+import { blobApiError, filenameFromContentDisposition } from '@/lib/download'
 
 /**
  * Pharmacy API — typed hooks over the real backend contract
@@ -691,4 +693,23 @@ export function useReceivePurchaseOrder(id: string) {
       qc.invalidateQueries({ queryKey: pharmacyKeys.prescriptions() })
     },
   )
+}
+
+// ── Prescription PDF ─────────────────────────────────────────────────────────
+
+/**
+ * Download a prescription as the PDF slip the patient takes away
+ * (`GET /prescriptions/{id}/pdf`, which needs `pharmacy.prescription.read`).
+ */
+export async function fetchPrescriptionPdf(id: string): Promise<{ blob: Blob; filename: string }> {
+  try {
+    const res = await api.get<Blob>(`/prescriptions/${id}/pdf`, { responseType: 'blob' })
+    const headers = res.headers as Record<string, unknown> | undefined
+    return {
+      blob: res.data,
+      filename: filenameFromContentDisposition(headers?.['content-disposition']) ?? `prescription-${id.slice(0, 8)}.pdf`,
+    }
+  } catch (err) {
+    throw await blobApiError(err)
+  }
 }
