@@ -15,7 +15,10 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Any
 
 import pytest
+from sqlalchemy import func, update
 
+from app.models.patient import Patient
+from app.models.patient_account import PatientAccountLink
 from app.tests.api.test_patient_booking_api import (  # noqa: F401 — fixtures, registered by import
     _error,
     _Patient,
@@ -202,6 +205,22 @@ class TestCreation:
 
         assert _error(response) == NOT_VALID
 
+    async def test_an_absent_expiry_lasts_thirty_days(
+        self,
+        patient: _Patient,
+        hospital: Hospital,
+        doctor: Doctor,
+    ) -> None:
+        body = _body(hospital, doctor)
+        del body["expires_at"]
+        before = datetime.now(UTC)
+
+        response = await _create(patient, hospital.slug, body)
+
+        assert response.status_code == 201, response.text
+        expires_at = datetime.fromisoformat(response.json()["data"]["expires_at"])
+        assert before + timedelta(days=30) <= expires_at <= datetime.now(UTC) + timedelta(days=30)
+
 
 class TestListing:
     async def test_own_grants_newest_first_with_their_derived_status(
@@ -255,6 +274,41 @@ class TestListing:
         assert body["metadata"]["pagination"]["total_records"] == 1
         assert body["data"][0]["status"] == "revoked"
         assert body["data"][0]["revoked_at"] is not None
+
+    @pytest.mark.parametrize("stale", ["unlinked", "phone_changed"])
+    async def test_a_grant_at_a_link_no_longer_honoured_is_still_listed_and_revocable(
+        self,
+        patient: _Patient,
+        hospital: Hospital,
+        doctor: Doctor,
+        db_session: AsyncSession,
+        stale: str,
+    ) -> None:
+        created = await _create(patient, hospital.slug, _body(hospital, doctor))
+        assert created.status_code == 201, created.text
+        grant_id = created.json()["data"]["id"]
+        if stale == "unlinked":
+            await db_session.execute(
+                update(PatientAccountLink)
+                .where(PatientAccountLink.account_id == patient.account_id)
+                .values(unlinked_at=func.now())
+            )
+        else:
+            await db_session.execute(
+                update(Patient).where(Patient.id == patient.record_id).values(phone="+919333333333")
+            )
+        await db_session.commit()
+
+        page = await patient.client.get(GRANTS, params={"page_size": 10}, headers=patient.headers)
+
+        assert page.status_code == 200, page.text
+        assert [item["id"] for item in page.json()["data"]] == [grant_id]
+
+        revoked = await patient.client.post(
+            f"{GRANTS}/{grant_id}/revoke", json={}, headers=patient.headers
+        )
+        assert revoked.status_code == 200, revoked.text
+        assert revoked.json()["data"]["status"] == "revoked"
 
     async def test_somebody_elses_grants_are_not_listed(
         self,

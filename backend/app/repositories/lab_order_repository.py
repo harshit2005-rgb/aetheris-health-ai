@@ -318,8 +318,8 @@ class LabOrderRepository(BaseRepository[LabOrder]):
             ``released`` by the default; never widened for a patient read.
         :param skip: Rows to skip.
         :param limit: Maximum rows to return.
-        :returns: The page, newest first, and how many orders the list holds
-            in all.
+        :returns: The page, most recently released first, and how many orders
+            the list holds in all.
         """
         if not records:
             return [], 0
@@ -329,7 +329,7 @@ class LabOrderRepository(BaseRepository[LabOrder]):
         stmt = stmt.where(LabOrder.status.in_(tuple(statuses)))
         total = await self._session.execute(select(func.count()).select_from(stmt.subquery()))
         rows = await self._session.execute(
-            stmt.order_by(LabOrder.ordered_at.desc(), LabOrder.id.desc()).offset(skip).limit(limit)
+            stmt.order_by(LabOrder.released_at.desc(), LabOrder.id.desc()).offset(skip).limit(limit)
         )
         return list(rows.unique().scalars().all()), total.scalar_one()
 

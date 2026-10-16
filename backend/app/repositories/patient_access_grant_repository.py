@@ -125,6 +125,35 @@ class PatientAccessGrantRepository(BaseRepository[PatientAccessGrant]):
         )
         return result.scalar_one_or_none()
 
+    async def list_of_grantor(
+        self,
+        *,
+        grantor_account_id: uuid.UUID,
+        scope: uuid.UUID | CrossTenant = _OF_GRANTOR,
+    ) -> list[PatientAccessGrant]:
+        """Every grant this account has given, at any hospital, newest first.
+
+        For ``GET /patient/access-grants``: a patient must be able to see, and
+        so revoke, every grant they gave, whatever has happened to their link
+        since. Keyed by the grantor alone, like :meth:`get_grant_of_grantor`:
+        the only rows the key can name are the account's own acts.
+
+        :param grantor_account_id: The account that gave them.
+        :param scope: The read's explicit scope. The default is the deliberate
+            cross-tenant marker on this account's own grants.
+        :returns: Its grants, whatever their status.
+        """
+        result = await self._session.execute(
+            self._confine_to_tenant(
+                select(PatientAccessGrant)
+                .where(PatientAccessGrant.grantor_account_id == grantor_account_id)
+                .order_by(PatientAccessGrant.granted_at.desc(), PatientAccessGrant.id.desc()),
+                scope,
+                "list_of_grantor",
+            ).execution_options(populate_existing=True)
+        )
+        return list(result.scalars().all())
+
     async def get_for_grantor(
         self, hospital_id: uuid.UUID, grant_id: uuid.UUID, *, grantor_account_id: uuid.UUID
     ) -> PatientAccessGrant | None:
