@@ -245,11 +245,11 @@ describe('invoice actions by status and role', () => {
       () => draftInvoice({ discount_pending_approval: true }),
       ['Edit charges', 'Discount', 'Approve discount', 'Issue invoice'],
     ],
-    ['an issued invoice', () => issuedInvoice(), ['Record payment', 'Void']],
-    ['a part-paid invoice', () => issuedInvoice({ status: 'partially_paid' }), ['Record payment', 'Refund']],
-    ['a paid invoice', () => issuedInvoice({ status: 'paid' }), ['Refund']],
-    ['a void invoice', () => issuedInvoice({ status: 'void', void_reason: 'Raised in error' }), []],
-    ['a refunded invoice', () => issuedInvoice({ status: 'refunded' }), []],
+    ['an issued invoice', () => issuedInvoice(), ['Record payment', 'Void', 'Download PDF']],
+    ['a part-paid invoice', () => issuedInvoice({ status: 'partially_paid' }), ['Record payment', 'Refund', 'Download PDF']],
+    ['a paid invoice', () => issuedInvoice({ status: 'paid' }), ['Refund', 'Download PDF']],
+    ['a void invoice', () => issuedInvoice({ status: 'void', void_reason: 'Raised in error' }), ['Download PDF']],
+    ['a refunded invoice', () => issuedInvoice({ status: 'refunded' }), ['Download PDF']],
   ] as const)('gives an admin the right actions on %s', async (_name, make, expected) => {
     invoice = make()
     renderInvoice(ADMIN)
@@ -262,10 +262,10 @@ describe('invoice actions by status and role', () => {
     expect(await actions()).toEqual(['Edit charges', 'Discount', 'Issue invoice'])
   })
 
-  it('gives billing staff payment only on an issued or paid invoice', async () => {
+  it('gives billing staff payment and the PDF on an issued or paid invoice', async () => {
     invoice = issuedInvoice({ status: 'partially_paid' })
     renderInvoice(BILLING_STAFF)
-    expect(await actions()).toEqual(['Record payment'])
+    expect(await actions()).toEqual(['Record payment', 'Download PDF'])
   })
 
   it('gives a receptionist payment only, and nothing on a draft', async () => {
@@ -313,7 +313,7 @@ describe('issuing', () => {
 
     expect(await screen.findByRole('heading', { name: 'INV-2026-000007' })).toBeInTheDocument()
     expect(screen.getByText('Issued', { selector: 'span' })).toBeInTheDocument()
-    expect(await actions()).toEqual(['Record payment'])
+    expect(await actions()).toEqual(['Record payment', 'Download PDF'])
   })
 
   it('shows the API\'s reason when the draft cannot be issued', async () => {
@@ -382,7 +382,7 @@ describe('recording a payment', () => {
     )
     expect(await screen.findByText('Paid', { selector: 'span' })).toBeInTheDocument()
     expect(totals().getByText('Outstanding').closest('div')).toHaveTextContent(inr('0.00'))
-    expect(await actions()).toEqual([])
+    expect(await actions()).toEqual(['Download PDF'])
   })
 
   it.each(['-50', '0', '12.345', 'abc', ''])('rejects the amount "%s" before any request', async (bad) => {
@@ -444,7 +444,7 @@ describe('recording a payment', () => {
       expect(toastError).toHaveBeenCalledWith('A paid invoice cannot take a payment.'),
     )
     expect(await screen.findByText('Paid', { selector: 'span' })).toBeInTheDocument()
-    expect(await actions()).toEqual([])
+    expect(await actions()).toEqual(['Download PDF'])
   })
 
   it('shows an amount error from the API under the field', async () => {
@@ -725,7 +725,7 @@ describe('refunds', () => {
     expect(totals().getByText('Refunded').closest('div')).toHaveTextContent(inr('600.00'))
     const history = within(await screen.findByRole('region', { name: 'Refunds' }))
     expect(await history.findByRole('row', { name: /Sample could not be processed/ })).toBeInTheDocument()
-    expect(await actions()).toEqual([])
+    expect(await actions()).toEqual(['Download PDF'])
   })
 
   it('shows the API\'s refusal when the refund exceeds what was paid', async () => {
@@ -777,7 +777,7 @@ describe('voiding and editing', () => {
 
     expect(await screen.findByText('This invoice was voided')).toBeInTheDocument()
     expect(screen.getByText('Raised against the wrong patient')).toBeInTheDocument()
-    expect(await actions()).toEqual([])
+    expect(await actions()).toEqual(['Download PDF'])
   })
 
   it('edits a draft\'s charges by replacing the whole line set', async () => {
@@ -813,7 +813,7 @@ describe('voiding and editing', () => {
 })
 
 describe('downloading the PDF', () => {
-  const DOWNLOADER = [...ADMIN, 'invoice.pdf.download']
+  const DOWNLOADER = ADMIN
   /** What the button handed to the browser: one entry per file saved. */
   let downloads: { filename: string; blob: Blob }[]
   const realCreate = URL.createObjectURL
@@ -858,7 +858,7 @@ describe('downloading the PDF', () => {
 
   it('is not offered without invoice.pdf.download', async () => {
     invoice = issuedInvoice()
-    renderInvoice(ADMIN)
+    renderInvoice(ADMIN.filter((code) => code !== 'invoice.pdf.download'))
     expect(await actions()).not.toContain('Download PDF')
   })
 
