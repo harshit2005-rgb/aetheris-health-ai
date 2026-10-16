@@ -151,7 +151,8 @@ def render_prescription_pdf(document: PrescriptionDocument) -> bytes:
     small = style(7.5, color=MUTED)
     label = style(8, bold=True, color=MUTED)
 
-    doctor_line = f"Dr. {document.doctor_name}"
+    # The API already names a doctor "Dr. First Last".
+    doctor_line = document.doctor_name
     meta: list[tuple[str, str]] = [
         ("Patient", document.patient_name),
         ("MRN", document.patient_mrn),

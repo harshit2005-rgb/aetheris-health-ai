@@ -59,7 +59,7 @@ def _order(items: list[LabOrderItemResponse], **overrides: Any) -> LabOrderRespo
         "patient_name": "Ananya Rao",
         "patient_mrn": "SUN-000123",
         "doctor_id": uuid.uuid4(),
-        "doctor_name": "Kiran Reddy",
+        "doctor_name": "Dr. Kiran Reddy",
         "ordered_at": datetime(2026, 10, 16, 3, 40, tzinfo=UTC),
         "priority": LabOrderPriority.STAT,
         "status": LabOrderStatus.RELEASED,
@@ -97,7 +97,7 @@ class TestDocument:
         assert doc.patient_name == "Ananya Rao"
         assert doc.patient_mrn == "SUN-000123"
         assert doc.age_sex == "36 y · Female"
-        assert doc.doctor_name == "Kiran Reddy"
+        assert doc.doctor_name == "Dr. Kiran Reddy"
         assert doc.priority == "STAT"
         assert doc.ordered_on == "16 Oct 2026, 09:10"
         assert doc.collected_on == "16 Oct 2026, 09:25"

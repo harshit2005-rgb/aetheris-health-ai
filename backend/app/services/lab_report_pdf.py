@@ -189,7 +189,7 @@ def render_lab_report_pdf(document: LabReportDocument) -> bytes:
                 ("MRN", document.patient_mrn),
                 ("Age / Sex", document.age_sex),
                 ("Report no.", document.report_number),
-                ("Referred by", f"Dr. {document.doctor_name}"),
+                ("Referred by", document.doctor_name),
                 ("Priority", document.priority),
                 ("Sample collected", document.collected_on),
                 ("Reported", document.released_on),

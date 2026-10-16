@@ -47,7 +47,7 @@ def _rx(items: list[PrescriptionItemResponse], **overrides: Any) -> Prescription
         "patient_name": "Ananya Rao",
         "patient_mrn": "SUN-000123",
         "doctor_id": uuid.uuid4(),
-        "doctor_name": "Kiran Reddy",
+        "doctor_name": "Dr. Kiran Reddy",
         "status": PrescriptionStatus.ACTIVE,
         "notes": "Review in five days.",
         "prescribed_at": WRITTEN,
@@ -78,7 +78,7 @@ class TestDocument:
 
         assert doc.patient_name == "Ananya Rao"
         assert doc.age_sex == "36 y · Female"
-        assert doc.doctor_name == "Kiran Reddy"
+        assert doc.doctor_name == "Dr. Kiran Reddy"
         assert doc.doctor_specialization == "General Medicine"
         assert doc.doctor_registration == "TSMC/45231"
         assert doc.prescribed_on == "16 Oct 2026, 10:42"
