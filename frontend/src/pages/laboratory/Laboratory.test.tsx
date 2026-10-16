@@ -1123,3 +1123,74 @@ describe('laboratory in the rest of the app', () => {
     }
   })
 })
+
+describe('lab report PDF', () => {
+  const DOWNLOADER = [...ADMIN, 'lab.report.download']
+  let downloads: { filename: string; blob: Blob }[]
+  const realCreate = URL.createObjectURL
+  const realRevoke = URL.revokeObjectURL
+
+  beforeEach(() => {
+    downloads = []
+    const held = new Map<string, Blob>()
+    URL.createObjectURL = vi.fn((blob: Blob) => {
+      const url = `blob:test/${held.size}`
+      held.set(url, blob)
+      return url
+    }) as typeof URL.createObjectURL
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      const blob = held.get(this.href)
+      if (blob) downloads.push({ filename: this.download, blob })
+    })
+    intercept = (c) =>
+      c.url === '/lab-orders/o1/report.pdf'
+        ? {
+            status: 200,
+            data: new Blob(['%PDF-1.4 test'], { type: 'application/pdf' }),
+            headers: { 'content-disposition': 'attachment; filename="lab-report-MRN-2026-00007-LAB-1.pdf"' },
+          }
+        : undefined
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    URL.createObjectURL = realCreate
+    URL.revokeObjectURL = realRevoke
+  })
+
+  it('is offered on a released order to someone who may download reports', async () => {
+    orders = [{ ...resulted(), status: 'released', released_at: '2026-10-05T12:20:00Z' }]
+    renderAt('/laboratory/orders/o1', DOWNLOADER)
+
+    expect(await screen.findByRole('button', { name: 'Download report' })).toBeEnabled()
+  })
+
+  it.each(['ordered', 'collected', 'results_entered'] as const)('is not offered on an order that is %s', async (status) => {
+    orders = [{ ...resulted(), status }]
+    renderAt('/laboratory/orders/o1', DOWNLOADER)
+
+    await screen.findByRole('heading', { level: 1, name: 'Lab order' })
+    expect(actionNames()).not.toContain('Download report')
+  })
+
+  it('is not offered without lab.report.download', async () => {
+    orders = [{ ...resulted(), status: 'released' }]
+    renderAt('/laboratory/orders/o1', ADMIN)
+
+    await screen.findByRole('heading', { level: 1, name: 'Lab order' })
+    expect(actionNames()).not.toContain('Download report')
+  })
+
+  it('saves the report the server sends, under the name it gives', async () => {
+    orders = [{ ...resulted(), status: 'released', released_at: '2026-10-05T12:20:00Z' }]
+    const user = userEvent.setup()
+    renderAt('/laboratory/orders/o1', DOWNLOADER)
+
+    await user.click(await screen.findByRole('button', { name: 'Download report' }))
+
+    await waitFor(() => expect(downloads).toHaveLength(1))
+    expect(downloads[0].filename).toBe('lab-report-MRN-2026-00007-LAB-1.pdf')
+    expect(toastSuccess).toHaveBeenCalledWith('Downloaded lab-report-MRN-2026-00007-LAB-1.pdf')
+  })
+})

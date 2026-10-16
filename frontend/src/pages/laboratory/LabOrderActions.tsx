@@ -8,7 +8,9 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { FormDialog } from '@/components/forms/FormDialog'
 import { FormRefusal } from '@/components/forms/formRefusal'
+import { PdfDownloadButton } from '@/components/PdfDownloadButton'
 import {
+  fetchLabReportPdf,
   useAmendLabResult,
   useCancelLabOrder,
   useCollectSamples,
@@ -335,7 +337,8 @@ export function LabOrderActions({ order }: { order: LabOrder }) {
   const canEnter = LAB_RESULTS_ENTERABLE.has(order.status) && can('lab.order.enter_results')
   const canRelease = order.status === 'results_entered' && can('lab.order.release')
   const canCancel = LAB_CANCELLABLE.has(order.status) && can('lab.order.cancel')
-  if (!canCollect && !canEnter && !canRelease && !canCancel) return null
+  const canReport = order.status === 'released' && can('lab.report.download')
+  if (!canCollect && !canEnter && !canRelease && !canCancel && !canReport) return null
 
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
@@ -343,6 +346,13 @@ export function LabOrderActions({ order }: { order: LabOrder }) {
       {canRelease && <ReleaseOrderDialog order={order} />}
       {canEnter && <EnterResultsDialog order={order} />}
       {canCancel && <CancelOrderDialog order={order} />}
+      {canReport && (
+        <PdfDownloadButton
+          fetchFile={() => fetchLabReportPdf(order.id)}
+          label="Download report"
+          forbiddenMessage="You don't have permission to download lab reports."
+        />
+      )}
     </div>
   )
 }
