@@ -1,0 +1,53 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make *)",
+      "Bash(pnpm *)",
+      "Bash(uv *)",
+      "Bash(pytest *)",
+      "Bash(alembic *)",
+      "Bash(ruff *)",
+      "Bash(mypy *)",
+      "Bash(git status)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(git add *)",
+      "Bash(git branch *)",
+      "Bash(git checkout *)",
+      "Read(**)",
+      "Edit(backend/app/**)",
+      "Edit(backend/tests/**)",
+      "Edit(frontend/src/**)",
+      "Edit(frontend/tests/**)",
+      "Edit(docs/**)"
+    ],
+    "ask": [
+      "Bash(git push *)",
+      "Bash(git commit *)",
+      "Bash(git rebase *)",
+      "Bash(git reset *)",
+      "Bash(docker *)",
+      "Bash(rm *)",
+      "Bash(mv *)",
+      "Edit(backend/alembic/versions/**)",
+      "Edit(docker-compose.yml)",
+      "Edit(.github/workflows/**)",
+      "Edit(.env*)",
+      "Edit(backend/app/core/security.py)",
+      "Edit(backend/app/core/tenancy.py)",
+      "Edit(backend/app/repositories/base.py)"
+    ],
+    "deny": [
+      "Bash(git push --force *)",
+      "Bash(git push -f *)",
+      "Bash(rm -rf /)",
+      "Bash(sudo *)",
+      "Bash(curl * | sh)",
+      "Bash(curl * | bash)",
+      "Bash(wget * | sh)",
+      "Edit(.env)",
+      "Edit(.env.production)",
+      "Edit(secrets/**)"
+    ]
+  }
+}
