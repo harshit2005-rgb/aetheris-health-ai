@@ -23,7 +23,7 @@ from datetime import date
 
 from fastapi import APIRouter, Depends, Path, Query, status
 
-from app.api.dependencies.auth import require_permission
+from app.api.dependencies.auth import require_permission, user_has_permission
 from app.api.dependencies.services import get_doctor_service
 from app.core.exceptions import BusinessRuleError
 from app.models.user import User
@@ -60,6 +60,22 @@ _COMMON_RESPONSES: dict[int | str, dict[str, str]] = {
 _NOT_FOUND_RESPONSE: dict[int | str, dict[str, str]] = {
     404: {"description": "Doctor not found in this hospital."},
 }
+
+
+def _own_schedule_scope(current_user: User) -> uuid.UUID | None:
+    """Return the user whose schedule the caller is limited to, or ``None``.
+
+    Module spec §3: a hospital admin (who holds ``doctor.update``) manages every
+    doctor's availability and leave; anyone else holding the
+    ``doctor.availability.*`` / ``doctor.leave.*`` codes — a doctor — manages
+    only their own. The service enforces it; this only says which applies.
+
+    :param current_user: The authenticated user.
+    :returns: The user's UUID when their changes must be limited, else ``None``.
+    """
+    if user_has_permission(current_user, "doctor.update"):
+        return None
+    return current_user.id
 
 
 def _tenant_of(current_user: User) -> uuid.UUID:
@@ -305,7 +321,9 @@ async def get_availability(
         "`entries` list removes all availability.\n\n"
         "Windows on the same day must not overlap. Windows that touch — one "
         "ending exactly when the next begins — are fine, and are how a "
-        "mid-day change of slot duration is expressed."
+        "mid-day change of slot duration is expressed.\n\n"
+        "A caller without `doctor.update` (a doctor) may change only their own "
+        "schedule: another doctor's is `403`."
     ),
     responses={
         200: {"description": "Availability replaced."},
@@ -321,7 +339,11 @@ async def set_availability(
 ) -> SuccessResponse[list[AvailabilityResponse]]:
     """Replace a doctor's weekly availability atomically."""
     windows = await service.set_availability(
-        _tenant_of(current_user), doctor_id, payload, actor_id=current_user.id
+        _tenant_of(current_user),
+        doctor_id,
+        payload,
+        actor_id=current_user.id,
+        own_schedule_of=_own_schedule_scope(current_user),
     )
     return SuccessResponse[list[AvailabilityResponse]](
         message="Availability updated.", data=windows
@@ -364,7 +386,9 @@ async def list_leaves(
         "leave ending at 09:00 leaves the 08:30-09:00 slot bookable.\n\n"
         "Overlapping an existing leave is rejected with 409.\n\n"
         "The response metadata lists appointments that fall inside the leave, "
-        "so they can be reassigned."
+        "so they can be reassigned.\n\n"
+        "A caller without `doctor.update` (a doctor) may record leave only for "
+        "themselves: another doctor's is `403`."
     ),
     responses={
         201: {"description": "Leave recorded."},
@@ -381,7 +405,11 @@ async def create_leave(
 ) -> SuccessResponse[LeaveResponse]:
     """Record an auto-approved leave."""
     leave, affected = await service.create_leave(
-        _tenant_of(current_user), doctor_id, payload, actor_id=current_user.id
+        _tenant_of(current_user),
+        doctor_id,
+        payload,
+        actor_id=current_user.id,
+        own_schedule_of=_own_schedule_scope(current_user),
     )
     message = "Leave recorded."
     if affected:
@@ -395,7 +423,9 @@ async def create_leave(
     summary="Cancel a leave",
     description=(
         "Cancel a leave by soft-deleting it. The doctor's slots for that "
-        "window become bookable again."
+        "window become bookable again.\n\n"
+        "A caller without `doctor.update` (a doctor) may cancel only their own "
+        "leave: another doctor's is `403`."
     ),
     responses={
         204: {"description": "Leave cancelled."},
@@ -411,7 +441,11 @@ async def delete_leave(
 ) -> None:
     """Soft-delete a leave."""
     await service.delete_leave(
-        _tenant_of(current_user), doctor_id, leave_id, actor_id=current_user.id
+        _tenant_of(current_user),
+        doctor_id,
+        leave_id,
+        actor_id=current_user.id,
+        own_schedule_of=_own_schedule_scope(current_user),
     )
 
 

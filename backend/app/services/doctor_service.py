@@ -29,7 +29,13 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from app.core.audit import AuditEvent
-from app.core.exceptions import BusinessRuleError, ConflictError, NotFoundError, ValidationError
+from app.core.exceptions import (
+    BusinessRuleError,
+    ConflictError,
+    NotFoundError,
+    PermissionDeniedError,
+    ValidationError,
+)
 from app.core.logging import get_logger
 from app.models.doctor import SlotStatus
 from app.schemas.common import Page, PaginationParams
@@ -223,6 +229,19 @@ class DoctorNotFoundError(NotFoundError):
 
     def __init__(self, doctor_id: uuid.UUID) -> None:
         super().__init__(message="Doctor not found.", detail={"doctor_id": str(doctor_id)})
+
+
+class NotOwnScheduleError(PermissionDeniedError):
+    """Raised when a doctor tries to change another doctor's schedule.
+
+    Module spec §3: a doctor views and edits their **own** availability and
+    leave; only a hospital admin manages everyone's. 403, not 404: the other
+    doctor's schedule is readable by the same caller, so there is nothing to
+    hide by pretending it does not exist.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(message="You can change only your own schedule.")
 
 
 class LeaveNotFoundError(NotFoundError):
@@ -773,6 +792,7 @@ class DoctorService:
         payload: SetAvailabilityRequest,
         *,
         actor_id: uuid.UUID | None = None,
+        own_schedule_of: uuid.UUID | None = None,
     ) -> list[AvailabilityResponse]:
         """Replace a doctor's weekly availability atomically (module spec §5.2).
 
@@ -784,11 +804,15 @@ class DoctorService:
         :param doctor_id: The doctor whose schedule to replace.
         :param payload: The complete weekly schedule.
         :param actor_id: UUID of the acting user.
+        :param own_schedule_of: When set, the caller may change only the
+            schedule of the doctor whose login this is (module spec §3: a
+            doctor edits their own availability). ``None`` means no limit.
         :returns: The persisted availability.
         :raises DoctorNotFoundError: If the doctor is absent from this tenant.
+        :raises NotOwnScheduleError: If ``own_schedule_of`` is not this doctor's login.
         :raises ValidationError: If entries overlap within a day.
         """
-        await self._get_or_raise(hospital_id, doctor_id)
+        await self._get_schedule_or_raise(hospital_id, doctor_id, own_schedule_of)
         self._assert_no_overlap(payload)
 
         entries = [
@@ -848,6 +872,7 @@ class DoctorService:
         payload: CreateLeaveRequest,
         *,
         actor_id: uuid.UUID | None = None,
+        own_schedule_of: uuid.UUID | None = None,
     ) -> tuple[LeaveResponse, list[dict[str, Any]]]:
         """Record a leave, auto-approved (module spec §5.3).
 
@@ -859,11 +884,14 @@ class DoctorService:
         :param doctor_id: The doctor taking leave.
         :param payload: Validated leave data.
         :param actor_id: UUID of the acting user.
+        :param own_schedule_of: When set, the caller may record leave only for
+            the doctor whose login this is. ``None`` means no limit.
         :returns: ``(leave, affected_appointments)``.
         :raises DoctorNotFoundError: If the doctor is absent from this tenant.
+        :raises NotOwnScheduleError: If ``own_schedule_of`` is not this doctor's login.
         :raises OverlappingLeaveError: If it overlaps an existing leave.
         """
-        await self._get_or_raise(hospital_id, doctor_id)
+        await self._get_schedule_or_raise(hospital_id, doctor_id, own_schedule_of)
 
         starts_at = payload.starts_at.astimezone(UTC)
         ends_at = payload.ends_at.astimezone(UTC)
@@ -931,6 +959,7 @@ class DoctorService:
         leave_id: uuid.UUID,
         *,
         actor_id: uuid.UUID | None = None,
+        own_schedule_of: uuid.UUID | None = None,
     ) -> None:
         """Cancel a leave by soft-deleting it.
 
@@ -938,10 +967,13 @@ class DoctorService:
         :param doctor_id: The doctor the leave belongs to.
         :param leave_id: The leave to cancel.
         :param actor_id: UUID of the acting user.
+        :param own_schedule_of: When set, the caller may cancel leave only for
+            the doctor whose login this is. ``None`` means no limit.
         :raises DoctorNotFoundError: If the doctor is absent from this tenant.
+        :raises NotOwnScheduleError: If ``own_schedule_of`` is not this doctor's login.
         :raises LeaveNotFoundError: If the leave is absent or another doctor's.
         """
-        await self._get_or_raise(hospital_id, doctor_id)
+        await self._get_schedule_or_raise(hospital_id, doctor_id, own_schedule_of)
 
         leave = await self._doctors.get_leave_by_id(hospital_id, doctor_id, leave_id)
         if leave is None:
@@ -1039,6 +1071,23 @@ class DoctorService:
         )
 
     # ── Internals ─────────────────────────────────────────────────────────────
+
+    async def _get_schedule_or_raise(
+        self, hospital_id: uuid.UUID, doctor_id: uuid.UUID, own_schedule_of: uuid.UUID | None
+    ) -> Doctor:
+        """Fetch a doctor whose schedule the caller may change.
+
+        :param hospital_id: The tenant.
+        :param doctor_id: The doctor whose schedule is being changed.
+        :param own_schedule_of: The caller's user id when they may change only
+            their own schedule; ``None`` for no limit.
+        :raises DoctorNotFoundError: If the doctor is absent from this tenant.
+        :raises NotOwnScheduleError: If the doctor is not the caller's own profile.
+        """
+        doctor = await self._get_or_raise(hospital_id, doctor_id)
+        if own_schedule_of is not None and doctor.user_id != own_schedule_of:
+            raise NotOwnScheduleError
+        return doctor
 
     async def _get_or_raise(self, hospital_id: uuid.UUID, doctor_id: uuid.UUID) -> Doctor:
         """Fetch an active doctor or raise :class:`DoctorNotFoundError`."""
