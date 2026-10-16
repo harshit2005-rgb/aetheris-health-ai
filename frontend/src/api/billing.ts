@@ -4,6 +4,8 @@ import { http } from '@/api/http'
 import { newIdempotencyKey } from '@/api/idempotency'
 import { dashboardKeys, reportKeys } from '@/api/reports'
 import { ApiError, type ListQueryOptions, type Paginated } from '@/api/types'
+import { api } from '@/lib/api'
+import { blobApiError, filenameFromContentDisposition } from '@/lib/download'
 
 /**
  * Billing API — typed hooks over the contract in `docs/18-API_CONTRACTS.md` §6
@@ -330,5 +332,44 @@ export function useRecordRefund(id: string) {
     )
     attempt.reset()
     return result
+  })
+}
+
+// ── PDF ──────────────────────────────────────────────────────────────────────
+
+export interface InvoicePdfFile {
+  blob: Blob
+  filename: string
+}
+
+/**
+ * Download an invoice as a PDF (`GET /invoices/{id}/pdf`, which needs
+ * `invoice.pdf.download`). The server names the file in `Content-Disposition`;
+ * where that header is not readable (a cross-origin API does not expose it),
+ * a name of the same shape is built from the invoice number.
+ *
+ * A failure is thrown as an `ApiError` with the server's message: a 400 for a
+ * draft, a 403 without the permission, a 404 for an invoice the caller cannot see.
+ */
+export async function fetchInvoicePdf(id: string, invoiceNumber: string | null): Promise<InvoicePdfFile> {
+  try {
+    const res = await api.get<Blob>(`/invoices/${id}/pdf`, { responseType: 'blob' })
+    const headers = res.headers as Record<string, unknown> | undefined
+    return {
+      blob: res.data,
+      filename:
+        filenameFromContentDisposition(headers?.['content-disposition']) ??
+        `invoice-${(invoiceNumber ?? id).replace(/[^A-Za-z0-9_-]/g, '-')}.pdf`,
+    }
+  } catch (err) {
+    throw await blobApiError(err)
+  }
+}
+
+/** Download an invoice's PDF and return the file for the caller to save. */
+export function useDownloadInvoicePdf() {
+  return useMutation({
+    mutationFn: ({ id, invoiceNumber }: { id: string; invoiceNumber: string | null }) =>
+      fetchInvoicePdf(id, invoiceNumber),
   })
 }

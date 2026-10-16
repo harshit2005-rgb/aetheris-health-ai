@@ -50,6 +50,8 @@ let after: Partial<Invoice>
 let onWrite: ((config: InternalAxiosRequestConfig) => Outcome | Promise<Outcome>) | null
 /** Override the invoice read, e.g. to fail it. */
 let onRead: (() => Outcome | Promise<Outcome>) | null
+/** What `GET /invoices/inv-1/pdf` answers. */
+let onPdf: () => Outcome
 
 function write(config: InternalAxiosRequestConfig): Outcome {
   const url = config.url ?? ''
@@ -78,12 +80,18 @@ beforeEach(() => {
   after = {}
   onWrite = null
   onRead = null
+  onPdf = () => ({
+    status: 200,
+    data: new Blob(['%PDF-1.4 test'], { type: 'application/pdf' }),
+    headers: { 'content-disposition': 'attachment; filename="invoice-INV-2026-000007.pdf"' },
+  })
   api = installFakeApi((config) => {
     const url = config.url ?? ''
     if (config.method !== 'get') return (onWrite ?? write)(config)
     if (url === '/invoices/inv-1') return onRead ? onRead() : ok({ ...invoice })
     if (url === '/invoices/inv-1/payments') return ok([...payments])
     if (url === '/invoices/inv-1/refunds') return ok([...refunds])
+    if (url === '/invoices/inv-1/pdf') return onPdf()
     if (url === '/services') return paged(SERVICES)
     if (url === '/appointments/appt-1') {
       return ok({
@@ -801,5 +809,104 @@ describe('voiding and editing', () => {
       expect(totals().getByText('Total').closest('div')).toHaveTextContent(inr('450.00')),
     )
     expect(screen.queryByRole('row', { name: /Crepe bandage/ })).not.toBeInTheDocument()
+  })
+})
+
+describe('downloading the PDF', () => {
+  const DOWNLOADER = [...ADMIN, 'invoice.pdf.download']
+  /** What the button handed to the browser: one entry per file saved. */
+  let downloads: { filename: string; blob: Blob }[]
+  const realCreate = URL.createObjectURL
+  const realRevoke = URL.revokeObjectURL
+
+  beforeEach(() => {
+    downloads = []
+    const held = new Map<string, Blob>()
+    URL.createObjectURL = vi.fn((blob: Blob) => {
+      const url = `blob:test/${held.size}`
+      held.set(url, blob)
+      return url
+    }) as typeof URL.createObjectURL
+    URL.revokeObjectURL = vi.fn()
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function (this: HTMLAnchorElement) {
+      const blob = held.get(this.href)
+      if (blob) downloads.push({ filename: this.download, blob })
+    })
+  })
+
+  afterEach(() => {
+    vi.restoreAllMocks()
+    URL.createObjectURL = realCreate
+    URL.revokeObjectURL = realRevoke
+  })
+
+  it.each([
+    ['an issued invoice', () => issuedInvoice()],
+    ['a paid invoice', () => issuedInvoice({ status: 'paid' })],
+    ['a void invoice', () => issuedInvoice({ status: 'void', void_reason: 'Raised in error' })],
+  ] as const)('is offered on %s to someone who may download PDFs', async (_name, make) => {
+    invoice = make()
+    renderInvoice(DOWNLOADER)
+    expect(await actions()).toContain('Download PDF')
+  })
+
+  it('is not offered on a draft, which has no PDF', async () => {
+    invoice = draftInvoice()
+    renderInvoice(DOWNLOADER)
+    expect(await actions()).not.toContain('Download PDF')
+  })
+
+  it('is not offered without invoice.pdf.download', async () => {
+    invoice = issuedInvoice()
+    renderInvoice(ADMIN)
+    expect(await actions()).not.toContain('Download PDF')
+  })
+
+  it('saves the file the server sends, under the name it gives', async () => {
+    invoice = issuedInvoice()
+    const user = userEvent.setup()
+    renderInvoice(DOWNLOADER)
+    await screen.findByRole('region', { name: 'Totals' })
+
+    await user.click(action('Download PDF'))
+
+    await waitFor(() => expect(downloads).toHaveLength(1))
+    expect(downloads[0].filename).toBe('invoice-INV-2026-000007.pdf')
+    expect(downloads[0].blob.type).toBe('application/pdf')
+    expect(toastSuccess).toHaveBeenCalledWith('Downloaded invoice-INV-2026-000007.pdf')
+    const sent = api.sent.filter((c) => c.url === '/invoices/inv-1/pdf')
+    expect(sent).toHaveLength(1)
+    expect(sent[0].responseType).toBe('blob')
+  })
+
+  it('names the file from the invoice number when the header cannot be read', async () => {
+    invoice = issuedInvoice()
+    onPdf = () => ({ status: 200, data: new Blob(['%PDF-1.4'], { type: 'application/pdf' }) })
+    const user = userEvent.setup()
+    renderInvoice(DOWNLOADER)
+    await screen.findByRole('region', { name: 'Totals' })
+
+    await user.click(action('Download PDF'))
+
+    await waitFor(() => expect(downloads).toHaveLength(1))
+    expect(downloads[0].filename).toBe(`invoice-${invoice.invoice_number}.pdf`)
+  })
+
+  it('says why when the server refuses, and saves nothing', async () => {
+    invoice = issuedInvoice()
+    onPdf = () => ({
+      status: 403,
+      data: new Blob([JSON.stringify({ success: false, message: 'Forbidden' })], { type: 'application/json' }),
+    })
+    const user = userEvent.setup()
+    renderInvoice(DOWNLOADER)
+    await screen.findByRole('region', { name: 'Totals' })
+
+    await user.click(action('Download PDF'))
+
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith("You don't have permission to download invoice PDFs."),
+    )
+    expect(downloads).toHaveLength(0)
   })
 })

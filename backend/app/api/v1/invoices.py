@@ -24,8 +24,11 @@ the original payment and ``200`` rather than recording a second one.
 **Idempotency.** ``POST /invoices/{id}/payments`` and
 ``POST /invoices/{id}/refund`` require an ``Idempotency-Key`` header.
 
-**Not here yet.** ``pdf`` and ``ai-explain`` from §9 are not implemented;
-calling them is a 404.
+**PDF.** ``GET /invoices/{id}/pdf`` needs ``invoice.pdf.download``; holding
+only ``invoice.read.own`` besides limits it to the caller's own visits, as for
+reading. A draft has no PDF.
+
+**Not here yet.** ``ai-explain`` from §9 is not implemented; calling it is a 404.
 """
 
 from __future__ import annotations
@@ -238,6 +241,44 @@ async def get_invoice(
         _tenant_of(current_user), invoice_id, own_visits_of=_own_visits_scope(current_user)
     )
     return SuccessResponse[InvoiceResponse](message="Invoice retrieved.", data=invoice)
+
+
+@router.get(
+    "/{invoice_id}/pdf",
+    response_class=Response,
+    summary="Download an invoice as a PDF",
+    description=(
+        "The invoice as an A4 PDF, line for line as `GET /invoices/{id}` "
+        "returns it, with its payments and refunds and the hospital's "
+        "letterhead (module spec §9, AC-5).\n\n"
+        "A draft has no PDF (`400`). A void invoice does, stamped VOID. A "
+        "caller without `invoice.read` gets only invoices for their own visits."
+    ),
+    responses={
+        200: {"description": "The PDF.", "content": {"application/pdf": {}}},
+        400: {"description": "The invoice is a draft."},
+        **_NOT_FOUND_RESPONSE,
+        **_COMMON_RESPONSES,
+    },
+)
+async def download_invoice_pdf(
+    invoice_id: uuid.UUID = Path(description="Invoice UUID."),
+    current_user: User = Depends(require_permission("invoice.pdf.download")),
+    service: BillingService = Depends(get_billing_service),
+) -> Response:
+    """Render one invoice as a PDF."""
+    filename, content = await service.invoice_pdf(
+        _tenant_of(current_user), invoice_id, own_visits_of=_own_visits_scope(current_user)
+    )
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            # A bill holds a patient's name: never kept by a shared cache.
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.patch(
