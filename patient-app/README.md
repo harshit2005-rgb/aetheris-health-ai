@@ -1,6 +1,6 @@
 # Patient App
 
-The patient-facing web application of Aetheris Health AI. A separate Vite
+The patient-facing web application of Atheris Health AI. A separate Vite
 workspace from the Hospital app in `../frontend/`: its own lockfile, its own
 build, nothing shared at build time.
 

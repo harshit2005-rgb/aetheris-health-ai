@@ -1,6 +1,6 @@
 # 08 — AI Architecture
 
-AI is not a module in Aetheris. It is a **platform capability** every module can use. This document describes how the AI layer is structured, how modules invoke it, and the safety guarantees around it.
+AI is not a module in Atheris. It is a **platform capability** every module can use. This document describes how the AI layer is structured, how modules invoke it, and the safety guarantees around it.
 
 > **Read §0 first.** This document describes both what is built and what is planned. Every section below is labelled **Implemented**, **Partly implemented** or **Planned — not built**. Only the parts labelled implemented exist in the code today.
 
@@ -367,14 +367,14 @@ Chunking, embedding model choice, and re-ranking approach documented in the retr
 
 **Status: planned — not built.** `app/mcp/` is an empty package; there is no `app/mcp/tools.py`.
 
-Model Context Protocol would let future AI agents (both ours and third-party) talk to Aetheris capabilities safely. Design intent:
+Model Context Protocol would let future AI agents (both ours and third-party) talk to Atheris capabilities safely. Design intent:
 
 - Every MCP tool wraps an existing service method
 - MCP tools are registered in `app/mcp/tools.py`
 - MCP calls run under an OAuth-authenticated identity with scoped permissions
 - Every MCP call is audited (`actor_type = "ai_agent"` in audit logs)
 
-MCP is the eventual surface for third parties to build agents against Aetheris without us shipping SDKs for every language.
+MCP is the eventual surface for third parties to build agents against Atheris without us shipping SDKs for every language.
 
 ## 10. Streaming
 

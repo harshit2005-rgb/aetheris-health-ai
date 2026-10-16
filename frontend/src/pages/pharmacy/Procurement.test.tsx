@@ -1601,7 +1601,7 @@ describe('purchase order detail', () => {
     await screen.findByRole('heading', { level: 1, name: 'PO-2026-3FA85F64' })
     const note = screen.getByRole('alert')
     expect(note).toHaveTextContent('“Sent” only records the status and the time')
-    expect(note).toHaveTextContent('Aetheris does not transmit anything to the vendor')
+    expect(note).toHaveTextContent('Atheris does not transmit anything to the vendor')
     expect(note).toHaveTextContent('an order is received once, in one go')
     // A pharmacist cannot cancel, so is not told to.
     expect(note).toHaveTextContent('someone who manages purchasing has to cancel it and draft another')
@@ -1697,7 +1697,7 @@ describe('sending and cancelling a purchase order', () => {
     const d = await dialog()
 
     expect(d).toHaveTextContent('Records that PO-2026-3FA85F64 has gone to Sanjeevani Pharma Distributors')
-    expect(d).toHaveTextContent('Aetheris does not transmit the order — send it to the vendor yourself')
+    expect(d).toHaveTextContent('Atheris does not transmit the order — send it to the vendor yourself')
     expect(sent('post', '/purchase-orders/o1/send')).toHaveLength(0)
     await user.click(within(d).getByRole('button', { name: 'Mark as sent' }))
 
@@ -1706,7 +1706,7 @@ describe('sending and cancelling a purchase order', () => {
     expect(address(request)).toBe('/api/v1/purchase-orders/o1/send')
     expect(request.data).toBeUndefined()
     await waitFor(() => expect(header().getByText('Sent')).toBeInTheDocument())
-    expect(screen.getByText(/Aetheris does not transmit anything to the vendor/)).toBeInTheDocument()
+    expect(screen.getByText(/Atheris does not transmit anything to the vendor/)).toBeInTheDocument()
     await waitFor(() => expect(actionNames()).toEqual(['Receive', 'Cancel order']))
   })
 
@@ -1720,8 +1720,8 @@ describe('sending and cancelling a purchase order', () => {
     expect(d).toHaveTextContent('a cancelled order cannot be reopened, sent or received')
     // The API has nowhere to keep a reason, so none is asked for.
     expect(within(d).queryByRole('textbox')).not.toBeInTheDocument()
-    if (status === 'sent') expect(d).toHaveTextContent('Aetheris does not tell the vendor')
-    else expect(d).not.toHaveTextContent('Aetheris does not tell the vendor')
+    if (status === 'sent') expect(d).toHaveTextContent('Atheris does not tell the vendor')
+    else expect(d).not.toHaveTextContent('Atheris does not tell the vendor')
     expect(sent('post', '/purchase-orders/o1/cancel')).toHaveLength(0)
     await user.click(within(d).getByRole('button', { name: 'Cancel order' }))
 

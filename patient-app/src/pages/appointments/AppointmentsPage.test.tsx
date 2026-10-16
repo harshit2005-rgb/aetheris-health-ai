@@ -679,7 +679,7 @@ describe('my appointments — keyboard and assistive technology', () => {
     expect(position()).toBe(region)
 
     const navigation = within(screen.getByRole('navigation', { name: 'Main' })).getAllByRole('link')
-    expect(navigation.map((link) => link.textContent)).toEqual(['Home', 'Hospitals', 'Appointments', 'Link hospital'])
+    expect(navigation.map((link) => link.textContent)).toEqual(['Home', 'Hospitals', 'Appointments', 'Account'])
     for (const link of navigation) expect(link).toHaveClass('min-h-14')
     expect(screen.getByRole('link', { name: 'Appointments' })).toHaveAttribute('aria-current', 'page')
   })

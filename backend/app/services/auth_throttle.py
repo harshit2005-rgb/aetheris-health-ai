@@ -227,7 +227,7 @@ _MAX_DOUBLINGS: Final = 20
 _PURGE_BATCH: Final = 200
 _PURGE_ONE_IN: Final = 32
 
-_KEY_PREFIX: Final = b"aetheris:auth-throttle:v1"
+_KEY_PREFIX: Final = b"atheris:auth-throttle:v1"
 
 
 @dataclass(frozen=True, slots=True)

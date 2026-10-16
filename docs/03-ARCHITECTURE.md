@@ -2,13 +2,13 @@
 
 **Status:** Finalized. Do not modify without a formal change proposal.
 
-This document describes *how* Aetheris Health AI is built. It is derived from the founding architectural constitution and is the definitive reference for every engineer, human or AI, working on the codebase.
+This document describes *how* Atheris Health AI is built. It is derived from the founding architectural constitution and is the definitive reference for every engineer, human or AI, working on the codebase.
 
 ---
 
 ## 1. Architectural Style
 
-Aetheris is a **Modular Monolith** with **Clean Architecture** foundations, designed to be **Microservice Ready**.
+Atheris is a **Modular Monolith** with **Clean Architecture** foundations, designed to be **Microservice Ready**.
 
 We chose a modular monolith because:
 - **Faster MVP delivery** — one repo, one deploy, one database

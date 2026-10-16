@@ -321,10 +321,10 @@ class TestDeviceCookieOutsideDevelopment:
         from app.api.v1 import auth as auth_routes
 
         monkeypatch.setattr(settings, "AUTH_DEVICE_COOKIE_SECURE", True)
-        assert auth_routes._device_cookie_name() == "__Host-aetheris-device"  # noqa: SLF001
+        assert auth_routes._device_cookie_name() == "__Host-atheris-device"  # noqa: SLF001
 
         monkeypatch.setattr(settings, "AUTH_DEVICE_COOKIE_SECURE", False)
-        assert auth_routes._device_cookie_name() == "aetheris-device"  # noqa: SLF001
+        assert auth_routes._device_cookie_name() == "atheris-device"  # noqa: SLF001
 
 
 class TestTrustedProxyNetworks:

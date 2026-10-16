@@ -1,9 +1,9 @@
-import type { ReactNode } from 'react'
-import { Clock, MapPin, Phone, Stethoscope, type LucideIcon } from 'lucide-react'
+import { Clock, MapPin, Phone, Stethoscope } from 'lucide-react'
 import { Link, useParams } from 'react-router-dom'
 import { Button } from '@atheris/ui'
 import type { PatientHospital } from '@/api/hospitals'
 import { BackLink } from '@/components/BackLink'
+import { DetailRow } from '@/components/DetailRow'
 import { PageHeading } from '@/components/PageHeading'
 import { addressLines, telHref } from '@/pages/hospitals/address'
 import { HospitalBadges } from '@/pages/hospitals/HospitalBadges'
@@ -91,18 +91,6 @@ function HospitalDetail({ hospital }: { hospital: PatientHospital }) {
             </Link>
           </Button>
         )}
-      </div>
-    </div>
-  )
-}
-
-function DetailRow({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children: ReactNode }) {
-  return (
-    <div className="flex items-start gap-3 p-4">
-      <Icon className="text-secondary mt-0.5 size-5 shrink-0" aria-hidden />
-      <div className="min-w-0 flex-1">
-        <dt className="text-body-sm text-on-surface-variant">{label}</dt>
-        <dd className="text-body-lg text-on-surface break-words">{children}</dd>
       </div>
     </div>
   )

@@ -1,4 +1,4 @@
-"""Aetheris Core — configuration, security, logging, and foundational types.
+"""Atheris Core — configuration, security, logging, and foundational types.
 
 This package contains cross-cutting concerns used by every other layer:
 
@@ -21,7 +21,7 @@ from app.core.constants import (
 from app.core.envelope import error_envelope, paginated_envelope, success_envelope
 from app.core.error_codes import ErrorCode
 from app.core.exceptions import (
-    AetherisError,
+    AtherisError,
     BusinessRuleError,
     ConfigurationError,
     NotFoundError,
@@ -39,7 +39,7 @@ __all__ = [
     "error_envelope",
     "paginated_envelope",
     "success_envelope",
-    "AetherisError",
+    "AtherisError",
     "BusinessRuleError",
     "ConfigurationError",
     "NotFoundError",

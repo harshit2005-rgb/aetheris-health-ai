@@ -383,7 +383,7 @@ class TestNoHospital:
         user = User(
             id=uuid.uuid4(),
             hospital_id=None,
-            email="platform@aetheris.test",
+            email="platform@atheris.test",
             password_hash="test-placeholder-not-a-hash",
             first_name="Platform",
             last_name="Account",

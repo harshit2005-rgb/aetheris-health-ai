@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Aetheris Health AI — Root Developer Commands
+# Atheris Health AI — Root Developer Commands
 #
 # Thin wrapper that delegates to docker-compose (infra + backend) and
 # npm (Hospital frontend, Patient App). Run `make help` for the full list.

@@ -1,4 +1,4 @@
-# Aetheris Health AI — Sprint Plan (v2.0)
+# Atheris Health AI — Sprint Plan (v2.0)
 
 **Living document. Owner: Sanjeev + tech lead. Updated at the end of every sprint.**
 

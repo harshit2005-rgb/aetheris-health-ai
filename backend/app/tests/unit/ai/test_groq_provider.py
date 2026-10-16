@@ -163,7 +163,7 @@ class TestSuccess:
         header_ok = request.headers.get("authorization") == f"Bearer {FAKE_GROQ_KEY}"
         assert header_ok
         assert request.headers["accept"] == "application/json"
-        assert request.headers["user-agent"] == "aetheris-health-ai"
+        assert request.headers["user-agent"] == "atheris-health-ai"
         key_in_url = FAKE_GROQ_KEY in str(request.url)
         assert key_in_url is False
 

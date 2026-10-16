@@ -1,7 +1,7 @@
 import { screen, waitFor } from '@testing-library/react'
 import type { UserEvent } from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
-import { bodyOf, fail, headerOf, ok, serve } from '@/test/fakeApi'
+import { bodyOf, fail, headerOf, ok, okPage, serve } from '@/test/fakeApi'
 import { cityCare, me } from '@/test/fixtures'
 import { renderApp, signIn } from '@/test/renderApp'
 
@@ -76,7 +76,7 @@ describe('link a hospital record', () => {
   })
 
   it('LINKED — creates the link, sending only the date of birth and consent, never a phone or patient id', async () => {
-    const api = serve({ [LINK]: ok(linkBody, 201), [ME]: ok(me([cityCare])) })
+    const api = serve({ [LINK]: ok(linkBody, 201), [ME]: ok(me([cityCare])), 'GET /appointments': okPage([]) })
     const { user } = open()
 
     await submitDetails(user)
@@ -104,7 +104,7 @@ describe('link a hospital record', () => {
   })
 
   it('ALREADY LINKED — a 200 is reported as nothing having changed', async () => {
-    serve({ [LINK]: ok(linkBody, 200), [ME]: ok(me([cityCare])) })
+    serve({ [LINK]: ok(linkBody, 200), [ME]: ok(me([cityCare])), 'GET /appointments': okPage([]) })
     const { user } = open()
 
     await submitDetails(user)
@@ -114,7 +114,7 @@ describe('link a hospital record', () => {
   })
 
   it('MRN REQUIRED then success — asks for the MRN only after the server does, then links with it', async () => {
-    const api = serve({ [LINK]: fail(409, 'LINK_MRN_REQUIRED'), [ME]: ok(me([cityCare])) })
+    const api = serve({ [LINK]: fail(409, 'LINK_MRN_REQUIRED'), [ME]: ok(me([cityCare])), 'GET /appointments': okPage([]) })
     const { user } = open()
     await codeField()
     expect(screen.queryByLabelText(/MRN/)).not.toBeInTheDocument()
@@ -162,7 +162,7 @@ describe('link a hospital record', () => {
     await submitDetails(user)
     await user.type(await screen.findByLabelText('Medical record number (MRN)'), 'MRN-00042')
 
-    api.on({ 'POST /hospitals/city-care-2/link': ok(linkBody, 201), [ME]: ok(me([cityCare])) })
+    api.on({ 'POST /hospitals/city-care-2/link': ok(linkBody, 201), [ME]: ok(me([cityCare])), 'GET /appointments': okPage([]) })
     await user.type(await codeField(), '-2')
     expect(screen.queryByLabelText(/MRN/)).not.toBeInTheDocument()
     await user.click(findMyRecord())
@@ -175,7 +175,7 @@ describe('link a hospital record', () => {
   })
 
   it('NOT FOUND -> REGISTER CONFIRMATION -> REGISTERED', async () => {
-    const api = serve({ [LINK]: notFound(), [REGISTER]: ok({ link: linkBody }, 201), [ME]: ok(me([cityCare])) })
+    const api = serve({ [LINK]: notFound(), [REGISTER]: ok({ link: linkBody }, 201), [ME]: ok(me([cityCare])), 'GET /appointments': okPage([]) })
     const { user } = open()
 
     await submitDetails(user)
@@ -291,7 +291,7 @@ describe('link a hospital record', () => {
   })
 
   it('CONSENT — each tick says only what is agreed to, and no terms or privacy acceptance is sent', async () => {
-    const api = serve({ [LINK]: notFound(), [REGISTER]: ok({}, 201), [ME]: ok(me([cityCare])) })
+    const api = serve({ [LINK]: notFound(), [REGISTER]: ok({}, 201), [ME]: ok(me([cityCare])), 'GET /appointments': okPage([]) })
     const { user } = open()
 
     await codeField()

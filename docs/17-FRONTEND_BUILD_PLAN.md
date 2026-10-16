@@ -1,4 +1,4 @@
-# Aetheris Health AI — Frontend Build Plan & Gap Analysis
+# Atheris Health AI — Frontend Build Plan & Gap Analysis
 
 > **Status:** proposal for team review · **Owner:** frontend (Jaikanth) · **Date:** 2026-08-09
 >

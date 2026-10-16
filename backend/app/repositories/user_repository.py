@@ -163,7 +163,7 @@ class UserRepository(BaseRepository[User]):
         :param email: The email address, in any case.
         :returns: A signed 64-bit integer.
         """
-        digest = hashlib.sha256(b"aetheris:staff-auth:" + normalize_email(email).encode("utf-8"))
+        digest = hashlib.sha256(b"atheris:staff-auth:" + normalize_email(email).encode("utf-8"))
         return int.from_bytes(digest.digest()[:8], "big", signed=True)
 
     async def claim_authentication_attempt(self, email: str) -> bool:

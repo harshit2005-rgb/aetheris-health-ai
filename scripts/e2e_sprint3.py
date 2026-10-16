@@ -19,7 +19,7 @@ import time
 import urllib.error
 import urllib.request
 
-BASE = os.environ.get("AETHERIS_API_BASE", "http://127.0.0.1:8000/api/v1")
+BASE = os.environ.get("ATHERIS_API_BASE", "http://127.0.0.1:8000/api/v1")
 
 failures: list[str] = []
 

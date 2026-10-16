@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Aetheris Health AI — CI Pipeline
+# Atheris Health AI — CI Pipeline
 #
 # Runs backend (Python), Hospital frontend and Patient App (Node) quality
 # checks on every push to develop and on pull requests.
@@ -31,19 +31,19 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: aetheris
-          POSTGRES_PASSWORD: aetheris
-          POSTGRES_DB: aetheris
+          POSTGRES_USER: atheris
+          POSTGRES_PASSWORD: atheris
+          POSTGRES_DB: atheris
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U aetheris -d aetheris"
+          --health-cmd="pg_isready -U atheris -d atheris"
           --health-interval=5s
           --health-timeout=5s
           --health-retries=5
 
     env:
-      DATABASE_URL: postgresql+asyncpg://aetheris:aetheris@localhost:5432/aetheris
+      DATABASE_URL: postgresql+asyncpg://atheris:atheris@localhost:5432/atheris
       REDIS_URL: redis://localhost:6379/0
       # Must be a member of AppEnv (development / staging / production) —
       # Settings rejects anything else at import, so every test file failed
@@ -76,13 +76,13 @@ jobs:
         run: uv run mypy app/
 
       # The suite runs against `<DATABASE_URL>_test`, never the configured
-      # database, but the service container only creates `aetheris`. Without
+      # database, but the service container only creates `atheris`. Without
       # this step the engine fixture cannot connect and *skips* every
       # database-backed test — CI would pass while testing none of them.
       - name: Create test database
         env:
-          PGPASSWORD: aetheris
-        run: psql -h localhost -U aetheris -d aetheris -c "CREATE DATABASE aetheris_test"
+          PGPASSWORD: atheris
+        run: psql -h localhost -U atheris -d atheris -c "CREATE DATABASE atheris_test"
 
       - name: Run tests
         run: uv run pytest app/tests/ -v

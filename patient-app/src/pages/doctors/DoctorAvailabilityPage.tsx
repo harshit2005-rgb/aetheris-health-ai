@@ -438,7 +438,7 @@ function DayChip({ day, isSelected, isToday, onChoose }: DayChipProps) {
       <span className="text-body-sm font-semibold">{isToday ? S.today : weekday.slice(0, 3)}</span>
       <span className="font-display text-title-lg leading-none">{dayOfMonth}</span>
       <span className="text-body-sm">{month.slice(0, 3)}</span>
-      <span className={cn('text-body-sm', isSelected ? '' : count === 0 ? 'text-outline' : 'text-secondary font-semibold')}>
+      <span className={cn('text-body-sm', isSelected ? '' : count === 0 ? 'text-on-surface-variant' : 'text-secondary font-semibold')}>
         {count === 0 ? S.noSlotsOnChip : S.slotCount(count)}
       </span>
     </button>

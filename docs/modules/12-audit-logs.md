@@ -72,8 +72,8 @@ Additional DB privileges:
 
 ```sql
 -- On the migration user, after audit_logs is created:
-REVOKE UPDATE, DELETE ON audit_logs FROM aetheris_app;
-GRANT INSERT, SELECT ON audit_logs TO aetheris_app;
+REVOKE UPDATE, DELETE ON audit_logs FROM atheris_app;
+GRANT INSERT, SELECT ON audit_logs TO atheris_app;
 ```
 
 Time-series partitioning by month (v2.2) for scale.

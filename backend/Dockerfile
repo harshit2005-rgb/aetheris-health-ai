@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Aetheris Health AI — Backend Dockerfile
+# Atheris Health AI — Backend Dockerfile
 #
 # Multi-stage build:
 #   1. builder   — Install dependencies and compile.
@@ -40,7 +40,7 @@ RUN uv pip install --system ".[dev]"
 FROM python:3.13-slim AS runtime
 
 # Security: run as non-root user
-RUN groupadd -r aetheris && useradd -r -g aetheris aetheris
+RUN groupadd -r atheris && useradd -r -g atheris atheris
 
 # Install only runtime system dependencies
 RUN apt-get update && \
@@ -63,9 +63,9 @@ COPY . .
 RUN python -c "import app; print(f'App package loaded: {app.__name__}')"
 
 # Set ownership to non-root user
-RUN chown -R aetheris:aetheris /app
+RUN chown -R atheris:atheris /app
 
-USER aetheris
+USER atheris
 
 # Health check — verifies the service responds to HTTP requests
 HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \

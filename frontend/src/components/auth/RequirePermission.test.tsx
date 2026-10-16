@@ -10,7 +10,7 @@ function login(role: keyof typeof MOCK_PERMISSIONS_BY_ROLE) {
     {
       id: '1',
       name: 'Test User',
-      email: 'test@aetheris.health',
+      email: 'test@atheris.health',
       role,
       permissions: [...MOCK_PERMISSIONS_BY_ROLE[role]],
     },

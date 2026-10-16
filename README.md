@@ -1,4 +1,4 @@
-# Aetheris Health AI
+# Atheris Health AI
 
 Enterprise AI-first Hospital Management Platform. Multi-tenant SaaS for
 appointments, patient records, billing, clinical decision support, and
@@ -77,7 +77,7 @@ cd frontend && npm ci
 | Frontend | http://localhost:5173 | Vite dev server with HMR |
 | Backend API | http://localhost:8000 | FastAPI + Uvicorn |
 | API Docs | http://localhost:8000/docs | Swagger UI (auto-generated) |
-| PostgreSQL | localhost:5432 | Database: `aetheris`, User: `aetheris` |
+| PostgreSQL | localhost:5432 | Database: `atheris`, User: `atheris` |
 | Redis | localhost:6380 | Rate limiting, caching |
 
 ---
@@ -94,7 +94,7 @@ Key variables used by Docker Compose:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgresql+asyncpg://aetheris:aetheris@postgres:5432/aetheris` | Database connection |
+| `DATABASE_URL` | `postgresql+asyncpg://atheris:atheris@postgres:5432/atheris` | Database connection |
 | `REDIS_URL` | `redis://redis:6379/0` | Redis connection (internal Docker port 6379, mapped to host 6380) |
 | `APP_ENV` | `development` | Runtime environment |
 | `APP_DEBUG` | `true` | Enable debug mode |
@@ -254,7 +254,7 @@ Stop existing services on that port, or change the port mapping in
 Ensure Docker is running and containers are healthy:
 ```bash
 docker compose ps
-docker compose exec postgres pg_isready -U aetheris -d aetheris
+docker compose exec postgres pg_isready -U atheris -d atheris
 ```
 
 **Backend won't start:**
@@ -274,4 +274,4 @@ it. Check: `docker compose exec redis redis-cli ping` (Redis is on host port 638
 
 ## License
 
-Proprietary — Aetheris Health AI. All rights reserved.
+Proprietary — Atheris Health AI. All rights reserved.

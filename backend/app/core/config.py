@@ -112,7 +112,7 @@ class Settings(BaseSettings):
 
     # ── App ────────────────────────────────────────────────────────────────
     APP_NAME: str = Field(
-        default="Aetheris Health AI", description="Human-readable application name"
+        default="Atheris Health AI", description="Human-readable application name"
     )
     APP_ENV: AppEnv = Field(default=AppEnv.DEVELOPMENT, description="Deployment environment")
     APP_DEBUG: bool = Field(
@@ -136,7 +136,7 @@ class Settings(BaseSettings):
 
     # ── Database ───────────────────────────────────────────────────────────
     DATABASE_URL: str = Field(
-        default="postgresql+asyncpg://aetheris:aetheris@localhost:5432/aetheris",
+        default="postgresql+asyncpg://atheris:atheris@localhost:5432/atheris",
         description="Async PostgreSQL connection string (asyncpg driver)",
     )
     DATABASE_POOL_SIZE: int = Field(
@@ -193,7 +193,7 @@ class Settings(BaseSettings):
         default=None,
         description="RSA public key for JWT verification (PEM). If None, uses HS256 with APP_SECRET_KEY.",
     )
-    JWT_ISSUER: str = Field(default="aetheris", description="JWT issuer claim (iss)")
+    JWT_ISSUER: str = Field(default="atheris", description="JWT issuer claim (iss)")
     JWT_ACCESS_TTL_SECONDS: int = Field(
         default=900, ge=60, le=86400, description="Access token TTL in seconds (default 15 min)"
     )
@@ -281,7 +281,7 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str | None = Field(default=None, description="SMTP password")
     SMTP_STARTTLS: bool = Field(default=True, description="Upgrade the connection with STARTTLS")
     EMAIL_FROM: str = Field(
-        default="noreply@aetheris.health", description="From address for outbound email"
+        default="noreply@atheris.health", description="From address for outbound email"
     )
     FRONTEND_BASE_URL: str = Field(
         default="http://localhost:5173",

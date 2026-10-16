@@ -28,7 +28,7 @@ import uuid
 from datetime import date, datetime, timedelta
 from typing import Any
 
-BASE = os.environ.get("AETHERIS_API_BASE", "http://127.0.0.1:8000/api/v1")
+BASE = os.environ.get("ATHERIS_API_BASE", "http://127.0.0.1:8000/api/v1")
 FLAG = "feature.ai.slot_recommendation"
 
 # Seeded demo accounts (backend/app/seeds/seed.py). Development data only.

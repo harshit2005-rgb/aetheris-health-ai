@@ -1,13 +1,13 @@
 # 09 — Project Structure
 
-The canonical layout of the Aetheris Health AI repository. Every new file belongs somewhere on this map. If it doesn't, the map extends before the file lands.
+The canonical layout of the Atheris Health AI repository. Every new file belongs somewhere on this map. If it doesn't, the map extends before the file lands.
 
 ---
 
 ## Repository Root
 
 ```
-aetheris/
+atheris/
 ├── backend/
 ├── frontend/
 ├── infra/

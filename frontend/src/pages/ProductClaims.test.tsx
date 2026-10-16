@@ -137,7 +137,7 @@ describe('landing page', () => {
     const questions = [
       'How is patient data protected?',
       'Which modules are available today?',
-      'Does Aetheris include AI features today?',
+      'Does Atheris include AI features today?',
       'Will it connect to our existing EHR and lab systems?',
     ]
     for (const question of questions) {
@@ -230,7 +230,7 @@ describe('landing page', () => {
     renderPublic(<LandingPage />)
 
     expectBuiltModulesNotPlanned(passagesOnPage())
-    for (const question of ['Which modules are available today?', 'Does Aetheris include AI features today?']) {
+    for (const question of ['Which modules are available today?', 'Does Atheris include AI features today?']) {
       await user.click(screen.getByRole('button', { name: question }))
       expectBuiltModulesNotPlanned(passagesOnPage())
     }
@@ -385,8 +385,8 @@ describe('contact page', () => {
     await waitFor(() => expect(openEmailApp).toHaveBeenCalledTimes(1))
     expect(openEmailApp).toHaveBeenCalledWith(
       mailtoUrl({
-        to: 'sales@aetheris.health',
-        subject: 'Aetheris enquiry from City Hospital',
+        to: 'sales@atheris.health',
+        subject: 'Atheris enquiry from City Hospital',
         body: 'We would like to see the booking flow.\n\nAsha Verma\nCity Hospital\nasha@example.org',
       }),
     )
@@ -410,9 +410,9 @@ describe('contact page', () => {
   it('offers each address as a real mail link and makes no unsupported claim', () => {
     renderPublic(<ContactPage />)
 
-    expect(screen.getByRole('link', { name: 'sales@aetheris.health' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'sales@atheris.health' })).toHaveAttribute(
       'href',
-      'mailto:sales@aetheris.health',
+      'mailto:sales@atheris.health',
     )
     expectHonest(pageText())
   })

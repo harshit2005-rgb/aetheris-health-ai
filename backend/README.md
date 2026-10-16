@@ -1,4 +1,4 @@
-# Aetheris Health AI — Backend
+# Atheris Health AI — Backend
 
 FastAPI + SQLAlchemy 2.0 (async) + PostgreSQL 16. Layout follows
 [`docs/09-PROJECT_STRUCTURE.md`](../docs/09-PROJECT_STRUCTURE.md); conventions

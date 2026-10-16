@@ -1,6 +1,6 @@
 # Frontend Context (React / TypeScript)
 
-You are in the frontend of Aetheris Health AI. The root `../CLAUDE.md` is in effect — read it first. This file adds frontend-specific rules.
+You are in the frontend of Atheris Health AI. The root `../CLAUDE.md` is in effect — read it first. This file adds frontend-specific rules.
 
 ---
 

@@ -196,7 +196,7 @@ export default function LoginPage() {
           </h1>
           <p className="font-body text-body-sm text-on-surface-variant mt-2">
             {mfaTicket
-              ? 'Open your authenticator app and enter the 6-digit code for Aetheris.'
+              ? 'Open your authenticator app and enter the 6-digit code for Atheris.'
               : 'Sign in to your clinical workspace.'}
           </p>
         </div>
@@ -348,7 +348,7 @@ export default function LoginPage() {
         )}
 
         <p className="font-body text-body-sm text-on-surface-variant mt-8 text-center">
-          New to Aetheris?{' '}
+          New to Atheris?{' '}
           <Link to="/contact" className="text-secondary font-bold hover:underline">
             Get started
           </Link>

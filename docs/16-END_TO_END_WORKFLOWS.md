@@ -2,7 +2,7 @@
 
 **Owner: QA Lead. Read by: everyone.**
 
-Modules that pass their own tests can still fail when composed. Aetheris runs on multi-module workflows — a patient visit touches Patient, Doctor, Appointment, Billing, and Notifications. This document defines the workflows that must pass **end-to-end** before each release milestone.
+Modules that pass their own tests can still fail when composed. Atheris runs on multi-module workflows — a patient visit touches Patient, Doctor, Appointment, Billing, and Notifications. This document defines the workflows that must pass **end-to-end** before each release milestone.
 
 Modules ship when their unit tests pass. **The product ships when these workflows pass.**
 

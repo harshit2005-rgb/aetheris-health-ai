@@ -62,14 +62,14 @@ const OUTCOMES = [
 const FAQ = [
   {
     q: 'How is patient data protected?',
-    a: "Access is scoped by role and permission, each hospital's data is kept separate, passwords are hashed and accounts can add a second factor, and changes are written to an append-only audit log. Aetheris has not been independently audited and does not currently claim HIPAA compliance or a SOC 2 report.",
+    a: "Access is scoped by role and permission, each hospital's data is kept separate, passwords are hashed and accounts can add a second factor, and changes are written to an append-only audit log. Atheris has not been independently audited and does not currently claim HIPAA compliance or a SOC 2 report.",
   },
   {
     q: 'Which modules are available today?',
     a: 'Patients, doctors and departments, appointments, billing, laboratory orders and results, pharmacy prescribing and dispensing with medicine stock, inventory of supplies by location, reports and role dashboards, notifications, user and role management, hospital settings, and the audit log.',
   },
   {
-    q: 'Does Aetheris include AI features today?',
+    q: 'Does Atheris include AI features today?',
     a: "One, and it is optional. When booking an appointment, staff can ask for an AI-suggested time slot, chosen from the doctor's open slots. It only suggests: a member of staff reviews it and books the appointment themselves. It is off unless it has been set up and enabled for your hospital, and it never makes a clinical decision.",
   },
   {
@@ -346,7 +346,7 @@ export default function LandingPage() {
         <div className="glassmorphism relative overflow-hidden rounded-3xl px-8 py-16 text-center">
           <div className="from-secondary-fixed/30 absolute inset-0 -z-10 bg-gradient-to-br to-transparent blur-3xl" />
           <h2 className="font-display text-headline-lg text-gradient mx-auto max-w-2xl">
-            See Aetheris run your hospital.
+            See Atheris run your hospital.
           </h2>
           <p className="font-body text-body-md text-on-surface-variant mx-auto mt-3 max-w-md">
             Walk through the platform with our team and map it to your departments.

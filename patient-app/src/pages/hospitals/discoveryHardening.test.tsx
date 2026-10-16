@@ -238,7 +238,7 @@ describe('NO DISTANCE, NO INTERNAL ID — neither is shown, kept in the page, or
   })
 
   it('home shows linked hospitals without putting the id /me gives into the page', async () => {
-    serve({ 'GET /me': ok(me([cityCare, lakeside])) })
+    serve({ 'GET /me': ok(me([cityCare, lakeside])), 'GET /appointments': okPage([]) })
     open('/')
 
     await card('City Care Hospital')
@@ -292,7 +292,7 @@ describe('LOGO — an address the app will not load is never in the page', () =>
     ['the doctors page', '/hospitals/city-care/doctors'],
     ['home', '/'],
   ])('%s never loads a logo at all, safe or not', async (_case, path) => {
-    serve({ ...hospitalDirectory([cityCareHospital]), ...doctorDirectory('city-care', [ashaRao]), 'GET /me': ok(me([cityCare])) })
+    serve({ ...hospitalDirectory([cityCareHospital]), ...doctorDirectory('city-care', [ashaRao]), 'GET /me': ok(me([cityCare])), 'GET /appointments': okPage([]) })
     open(path)
 
     await screen.findAllByText(/City Care Hospital/)
@@ -382,7 +382,7 @@ describe('SERVER TEXT IS TEXT — markup in any field is shown as the characters
   })
 
   it('ATTACK — markup in a linked hospital’s name from /me is text on home', async () => {
-    serve({ 'GET /me': ok(me([{ ...cityCare, hospital_name: '<img src=x onerror=window.pwned=1>City Care' }])) })
+    serve({ 'GET /me': ok(me([{ ...cityCare, hospital_name: '<img src=x onerror=window.pwned=1>City Care' }])), 'GET /appointments': okPage([]) })
     open('/')
 
     expect(await card('<img src=x onerror=window.pwned=1>City Care')).toHaveAttribute('href', '/hospitals/city-care')

@@ -14,7 +14,7 @@ export const privacyDoc: LegalDoc = {
   title: 'Privacy Policy',
   updated: 'October 2026',
   intro:
-    'This policy explains what information Aetheris Health AI collects, how we use it, and the choices you have. It applies to our marketing site and the Aetheris platform.',
+    'This policy explains what information Atheris Health AI collects, how we use it, and the choices you have. It applies to our marketing site and the Atheris platform.',
   sections: [
     {
       heading: 'Information we collect',
@@ -26,14 +26,14 @@ export const privacyDoc: LegalDoc = {
     {
       heading: 'Protected health information',
       body: [
-        "Patient data entered into Aetheris belongs to the hospital that entered it and is kept separate from every other hospital's data. It is handled only as needed to provide the service to that hospital.",
+        "Patient data entered into Atheris belongs to the hospital that entered it and is kept separate from every other hospital's data. It is handled only as needed to provide the service to that hospital.",
       ],
     },
     {
       heading: 'How we use information',
       body: [
         'To provide, maintain, and improve the platform, to secure it against misuse, and to support your team.',
-        "We do not sell personal information. Aetheris has one optional AI feature: slot suggestions when booking an appointment. It is off unless it has been set up and enabled for a hospital. When staff use it, the date and the open and unavailable times in the chosen doctor's day are sent to an external AI model provider so that it can suggest one. No patient name, record number, contact detail or medical information is sent, and patient data is not used to train a model.",
+        "We do not sell personal information. Atheris has one optional AI feature: slot suggestions when booking an appointment. It is off unless it has been set up and enabled for a hospital. When staff use it, the date and the open and unavailable times in the chosen doctor's day are sent to an external AI model provider so that it can suggest one. No patient name, record number, contact detail or medical information is sent, and patient data is not used to train a model.",
       ],
     },
     {
@@ -69,18 +69,18 @@ export const termsDoc: LegalDoc = {
   title: 'Terms of Service',
   updated: 'October 2026',
   intro:
-    'These terms govern your access to and use of the Aetheris Health AI platform. By using the service, your organization agrees to them.',
+    'These terms govern your access to and use of the Atheris Health AI platform. By using the service, your organization agrees to them.',
   sections: [
     {
       heading: 'The service',
       body: [
-        'Aetheris provides hospital management software for patient registration and records, a directory of doctors and departments, appointment scheduling, billing, laboratory orders and results, pharmacy prescribing and dispensing, inventory of supplies, in-app notifications, user and role management, hospital settings, and an audit log.',
+        'Atheris provides hospital management software for patient registration and records, a directory of doctors and departments, appointment scheduling, billing, laboratory orders and results, pharmacy prescribing and dispensing, inventory of supplies, in-app notifications, user and role management, hospital settings, and an audit log.',
       ],
     },
     {
       heading: 'Clinical responsibility',
       body: [
-        "Aetheris is an administrative and record-keeping tool. The prescriptions it stores, and the laboratory results it marks against a hospital's own reference ranges, are records and not clinical advice.",
+        "Atheris is an administrative and record-keeping tool. The prescriptions it stores, and the laboratory results it marks against a hospital's own reference ranges, are records and not clinical advice.",
         'It does not diagnose, recommend treatment, or make clinical decisions. A qualified clinician is responsible for every diagnosis and treatment decision.',
       ],
     },
@@ -99,13 +99,13 @@ export const termsDoc: LegalDoc = {
     {
       heading: 'Intellectual property',
       body: [
-        'Aetheris and its software are owned by Aetheris Health AI. These terms do not transfer any ownership in the platform to you.',
+        'Atheris and its software are owned by Atheris Health AI. These terms do not transfer any ownership in the platform to you.',
       ],
     },
     {
       heading: 'Disclaimers and liability',
       body: [
-        'The service is provided on an as-available basis. To the extent permitted by law, Aetheris is not liable for indirect or consequential damages arising from use of the service.',
+        'The service is provided on an as-available basis. To the extent permitted by law, Atheris is not liable for indirect or consequential damages arising from use of the service.',
       ],
     },
     {
@@ -127,7 +127,7 @@ export const securityDoc: LegalDoc = {
   title: 'Security',
   updated: 'October 2026',
   intro:
-    'This page describes the safeguards the Aetheris platform implements today, and what it does not yet claim.',
+    'This page describes the safeguards the Atheris platform implements today, and what it does not yet claim.',
   sections: [
     {
       heading: 'Access control',
@@ -156,7 +156,7 @@ export const securityDoc: LegalDoc = {
     {
       heading: 'What we do not claim',
       body: [
-        'Aetheris has not been independently audited or certified. We do not currently claim HIPAA compliance, hold a SOC 2 report, or offer a Business Associate Agreement.',
+        'Atheris has not been independently audited or certified. We do not currently claim HIPAA compliance, hold a SOC 2 report, or offer a Business Associate Agreement.',
         'Encryption of data in transit and at rest depends on how and where the platform is deployed, and is not something this page can state for you.',
         CONTACT_LINE,
       ],

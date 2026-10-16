@@ -103,7 +103,7 @@ def configure_logging() -> None:
     logging.getLogger().setLevel(log_level)
 
     # Log confirmation
-    logger = structlog.get_logger("aetheris.logging")
+    logger = structlog.get_logger("atheris.logging")
     logger.info(
         "logging_configured",
         log_level=settings.LOG_LEVEL,

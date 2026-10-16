@@ -1,31 +1,46 @@
-import { Building2, CalendarDays, LogOut, Plus, Search } from 'lucide-react'
+import { Building2, CalendarDays, Plus, Search } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { Alert, Button, EmptyState, Skeleton } from '@atheris/ui'
-import { useSignOut } from '@/api/auth'
 import { useMe, type HospitalLink } from '@/api/me'
 import { formatDay } from '@/lib/format'
 import { usePageTitle } from '@/lib/usePageTitle'
+import { NextAppointment } from '@/pages/home/NextAppointment'
 import { homeStrings as S } from '@/pages/home/strings'
 import { hospitalPath } from '@/pages/hospitals/paths'
 
-/** Home: who is signed in, the ways to hospital discovery and to the patient's appointments, and the linked hospital records. */
+/**
+ * Home: the patient's next appointment, the way to hospital discovery, and the
+ * linked hospital records. The account itself — the number and signing out —
+ * is on the Account page.
+ */
 export function HomePage() {
   usePageTitle(S.title)
   const me = useMe()
-  const signOut = useSignOut()
+  // Appointments come only through a linked hospital: without one there is nothing to ask for.
+  const hasLinks = (me.data?.links.length ?? 0) > 0
 
   return (
     <div className="space-y-8">
-      <section aria-labelledby="home-heading" className="space-y-1">
-        <h1 id="home-heading" className="font-display text-headline-md text-primary">
-          {S.heading}
-        </h1>
-        {me.data && (
-          <p className="text-body-lg text-on-surface-variant">
-            {S.signedInAs} <span className="text-on-surface font-semibold">{me.data.account.phone_masked}</span>
-          </p>
-        )}
-      </section>
+      <h1 className="font-display text-headline-md text-primary">{S.heading}</h1>
+
+      {hasLinks ? (
+        <NextAppointment />
+      ) : (
+        <section aria-labelledby="appointments-heading" className="bg-card space-y-3 rounded-2xl border p-5">
+          <div className="space-y-1">
+            <h2 id="appointments-heading" className="font-display text-title-lg text-primary">
+              {S.appointmentsHeading}
+            </h2>
+            <p className="text-body-sm text-on-surface-variant">{S.appointmentsBody}</p>
+          </div>
+          <Button asChild variant="outline" size="touch" className="w-full">
+            <Link to="/appointments">
+              <CalendarDays aria-hidden />
+              {S.appointmentsCta}
+            </Link>
+          </Button>
+        </section>
+      )}
 
       <section aria-labelledby="find-heading" className="bg-card space-y-3 rounded-2xl border p-5">
         <div className="space-y-1">
@@ -38,21 +53,6 @@ export function HomePage() {
           <Link to="/hospitals">
             <Search aria-hidden />
             {S.findCta}
-          </Link>
-        </Button>
-      </section>
-
-      <section aria-labelledby="appointments-heading" className="bg-card space-y-3 rounded-2xl border p-5">
-        <div className="space-y-1">
-          <h2 id="appointments-heading" className="font-display text-title-lg text-primary">
-            {S.appointmentsHeading}
-          </h2>
-          <p className="text-body-sm text-on-surface-variant">{S.appointmentsBody}</p>
-        </div>
-        <Button asChild variant="outline" size="touch" className="w-full">
-          <Link to="/appointments">
-            <CalendarDays aria-hidden />
-            {S.appointmentsCta}
           </Link>
         </Button>
       </section>
@@ -103,19 +103,6 @@ export function HomePage() {
         )}
       </section>
 
-      <section className="space-y-3 border-t pt-6">
-        {signOut.isError && <Alert variant="error">{S.signOutFailed}</Alert>}
-        <Button
-          variant="ghost"
-          size="touch"
-          className="text-on-surface-variant w-full"
-          onClick={() => signOut.mutate()}
-          disabled={signOut.isPending}
-        >
-          <LogOut aria-hidden />
-          {signOut.isPending ? S.signingOut : S.signOut}
-        </Button>
-      </section>
     </div>
   )
 }

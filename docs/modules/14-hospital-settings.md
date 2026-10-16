@@ -8,7 +8,7 @@
 
 ## 1. Purpose
 
-Every piece of data in Aetheris belongs to a **hospital (tenant)**. This module owns the hospital record itself: its identity, configuration, branding, feature flags, working hours, and format rules (MRN, invoice number, currency, timezone). It also enforces the **multi-tenant isolation guarantee** that no user of Hospital A can ever see data from Hospital B.
+Every piece of data in Atheris belongs to a **hospital (tenant)**. This module owns the hospital record itself: its identity, configuration, branding, feature flags, working hours, and format rules (MRN, invoice number, currency, timezone). It also enforces the **multi-tenant isolation guarantee** that no user of Hospital A can ever see data from Hospital B.
 
 This is the "settings backbone" the rest of the platform reads from.
 
@@ -34,7 +34,7 @@ This is the "settings backbone" the rest of the platform reads from.
 - Custom fields per hospital (extensible attributes)
 - Localization (multi-language UI per hospital)
 - Custom email templates per hospital
-- Domain/subdomain per hospital (e.g., `apollo.aetheris.health`)
+- Domain/subdomain per hospital (e.g., `apollo.atheris.health`)
 
 ### Out of Scope
 - Cross-tenant reporting (Superadmin analytics is a separate future module)

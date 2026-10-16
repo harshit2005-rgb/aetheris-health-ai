@@ -73,15 +73,15 @@ def create_app() -> FastAPI:
         # Disable default 422 handler — we use our own exception handling
         validation_error_details=settings.is_development,
         default_response_class=JSONResponse,
-        terms_of_service="https://aetheris.health/terms",
+        terms_of_service="https://atheris.health/terms",
         contact={
-            "name": "Aetheris Health",
-            "email": "dev@aetheris.health",
-            "url": "https://aetheris.health",
+            "name": "Atheris Health",
+            "email": "dev@atheris.health",
+            "url": "https://atheris.health",
         },
         license_info={
             "name": "Proprietary",
-            "url": "https://aetheris.health/license",
+            "url": "https://atheris.health/license",
         },
     )
 
@@ -306,20 +306,20 @@ _STATUS_TO_ERROR_CODE: dict[int, str] = {
 def _register_exception_handlers(app: FastAPI) -> None:
     """Register global exception handlers.
 
-    Maps :class:`AetherisError` subclasses to structured JSON responses.
+    Maps :class:`AtherisError` subclasses to structured JSON responses.
     """
     from fastapi.exceptions import RequestValidationError
     from starlette.exceptions import HTTPException as StarletteHTTPException
 
     from app.core.envelope import error_envelope
     from app.core.error_codes import ErrorCode
-    from app.core.exceptions import AetherisError
+    from app.core.exceptions import AtherisError
     from app.core.logging import get_logger
 
-    handler_logger = get_logger("aetheris.exception_handler")
+    handler_logger = get_logger("atheris.exception_handler")
 
-    @app.exception_handler(AetherisError)
-    async def aetheris_exception_handler(request: Request, exc: AetherisError) -> JSONResponse:  # noqa: ARG001
+    @app.exception_handler(AtherisError)
+    async def atheris_exception_handler(request: Request, exc: AtherisError) -> JSONResponse:  # noqa: ARG001
         """Handle all application-level exceptions with a consistent envelope."""
         handler_logger.warning(
             "application_error",

@@ -1,6 +1,6 @@
 # 12 — Deployment
 
-How Aetheris Health AI is packaged, deployed, and operated. Written for the MVP → v2.3 window; enterprise/Kubernetes deployment specifics live in a separate ops runbook when we get there.
+How Atheris Health AI is packaged, deployed, and operated. Written for the MVP → v2.3 window; enterprise/Kubernetes deployment specifics live in a separate ops runbook when we get there.
 
 ---
 
@@ -19,11 +19,11 @@ No shortcuts across environment boundaries. No prod data in dev, ever.
 
 ## 2. Artifacts
 
-- **Backend Docker image** — `aetheris/backend:<git-sha>` published to registry
-- **Frontend Docker image** — `aetheris/frontend:<git-sha>` (Nginx serving built static files)
+- **Backend Docker image** — `atheris/backend:<git-sha>` published to registry
+- **Frontend Docker image** — `atheris/frontend:<git-sha>` (Nginx serving built static files)
 - **Migration image** — same as backend; runs `alembic upgrade head` as its command
 
-Images are tagged with both git SHA and a semver label on release (`aetheris/backend:v2.0.0`).
+Images are tagged with both git SHA and a semver label on release (`atheris/backend:v2.0.0`).
 
 ---
 
@@ -44,27 +44,27 @@ services:
     restart: unless-stopped
 
   backend:
-    image: aetheris/backend:${IMAGE_TAG}
+    image: atheris/backend:${IMAGE_TAG}
     env_file: .env
     depends_on: [postgres, redis]
     restart: unless-stopped
 
   worker:
-    image: aetheris/backend:${IMAGE_TAG}
+    image: atheris/backend:${IMAGE_TAG}
     command: rq worker default ai_batch reports
     env_file: .env
     depends_on: [postgres, redis]
     restart: unless-stopped
 
   scheduler:
-    image: aetheris/backend:${IMAGE_TAG}
+    image: atheris/backend:${IMAGE_TAG}
     command: python -m app.background.scheduler
     env_file: .env
     depends_on: [postgres, redis]
     restart: unless-stopped
 
   frontend:
-    image: aetheris/frontend:${IMAGE_TAG}
+    image: atheris/frontend:${IMAGE_TAG}
     depends_on: [backend]
     restart: unless-stopped
 
@@ -236,7 +236,7 @@ Both targets use the same images and the same env-driven configuration.
 Prereq: images published, `.env` up to date on the target host.
 
 1. `ssh` into deploy host
-2. `cd /opt/aetheris`
+2. `cd /opt/atheris`
 3. `docker compose pull`
 4. `IMAGE_TAG=<new-tag> docker compose run --rm backend alembic upgrade head`
 5. `IMAGE_TAG=<new-tag> docker compose up -d`

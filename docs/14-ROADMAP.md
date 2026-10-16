@@ -1,4 +1,4 @@
-# Aetheris Health AI — Roadmap
+# Atheris Health AI — Roadmap
 
 **Living document. Owner: Co-founders. Last updated: 2026-07-26.**
 

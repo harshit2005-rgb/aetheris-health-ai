@@ -261,6 +261,7 @@ def _forged(kind: str, account_id: uuid.UUID) -> str:
         case "another audience":
             return _signed_by_us(account_id, aud="atheris-staff")
         case "an audience that only looks right":
+            # Deliberately not the real audience: one letter off, so it reads the same.
             return _signed_by_us(account_id, aud="aetheris-patient")
         case "no audience":
             return _signed_by_us(account_id, aud=None)

@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Final
 
 from app.core.error_codes import ErrorCode
-from app.core.exceptions import AetherisError
+from app.core.exceptions import AtherisError
 
 __all__ = [
     "OTP_THROTTLE_RETRY_AFTER_SECONDS",
@@ -27,7 +27,7 @@ __all__ = [
 OTP_THROTTLE_RETRY_AFTER_SECONDS: Final = 600
 
 
-class OtpInvalidError(AetherisError):
+class OtpInvalidError(AtherisError):
     """A one-time code was not accepted — for any reason at all.
 
     Unknown, expired or used challenge, wrong code, attempts exhausted, a
@@ -43,7 +43,7 @@ class OtpInvalidError(AetherisError):
         )
 
 
-class OtpThrottledError(AetherisError):
+class OtpThrottledError(AtherisError):
     """A limit on requesting one-time codes was reached.
 
     Says nothing about which limit. Maps to HTTP 429 with a fixed
@@ -60,7 +60,7 @@ class OtpThrottledError(AetherisError):
         self.headers: dict[str, str] = {"Retry-After": str(OTP_THROTTLE_RETRY_AFTER_SECONDS)}
 
 
-class LinkMrnRequiredError(AetherisError):
+class LinkMrnRequiredError(AtherisError):
     """More than one record matches; the MRN is needed to tell them apart.
 
     Says only that an MRN is needed — never how many records there are.
@@ -75,7 +75,7 @@ class LinkMrnRequiredError(AetherisError):
         )
 
 
-class LinkUnavailableError(AetherisError):
+class LinkUnavailableError(AtherisError):
     """Linking cannot be completed in the app. Maps to HTTP 403."""
 
     def __init__(self) -> None:
@@ -86,7 +86,7 @@ class LinkUnavailableError(AetherisError):
         )
 
 
-class ConsentRequiredError(AetherisError):
+class ConsentRequiredError(AtherisError):
     """A required policy or purpose consent has not been given. Maps to HTTP 403."""
 
     def __init__(self) -> None:
@@ -97,7 +97,7 @@ class ConsentRequiredError(AetherisError):
         )
 
 
-class RecordLinkRequiredError(AetherisError):
+class RecordLinkRequiredError(AtherisError):
     """The action needs a linked record at this hospital. Maps to HTTP 403."""
 
     def __init__(self) -> None:

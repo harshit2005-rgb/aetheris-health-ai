@@ -1,6 +1,6 @@
 # Backend Context (Python / FastAPI)
 
-You are in the backend of Aetheris Health AI. The root `../CLAUDE.md` is in effect — read it first if you haven't. This file adds backend-specific rules.
+You are in the backend of Atheris Health AI. The root `../CLAUDE.md` is in effect — read it first if you haven't. This file adds backend-specific rules.
 
 ---
 

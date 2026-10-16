@@ -148,7 +148,7 @@ def _otp_message(phone: str, code: str) -> SmsMessage:
     """The text a code is sent in: the code and its lifetime, and nothing else."""
     return SmsMessage(
         to=phone,
-        body=f"{code} is your Aetheris verification code. It expires in 5 minutes.",
+        body=f"{code} is your Atheris verification code. It expires in 5 minutes.",
         purpose="otp",
     )
 

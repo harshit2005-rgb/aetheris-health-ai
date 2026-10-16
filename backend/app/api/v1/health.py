@@ -42,7 +42,7 @@ router = APIRouter(tags=["health"])
                     "example": {
                         "status": "alive",
                         "timestamp": "2026-07-26T12:00:00Z",
-                        "app": "Aetheris Health AI",
+                        "app": "Atheris Health AI",
                         "version": "0.1.0",
                     },
                 },

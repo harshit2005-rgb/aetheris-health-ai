@@ -544,7 +544,7 @@ class TestDeviceCookiePadding:
     shared account budget an attacker can drain.
     """
 
-    NAME = "aetheris-device"  # the suite runs with AUTH_DEVICE_COOKIE_SECURE off
+    NAME = "atheris-device"  # the suite runs with AUTH_DEVICE_COOKIE_SECURE off
     REAL = "r" * 43
 
     def test_sixteen_planted_tokens_cannot_hide_the_real_one(self) -> None:

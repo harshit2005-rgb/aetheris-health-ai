@@ -642,9 +642,7 @@ class TestTheCodeIsNowhereButInTheMessage:
 
         assert message.to == phone
         assert message.purpose == "otp"
-        assert (
-            message.body == f"{code} is your Aetheris verification code. It expires in 5 minutes."
-        )
+        assert message.body == f"{code} is your Atheris verification code. It expires in 5 minutes."
         assert code not in repr(message)
 
 

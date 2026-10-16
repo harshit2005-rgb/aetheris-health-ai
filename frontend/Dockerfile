@@ -1,5 +1,5 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# Aetheris Health AI — Frontend Dockerfile
+# Atheris Health AI — Frontend Dockerfile
 #
 # Development image that runs the Vite dev server with HMR.
 # Bind-mount the source directory so edits reflect instantly.
