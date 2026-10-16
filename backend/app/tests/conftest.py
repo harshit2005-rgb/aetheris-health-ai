@@ -30,9 +30,10 @@ import asyncio
 import contextlib
 import logging
 import os
+import re
 import uuid
 from typing import TYPE_CHECKING, Any, Self
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, NonCallableMock
 
 import pytest
 import pytest_asyncio
@@ -104,6 +105,36 @@ def pytest_configure(config: pytest.Config) -> None:
         "markers",
         "database: test requires a reachable PostgreSQL instance.",
     )
+
+
+#: A UUID anywhere in a string, in any of the forms ``uuid.UUID`` accepts.
+_UUID_IN_TEXT = re.compile(
+    r"[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}"
+)
+
+
+def pytest_make_parametrize_id(config: pytest.Config, val: object, argname: str) -> str | None:
+    """Give random parameter values a stable test id.
+
+    pytest-xdist requires every worker to collect exactly the same test ids,
+    and ``uuid4()`` values, and the ``id`` in a mock's repr, differ from one
+    process to the next. Such values are named by what they are instead; pytest
+    numbers any ids that then collide, deterministically. Every other value
+    keeps pytest's own id.
+
+    :param config: The pytest config.
+    :param val: One parameter value.
+    :param argname: The parameter's name.
+    :returns: A stable id, or ``None`` for pytest's default.
+    """
+    del config
+    if isinstance(val, uuid.UUID):
+        return f"{argname}-uuid"
+    if isinstance(val, NonCallableMock):
+        return f"{argname}-mock"
+    if isinstance(val, str) and _UUID_IN_TEXT.search(val):
+        return _UUID_IN_TEXT.sub("<uuid>", val)
+    return None
 
 
 # ── Application ──────────────────────────────────────────────────────────────
@@ -457,14 +488,47 @@ def _test_database_url() -> str:
     ``TEST_DATABASE_URL`` wins. Otherwise the configured URL is reused with a
     ``_test`` suffix on the database name, so a misconfigured run cannot write
     to a developer's working data.
+
+    Under pytest-xdist (``pytest -n``) each worker gets a database of its own,
+    the name suffixed with the worker id (``atheris_test_gw0``, ...), so tests
+    that commit for real — the concurrency and attack suites — never meet
+    another worker's rows.
     """
     from app.core.config import settings
 
     explicit = os.getenv("TEST_DATABASE_URL")
     if explicit:
-        return explicit
-    base, _, database = settings.DATABASE_URL.rpartition("/")
-    return f"{base}/{database}_test"
+        base, _, database = explicit.rpartition("/")
+    else:
+        base, _, database = settings.DATABASE_URL.rpartition("/")
+        database = f"{database}_test"
+    worker = os.getenv("PYTEST_XDIST_WORKER")
+    if worker:
+        database = f"{database}_{worker}"
+    return f"{base}/{database}"
+
+
+async def _ensure_worker_database(url: str) -> None:
+    """Create a pytest-xdist worker's own test database if it is missing.
+
+    Only under ``pytest -n``: a plain run uses the database it was given and
+    never creates one. The database is created from the server's ``postgres``
+    maintenance database, by a role allowed to create databases (the CI
+    service user and a local superuser are).
+    """
+    if not os.getenv("PYTEST_XDIST_WORKER"):
+        return
+    base, _, database = url.rpartition("/")
+    admin = create_async_engine(f"{base}/postgres", isolation_level="AUTOCOMMIT")
+    try:
+        async with admin.connect() as connection:
+            exists = await connection.scalar(
+                text("SELECT 1 FROM pg_database WHERE datname = :name"), {"name": database}
+            )
+            if not exists:
+                await connection.execute(text(f'CREATE DATABASE "{database}"'))
+    finally:
+        await admin.dispose()
 
 
 def _run_migrations(database_url: str) -> None:
@@ -506,6 +570,7 @@ async def db_engine() -> AsyncGenerator[AsyncEngine]:
     engine = create_async_engine(url)
 
     try:
+        await _ensure_worker_database(url)
         async with engine.connect() as connection:
             await connection.execute(text("SELECT 1"))
     except Exception as exc:  # noqa: BLE001 — any connection failure means "no database"

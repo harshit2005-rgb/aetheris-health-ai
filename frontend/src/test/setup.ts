@@ -1,4 +1,14 @@
 import '@testing-library/jest-dom/vitest'
+import { configure } from '@testing-library/react'
+
+/**
+ * How long `findBy*` and `waitFor` wait before failing. The default of one
+ * second is too tight on a busy CI runner, where a refetch and a re-render can
+ * take longer, and tests failed at random ("Page 2 of 3" not found in
+ * DoctorsPage.inactive). They still return the moment the element appears, so
+ * a passing run is no slower; only a genuine failure takes longer to report.
+ */
+configure({ asyncUtilTimeout: 3000 })
 
 /**
  * jsdom implements neither the Pointer Capture API nor `scrollIntoView`, both

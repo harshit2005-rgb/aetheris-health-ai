@@ -515,7 +515,9 @@ class TestADeviceTokenIsIssuedOnlyByAVerifiedCode:
         [
             "A" * 43,
             "attacker-chosen-device-token-0123456789abcdefg",
-            secrets.token_urlsafe(32),
+            # A fresh random value each run: a stable id keeps the test name the
+            # same in every pytest-xdist worker.
+            pytest.param(secrets.token_urlsafe(32), id="random-token"),
         ],
     )
     async def test_a_value_the_client_supplies_is_never_adopted(

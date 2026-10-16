@@ -54,7 +54,16 @@ class _RecordingNotifier:
 
 #: Everything a notifier might answer that is not "an email was queued". Only
 #: the value ``True`` itself counts: a mock, a truthy string or ``1`` must not.
-_NOT_QUEUED = [False, None, 0, 1, "queued", MagicMock(name="not-a-bool")]
+_NOT_QUEUED = [
+    False,
+    None,
+    0,
+    1,
+    "queued",
+    # A mock's repr carries its memory address: an explicit id keeps the test
+    # name the same in every pytest-xdist worker.
+    pytest.param(MagicMock(name="not-a-bool"), id="<MagicMock not-a-bool>"),
+]
 
 
 @pytest.fixture

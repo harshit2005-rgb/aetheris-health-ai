@@ -34,5 +34,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     css: false,
+    // Per-test limit. The default 5 s is too tight on a busy runner for the
+    // longest journeys (webStorage walks the whole app), which timed out at random.
+    testTimeout: 15_000,
   },
 })

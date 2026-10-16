@@ -84,8 +84,11 @@ jobs:
           PGPASSWORD: atheris
         run: psql -h localhost -U atheris -d atheris -c "CREATE DATABASE atheris_test"
 
+      # Across every CPU core of the runner (pytest-xdist). Each worker creates
+      # and migrates its own database, atheris_test_gw0, atheris_test_gw1, ...
+      # (app/tests/conftest.py), so the step above only matters for a plain run.
       - name: Run tests
-        run: uv run pytest app/tests/ -v
+        run: uv run pytest app/tests/ -n auto
 
   # ── Frontend ─────────────────────────────────────────────────────────────
   frontend:

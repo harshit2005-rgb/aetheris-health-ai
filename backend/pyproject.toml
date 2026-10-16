@@ -70,6 +70,8 @@ dev = [
     "pytest>=8.3.0,<9.0.0",
     "pytest-asyncio>=0.25.0,<1.0.0",
     "pytest-cov>=6.0.0,<7.0.0",
+    # Runs the suite across CPU cores, one test database per worker (app/tests/conftest.py).
+    "pytest-xdist>=3.6.0,<4.0.0",
     # Property-based tests for invoice arithmetic (docs/modules/06-billing.md §16).
     "hypothesis>=6.100.0,<7.0.0",
     "ruff>=0.8.0,<1.0.0",
