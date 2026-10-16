@@ -4,6 +4,7 @@ import { EmptyState } from '@/components/ui/empty-state'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { usePermissions } from '@/hooks/usePermissions'
 import { HospitalSettingsTab } from './HospitalSettingsTab'
+import { WorkingHoursCard } from './WorkingHoursCard'
 import { AuditLogTab } from './AuditLogTab'
 
 /**
@@ -51,8 +52,9 @@ export default function SettingsPage() {
           </TabsList>
 
           {showHospital && (
-            <TabsContent value="hospital">
+            <TabsContent value="hospital" className="space-y-6">
               <HospitalSettingsTab />
+              <WorkingHoursCard />
             </TabsContent>
           )}
           {showAudit && (

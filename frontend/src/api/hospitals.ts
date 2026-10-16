@@ -55,6 +55,7 @@ export const hospitalKeys = {
   current: () => [...hospitalKeys.all, 'current'] as const,
   full: () => [...hospitalKeys.all, 'full'] as const,
   featureFlags: () => [...hospitalKeys.all, 'feature-flags'] as const,
+  workingHours: () => [...hospitalKeys.all, 'working-hours'] as const,
 }
 
 /** Public hospital record — used by any authenticated shell. */
@@ -111,6 +112,42 @@ export function useUpdateHospitalSettings() {
       http.patch<HospitalSettings>('/hospitals/current', input),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: hospitalKeys.all })
+    },
+  })
+}
+
+// ── Working hours (module 14 §8, §9) ───────────────────────────────────────
+
+/**
+ * One day of the hospital's week (`WorkingHoursDayResponse`). Open between two
+ * `HH:MM:SS` wall-clock times, open all day (`is_24h`), or closed (no times).
+ * A day with no entry has not been set.
+ */
+export interface WorkingHoursDay {
+  /** 0 = Monday … 6 = Sunday. */
+  day_of_week: number
+  is_24h: boolean
+  open_time: string | null
+  close_time: string | null
+}
+
+/** The hospital's opening hours. Any signed-in member may read them. */
+export function useWorkingHours(enabled = true) {
+  return useQuery({
+    enabled,
+    queryKey: hospitalKeys.workingHours(),
+    queryFn: () => http.get<WorkingHoursDay[]>('/hospitals/current/working-hours'),
+  })
+}
+
+/** Replace the whole week (`PUT /hospitals/current/working-hours`). Requires settings.update. */
+export function useSetWorkingHours() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (days: WorkingHoursDay[]) =>
+      http.put<WorkingHoursDay[]>('/hospitals/current/working-hours', { days }),
+    onSuccess: (days) => {
+      qc.setQueryData(hospitalKeys.workingHours(), days)
     },
   })
 }
