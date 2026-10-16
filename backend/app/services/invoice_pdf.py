@@ -191,21 +191,22 @@ def letterhead_from(hospital: Any) -> Letterhead:
     :returns: The letterhead.
     """
     address: dict[str, Any] = hospital.address or {}
-    street = str(address.get("street") or "").strip()
-    city_line = ", ".join(
-        part
-        for part in (
-            str(address.get("city") or "").strip(),
-            " ".join(
-                p
-                for p in (
-                    str(address.get("state") or "").strip(),
-                    str(address.get("zip") or "").strip(),
-                )
-                if p
-            ),
+
+    def part(*keys: str) -> str:
+        # The canonical keys are line1/line2/postal_code (the same as patients);
+        # street/zip are read too, for an address saved before they settled.
+        return next(
+            (str(address[k]).strip() for k in keys if str(address.get(k) or "").strip()), ""
         )
-        if part
+
+    street = ", ".join(p for p in (part("line1", "street"), part("line2")) if p)
+    city_line = ", ".join(
+        p
+        for p in (
+            part("city"),
+            " ".join(q for q in (part("state"), part("postal_code", "zip")) if q),
+        )
+        if p
     )
     country = str(address.get("country") or "").strip()
     contact = " · ".join(p for p in (hospital.phone, hospital.email) if p) or None

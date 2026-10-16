@@ -242,10 +242,11 @@ class TestLetterhead:
         hospital = SimpleNamespace(
             name="Lakeview Clinic",
             address={
-                "street": "4 Lake Road",
+                "line1": "4 Lake Road",
+                "line2": "Banjara Hills",
                 "city": "Hyderabad",
                 "state": "Telangana",
-                "zip": "500034",
+                "postal_code": "500034",
                 "country": "India",
             },
             phone="+91 40 1234 5678",
@@ -256,9 +257,25 @@ class TestLetterhead:
 
         letterhead = letterhead_from(hospital)
 
-        assert letterhead.address_lines == ("4 Lake Road", "Hyderabad, Telangana 500034", "India")
+        assert letterhead.address_lines == (
+            "4 Lake Road, Banjara Hills",
+            "Hyderabad, Telangana 500034",
+            "India",
+        )
         assert letterhead.contact == "+91 40 1234 5678"
         assert letterhead.gstin == "36ABCDE1234F1Z5"
+
+    def test_reads_an_address_saved_with_the_older_street_and_zip_keys(self) -> None:
+        hospital = SimpleNamespace(
+            name="H",
+            address={"street": "1 Old Road", "city": "Pune", "zip": "411001"},
+            phone=None,
+            email=None,
+            settings={},
+            timezone="Asia/Kolkata",
+        )
+
+        assert letterhead_from(hospital).address_lines == ("1 Old Road", "Pune, 411001")
 
     @pytest.mark.parametrize(
         "settings", [None, {}, {"billing": "oops"}, {"billing": {"gstin": "  "}}]
