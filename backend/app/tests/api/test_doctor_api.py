@@ -52,6 +52,16 @@ ALL_DOCTOR_PERMISSIONS = [
 ]
 
 
+#: What the seed gives a Doctor for their schedule (module spec §3, §10).
+DOCTOR_SCHEDULE_PERMISSIONS = [
+    "doctor.read",
+    "doctor.availability.read",
+    "doctor.availability.update",
+    "doctor.leave.create",
+    "doctor.leave.delete",
+]
+
+
 async def _make_user(
     session: AsyncSession,
     hospital_id: uuid.UUID,
@@ -450,15 +460,9 @@ class TestAvailability:
         doctor_user: uuid.UUID,
     ) -> None:
         """Module spec §3: a doctor edits their own schedule without doctor.update."""
-        created = await _create_doctor(api, full_access, doctor_user)
-        scheduler = _auth_header(
-            await _make_user(
-                db_session,
-                hospital_id,
-                ["doctor.read", "doctor.availability.read", "doctor.availability.update"],
-            ),
-            hospital_id,
-        )
+        own_login = await _make_user(db_session, hospital_id, DOCTOR_SCHEDULE_PERMISSIONS)
+        created = await _create_doctor(api, full_access, own_login)
+        scheduler = _auth_header(own_login, hospital_id)
 
         allowed = await api.put(
             f"/api/v1/doctors/{created['id']}/availability",
@@ -704,3 +708,152 @@ class TestSlots:
             headers=other_tenant,
         )
         assert response.status_code == 404
+
+
+class TestOnlyTheirOwnSchedule:
+    """Module spec §3: a doctor changes only their **own** availability and leave.
+
+    The ``doctor.availability.update`` and ``doctor.leave.*`` codes alone used
+    to let any doctor rewrite a colleague's week or cancel their leave. Only a
+    hospital admin (``doctor.update``) manages everyone's schedule.
+    """
+
+    @pytest_asyncio.fixture
+    async def scene(
+        self,
+        api: AsyncClient,
+        full_access: dict[str, str],
+        db_session: AsyncSession,
+        hospital_id: uuid.UUID,
+    ) -> dict[str, Any]:
+        """Two doctors with logins, the colleague on leave."""
+        me = await _make_user(db_session, hospital_id, DOCTOR_SCHEDULE_PERMISSIONS)
+        colleague = await _make_user(
+            db_session, hospital_id, DOCTOR_SCHEDULE_PERMISSIONS, first="Ravi", last="Rao"
+        )
+        my_profile = await _create_doctor(api, full_access, me)
+        their_profile = await _create_doctor(api, full_access, colleague)
+        leave = await api.post(
+            f"/api/v1/doctors/{their_profile['id']}/leaves",
+            json=build_leave_payload(),
+            headers=full_access,
+        )
+        assert leave.status_code == 201, leave.text
+        return {
+            "me": _auth_header(me, hospital_id),
+            "mine": my_profile["id"],
+            "theirs": their_profile["id"],
+            "their_leave": leave.json()["data"]["id"],
+        }
+
+    async def test_a_doctor_cannot_rewrite_a_colleagues_week(
+        self, api: AsyncClient, full_access: dict[str, str], scene: dict[str, Any]
+    ) -> None:
+        before = await api.get(
+            f"/api/v1/doctors/{scene['theirs']}/availability", headers=full_access
+        )
+
+        response = await api.put(
+            f"/api/v1/doctors/{scene['theirs']}/availability",
+            json={"entries": []},
+            headers=scene["me"],
+        )
+
+        assert response.status_code == 403
+        assert response.json()["message"] == "You can change only your own schedule."
+        after = await api.get(
+            f"/api/v1/doctors/{scene['theirs']}/availability", headers=full_access
+        )
+        assert after.json()["data"] == before.json()["data"]
+
+    async def test_a_doctor_cannot_put_a_colleague_on_leave(
+        self, api: AsyncClient, full_access: dict[str, str], scene: dict[str, Any]
+    ) -> None:
+        payload = build_leave_payload(
+            starts_at="2031-03-02T00:00:00+05:30", ends_at="2031-03-03T00:00:00+05:30"
+        )
+
+        response = await api.post(
+            f"/api/v1/doctors/{scene['theirs']}/leaves", json=payload, headers=scene["me"]
+        )
+
+        assert response.status_code == 403
+        leaves = await api.get(f"/api/v1/doctors/{scene['theirs']}/leaves", headers=full_access)
+        assert [leave["id"] for leave in leaves.json()["data"]] == [scene["their_leave"]]
+
+    async def test_a_doctor_cannot_cancel_a_colleagues_leave(
+        self, api: AsyncClient, full_access: dict[str, str], scene: dict[str, Any]
+    ) -> None:
+        response = await api.delete(
+            f"/api/v1/doctors/{scene['theirs']}/leaves/{scene['their_leave']}", headers=scene["me"]
+        )
+
+        assert response.status_code == 403
+        leaves = await api.get(f"/api/v1/doctors/{scene['theirs']}/leaves", headers=full_access)
+        assert [leave["id"] for leave in leaves.json()["data"]] == [scene["their_leave"]]
+
+    async def test_a_doctor_still_manages_their_own_week_and_leave(
+        self, api: AsyncClient, scene: dict[str, Any]
+    ) -> None:
+        week = await api.put(
+            f"/api/v1/doctors/{scene['mine']}/availability",
+            json=build_availability_payload(),
+            headers=scene["me"],
+        )
+        assert week.status_code == 200
+
+        leave = await api.post(
+            f"/api/v1/doctors/{scene['mine']}/leaves",
+            json=build_leave_payload(),
+            headers=scene["me"],
+        )
+        assert leave.status_code == 201
+        cancelled = await api.delete(
+            f"/api/v1/doctors/{scene['mine']}/leaves/{leave.json()['data']['id']}",
+            headers=scene["me"],
+        )
+        assert cancelled.status_code == 204
+
+    async def test_a_doctor_still_reads_a_colleagues_schedule(
+        self, api: AsyncClient, scene: dict[str, Any]
+    ) -> None:
+        # Reading is not limited: reception and colleagues need to see it.
+        assert (
+            await api.get(f"/api/v1/doctors/{scene['theirs']}/availability", headers=scene["me"])
+        ).status_code == 200
+        assert (
+            await api.get(f"/api/v1/doctors/{scene['theirs']}/leaves", headers=scene["me"])
+        ).status_code == 200
+
+    async def test_a_hospital_admin_manages_every_doctors_schedule(
+        self, api: AsyncClient, full_access: dict[str, str], scene: dict[str, Any]
+    ) -> None:
+        week = await api.put(
+            f"/api/v1/doctors/{scene['theirs']}/availability",
+            json=build_availability_payload(),
+            headers=full_access,
+        )
+        assert week.status_code == 200
+        cancelled = await api.delete(
+            f"/api/v1/doctors/{scene['theirs']}/leaves/{scene['their_leave']}", headers=full_access
+        )
+        assert cancelled.status_code == 204
+
+    async def test_a_login_with_no_doctor_profile_changes_no_schedule(
+        self,
+        api: AsyncClient,
+        db_session: AsyncSession,
+        hospital_id: uuid.UUID,
+        scene: dict[str, Any],
+    ) -> None:
+        stranger = _auth_header(
+            await _make_user(db_session, hospital_id, DOCTOR_SCHEDULE_PERMISSIONS), hospital_id
+        )
+
+        response = await api.put(
+            f"/api/v1/doctors/{scene['theirs']}/availability",
+            json={"entries": []},
+            headers=stranger,
+        )
+
+        assert response.status_code == 403
