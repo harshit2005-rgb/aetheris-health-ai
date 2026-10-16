@@ -7,15 +7,18 @@ access.
 
 **Tenancy.** ``hospital_id`` always comes from the authenticated user.
 
-**Not here yet.** ``GET /lab-orders/{id}/report.pdf`` and
-``POST /lab-orders/{id}/ai-explain`` are not built; calling them is a 404.
+**Report.** ``GET /lab-orders/{id}/report.pdf`` needs ``lab.report.download``
+and is only for a released order.
+
+**Not here yet.** ``POST /lab-orders/{id}/ai-explain`` is not built; calling
+it is a 404.
 """
 
 from __future__ import annotations
 
 import uuid
 
-from fastapi import APIRouter, Body, Depends, Path, Query, status
+from fastapi import APIRouter, Body, Depends, Path, Query, Response, status
 
 from app.api.dependencies.auth import require_permission
 from app.api.dependencies.services import get_lab_service
@@ -156,6 +159,41 @@ async def get_order(
     """Retrieve one lab order."""
     order = await service.get_order(_tenant_of(current_user), order_id)
     return SuccessResponse[LabOrderResponse](message="Lab order retrieved.", data=order)
+
+
+@router.get(
+    "/{order_id}/report.pdf",
+    response_class=Response,
+    summary="Download a lab report as a PDF",
+    description=(
+        "The released order as an A4 lab report on the hospital's letterhead: "
+        "every test with its result, unit, reference range and flag, value for "
+        "value as `GET /lab-orders/{id}` returns it (module spec §9, FR-5, AC-4).\n\n"
+        "Only a released order has a report (`400` otherwise)."
+    ),
+    responses={
+        200: {"description": "The PDF.", "content": {"application/pdf": {}}},
+        400: {"description": "The order is not released."},
+        **_NOT_FOUND_RESPONSE,
+        **_COMMON_RESPONSES,
+    },
+)
+async def download_report(
+    order_id: uuid.UUID = Path(description="Lab order UUID."),
+    current_user: User = Depends(require_permission("lab.report.download")),
+    service: LabService = Depends(get_lab_service),
+) -> Response:
+    """Render one released lab order as a PDF report."""
+    filename, content = await service.report_pdf(_tenant_of(current_user), order_id)
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            # A lab report holds a patient's results: never kept by a shared cache.
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @router.patch(

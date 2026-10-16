@@ -457,10 +457,18 @@ def get_lab_service(
     audit: AuditSink = Depends(get_audit_sink),
     charges: ChargeSink = Depends(get_charge_sink),
     notifier: Notifier = Depends(get_notifier),
+    hospitals: HospitalRepository = Depends(get_hospital_repository),
 ) -> LabService:
     """Provide a :class:`LabService` bound to the request session."""
     return LabService(
-        orders, tests, appointments, session, audit, charges=charges, notifier=notifier
+        orders,
+        tests,
+        appointments,
+        session,
+        audit,
+        charges=charges,
+        notifier=notifier,
+        hospitals=hospitals,
     )
 
 

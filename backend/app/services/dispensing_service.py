@@ -27,6 +27,7 @@ Returns DTOs, never ORM models, and records an audit event per mutation
 
 from __future__ import annotations
 
+import asyncio
 import uuid  # noqa: TC003 — needed at runtime for type hints
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -47,7 +48,12 @@ from app.schemas.pharmacy import (
     DispenseResponse,
     PrescriptionResponse,
 )
+from app.services.pdf_layout import letterhead_from, safe_filename
 from app.services.pharmacy_common import field_error, hospital_today
+from app.services.prescription_pdf import (
+    build_prescription_document,
+    render_prescription_pdf,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -449,6 +455,42 @@ class DispensingService:
         if prescription is None:
             raise PrescriptionNotFoundError(prescription_id)
         return await self._respond(prescription)
+
+    async def prescription_pdf(
+        self, hospital_id: uuid.UUID, prescription_id: uuid.UUID
+    ) -> tuple[str, bytes]:
+        """Render a prescription as the PDF slip the patient takes away.
+
+        A cancelled prescription still prints, watermarked CANCELLED.
+
+        :param hospital_id: The hospital the prescription belongs to.
+        :param prescription_id: The prescription to render.
+        :returns: ``(file name, PDF bytes)``.
+        :raises PrescriptionNotFoundError: If absent from this tenant.
+        """
+        prescription = await self._prescriptions.get_prescription_by_id(
+            hospital_id, prescription_id
+        )
+        if prescription is None:
+            raise PrescriptionNotFoundError(prescription_id)
+        hospital = await self._hospitals.get_by_id(hospital_id)
+        if hospital is None:  # pragma: no cover — the prescription proved the tenant exists
+            raise PrescriptionNotFoundError(prescription_id)
+        response = await self._respond(prescription)
+        patient, doctor = prescription.patient, prescription.doctor
+        document = build_prescription_document(
+            response,
+            letterhead=letterhead_from(hospital),
+            date_of_birth=patient.date_of_birth,
+            sex=getattr(patient.gender, "value", None),
+            doctor_specialization=doctor.specialization,
+            doctor_registration=doctor.license_number,
+            generated_at=datetime.now(UTC),
+        )
+        # Laying out a PDF is CPU work: keep it off the event loop.
+        content = await asyncio.to_thread(render_prescription_pdf, document)
+        name = safe_filename(f"{document.patient_mrn}-{document.reference}", "prescription")
+        return f"prescription-{name}.pdf", content
 
     async def list_prescriptions(
         self,

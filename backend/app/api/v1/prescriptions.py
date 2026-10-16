@@ -10,6 +10,9 @@ result in the standard envelope. No business logic, no database access.
 **Not in the spec's list.** ``POST /prescriptions``, ``GET /prescriptions``,
 ``GET /prescriptions/{id}``, the cancel route and the dispense history exist
 because there is no Consultation module to write or show a prescription.
+
+**PDF.** ``GET /prescriptions/{id}/pdf`` prints the slip the patient takes
+away; anyone who may read a prescription may print it.
 """
 
 from __future__ import annotations
@@ -17,7 +20,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Path, Query, status
+from fastapi import APIRouter, Body, Depends, Path, Query, Response, status
 
 from app.api.dependencies.auth import require_permission
 from app.api.dependencies.services import get_dispensing_service
@@ -186,6 +189,40 @@ async def get_prescription(
     prescription = await service.get_prescription(_tenant_of(current_user), prescription_id)
     return SuccessResponse[PrescriptionResponse](
         message="Prescription retrieved.", data=prescription
+    )
+
+
+@router.get(
+    "/{prescription_id}/pdf",
+    response_class=Response,
+    summary="Download a prescription as a PDF",
+    description=(
+        "The prescription as an A4 slip on the hospital's letterhead: patient, "
+        "prescribing doctor with registration number, and each medicine with "
+        "dose, frequency, duration, quantity and instructions. A cancelled "
+        "prescription prints watermarked CANCELLED."
+    ),
+    responses={
+        200: {"description": "The PDF.", "content": {"application/pdf": {}}},
+        **_NOT_FOUND,
+        **_COMMON_RESPONSES,
+    },
+)
+async def download_prescription_pdf(
+    prescription_id: uuid.UUID = Path(description="Prescription UUID."),
+    current_user: User = Depends(require_permission(_READ)),
+    service: DispensingService = Depends(get_dispensing_service),
+) -> Response:
+    """Render one prescription as a PDF."""
+    filename, content = await service.prescription_pdf(_tenant_of(current_user), prescription_id)
+    return Response(
+        content=content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            # A prescription holds a patient's medicines: never kept by a shared cache.
+            "Cache-Control": "no-store",
+        },
     )
 
 
