@@ -83,6 +83,8 @@ export const doctorKeys = {
   /** Every doctor's computed slots. Booking, cancelling or moving an appointment changes them. */
   slots: () => [...doctorKeys.all, 'slots'] as const,
   slotsFor: (id: string, date: string) => [...doctorKeys.slots(), id, date] as const,
+  availability: (id: string) => [...doctorKeys.all, 'availability', id] as const,
+  leaves: (id: string) => [...doctorKeys.all, 'leaves', id] as const,
 }
 
 /** List / search doctors. Supports `q`, `specialization`, `department`, page/size. */
@@ -198,4 +200,102 @@ export function useDeactivateDoctor(id: string) {
 /** Reactivate a deactivated doctor. No body; needs `doctor.update`, not `doctor.delete`. */
 export function useActivateDoctor(id: string) {
   return useDoctorMutation<void>(id, () => http.post<Doctor>(`/doctors/${id}/activate`))
+}
+
+// ── Schedule: weekly availability and leave ────────────────────────────────
+
+/** Slot lengths the scheduler supports, in minutes (module spec §11). */
+export const SLOT_DURATIONS = [10, 15, 20, 30, 45, 60] as const
+export type SlotDuration = (typeof SLOT_DURATIONS)[number]
+
+/** One weekly window (`AvailabilityResponse`). Times are hospital wall-clock, `HH:MM:SS`. */
+export interface AvailabilityWindow {
+  id: string
+  /** 0 = Monday … 6 = Sunday. */
+  day_of_week: number
+  start_time: string
+  end_time: string
+  slot_duration_minutes: number
+}
+
+/** One window to save (`AvailabilityEntry`): the same, without an id. */
+export type AvailabilityEntry = Omit<AvailabilityWindow, 'id'>
+
+/** A recorded leave (`LeaveResponse`). `ends_at` is exclusive. Both are UTC. */
+export interface DoctorLeave {
+  id: string
+  doctor_id: string
+  starts_at: string
+  ends_at: string
+  reason: string | null
+}
+
+/** Body of `POST /doctors/{id}/leaves`. Both instants carry the hospital's offset. */
+export interface CreateLeaveInput {
+  starts_at: string
+  ends_at: string
+  reason?: string
+}
+
+/** A doctor's weekly windows, ordered by the server. Needs `doctor.availability.read`. */
+export function useDoctorAvailability(id: string, options: ListQueryOptions = {}) {
+  return useQuery<AvailabilityWindow[]>({
+    enabled: (options.enabled ?? true) && !!id,
+    queryKey: doctorKeys.availability(id),
+    queryFn: () => http.get<AvailabilityWindow[]>(`/doctors/${id}/availability`),
+  })
+}
+
+/** A doctor's recorded leave, earliest first. Needs `doctor.read`. */
+export function useDoctorLeaves(id: string, options: ListQueryOptions = {}) {
+  return useQuery<DoctorLeave[]>({
+    enabled: (options.enabled ?? true) && !!id,
+    queryKey: doctorKeys.leaves(id),
+    queryFn: () => http.get<DoctorLeave[]>(`/doctors/${id}/leaves`),
+  })
+}
+
+/**
+ * Replace the doctor's whole week (`PUT /doctors/{id}/availability`): what is
+ * sent becomes the complete schedule, and an empty list clears it. The saved
+ * windows go straight into the cache; every computed slot is refetched,
+ * because slots come from availability.
+ *
+ * Needs `doctor.availability.update`. Without `doctor.update`, only one's own
+ * schedule: another doctor's is a 403.
+ */
+export function useSetAvailability(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (entries: AvailabilityEntry[]) =>
+      http.put<AvailabilityWindow[]>(`/doctors/${id}/availability`, { entries }),
+    onSuccess: (windows) => {
+      qc.setQueryData(doctorKeys.availability(id), windows)
+      qc.invalidateQueries({ queryKey: doctorKeys.slots() })
+    },
+  })
+}
+
+/** Record a leave (auto-approved). 409 when it overlaps one already recorded. */
+export function useCreateLeave(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: CreateLeaveInput) => http.post<DoctorLeave>(`/doctors/${id}/leaves`, input),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: doctorKeys.leaves(id) })
+      qc.invalidateQueries({ queryKey: doctorKeys.slots() })
+    },
+  })
+}
+
+/** Cancel a leave; its slots become bookable again. */
+export function useDeleteLeave(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (leaveId: string) => http.delete<void>(`/doctors/${id}/leaves/${leaveId}`),
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: doctorKeys.leaves(id) })
+      qc.invalidateQueries({ queryKey: doctorKeys.slots() })
+    },
+  })
 }

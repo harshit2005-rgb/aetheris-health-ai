@@ -7,8 +7,12 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Detail, InfoCard } from '@/components/ui/detail-card'
 import { formatMoney } from '@/lib/format'
 import { useDoctor, type Qualification } from '@/api/doctors'
+import { useHospital } from '@/api/hospitals'
 import { usePermissions } from '@/hooks/usePermissions'
+import { useAuthStore } from '@/store/auth-store'
 import { DoctorActions } from './DoctorActions'
+import { DoctorLeaves } from './schedule/DoctorLeaves'
+import { WeeklyAvailability } from './schedule/WeeklyAvailability'
 
 function initials(name: string): string {
   return name
@@ -37,6 +41,8 @@ function qualificationList(items: Qualification[]): string {
 export default function DoctorDetailPage() {
   const { doctorId } = useParams<{ doctorId: string }>()
   const { can } = usePermissions()
+  const userId = useAuthStore((s) => s.user?.id)
+  const { data: hospital } = useHospital()
   // A deactivated doctor is a 404 by default, and this is the page it is
   // reactivated from.
   const { data: doctor, isError, refetch } = useDoctor(doctorId, { includeInactive: true })
@@ -78,6 +84,10 @@ export default function DoctorDetailPage() {
 
   const quals = qualificationList(doctor.qualifications)
   const inactive = doctor.status === 'inactive'
+  // Module spec §3: an admin (doctor.update) manages every doctor's schedule;
+  // a doctor, only their own. The server enforces the same rule.
+  const mayManageThisSchedule = !inactive && (can('doctor.update') || doctor.user_id === userId)
+  const timeZone = hospital?.timezone ?? 'Asia/Kolkata'
 
   return (
     <div className="w-full space-y-6">
@@ -127,6 +137,20 @@ export default function DoctorDetailPage() {
           </div>
         </InfoCard>
       )}
+
+      {can('doctor.availability.read') && (
+        <WeeklyAvailability
+          doctorId={doctor.id}
+          canEdit={mayManageThisSchedule && can('doctor.availability.update')}
+        />
+      )}
+
+      <DoctorLeaves
+        doctorId={doctor.id}
+        doctorName={doctor.full_name}
+        timeZone={timeZone}
+        canEdit={mayManageThisSchedule && can('doctor.leave.create') && can('doctor.leave.delete')}
+      />
 
       {doctor.bio && (
         <section className="neo-extruded bg-surface rounded-2xl p-6">
