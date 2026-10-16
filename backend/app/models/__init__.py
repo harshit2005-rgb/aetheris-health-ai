@@ -44,6 +44,7 @@ from app.models.doctor import (
     SlotStatus,
 )
 from app.models.hospital import Hospital
+from app.models.hospital_working_hours import HospitalWorkingHours
 from app.models.inventory import (
     InventoryItem,
     InventoryLocation,
@@ -126,6 +127,7 @@ __all__ = [
     "UUIDPrimaryKeyMixin",
     # Identity
     "Hospital",
+    "HospitalWorkingHours",
     "PasswordResetToken",
     "Permission",
     "RefreshToken",

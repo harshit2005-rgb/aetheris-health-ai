@@ -637,3 +637,142 @@ class TestFeatureFlags:
 
         assert response.status_code == 403
         assert response.json()["message"] == "Account is not active."
+
+
+class TestWorkingHours:
+    """``GET`` / ``PUT /hospitals/current/working-hours`` (module spec §8, §9, §11)."""
+
+    URL = "/api/v1/hospitals/current/working-hours"
+
+    WEEK: dict[str, Any] = {
+        "days": [
+            {"day_of_week": 0, "open_time": "09:00:00", "close_time": "18:00:00"},
+            {"day_of_week": 5, "open_time": "09:00:00", "close_time": "13:00:00"},
+            {"day_of_week": 6},
+            {"day_of_week": 3, "is_24h": True},
+        ]
+    }
+
+    async def test_put_replaces_the_week_and_anyone_in_the_hospital_reads_it(
+        self, api: AsyncClient, admin: dict[str, str], no_settings: dict[str, str]
+    ) -> None:
+        put = await api.put(self.URL, json=self.WEEK, headers=admin)
+
+        assert put.status_code == 200, put.text
+        expected = [
+            {"day_of_week": 0, "is_24h": False, "open_time": "09:00:00", "close_time": "18:00:00"},
+            {"day_of_week": 3, "is_24h": True, "open_time": None, "close_time": None},
+            {"day_of_week": 5, "is_24h": False, "open_time": "09:00:00", "close_time": "13:00:00"},
+            {"day_of_week": 6, "is_24h": False, "open_time": None, "close_time": None},
+        ]
+        assert put.json()["data"] == expected
+        # Any signed-in member reads it: reception shows it, the app may too.
+        got = await api.get(self.URL, headers=no_settings)
+        assert got.status_code == 200
+        assert got.json()["data"] == expected
+
+    async def test_put_is_a_full_replace(self, api: AsyncClient, admin: dict[str, str]) -> None:
+        await api.put(self.URL, json=self.WEEK, headers=admin)
+
+        again = await api.put(
+            self.URL,
+            json={"days": [{"day_of_week": 1, "open_time": "10:00:00", "close_time": "16:00:00"}]},
+            headers=admin,
+        )
+
+        assert [d["day_of_week"] for d in again.json()["data"]] == [1]
+        cleared = await api.put(self.URL, json={"days": []}, headers=admin)
+        assert cleared.json()["data"] == []
+
+    async def test_a_new_hospital_has_no_hours_set(
+        self, api: AsyncClient, admin: dict[str, str]
+    ) -> None:
+        response = await api.get(self.URL, headers=admin)
+
+        assert response.status_code == 200
+        assert response.json()["data"] == []
+
+    async def test_the_change_is_audited_with_the_week_before_and_after(
+        self,
+        api: AsyncClient,
+        admin: dict[str, str],
+        db_session: AsyncSession,
+        hospital_id: uuid.UUID,
+    ) -> None:
+        from sqlalchemy import select
+
+        from app.models.audit_log import AuditLog
+
+        await api.put(self.URL, json=self.WEEK, headers=admin)
+        # The same week again changes nothing, so it is not audited twice.
+        await api.put(self.URL, json=self.WEEK, headers=admin)
+
+        result = await db_session.execute(
+            select(AuditLog).where(
+                AuditLog.hospital_id == hospital_id,
+                AuditLog.action == "settings.working_hours_updated",
+            )
+        )
+        entries = result.scalars().all()
+        assert len(entries) == 1
+        assert entries[0].actor_user_id is not None
+
+    @pytest.mark.parametrize(
+        "day",
+        [
+            {"day_of_week": 0, "open_time": "18:00:00", "close_time": "09:00:00"},
+            {"day_of_week": 0, "open_time": "09:00:00", "close_time": "09:00:00"},
+            {"day_of_week": 0, "open_time": "09:00:00"},
+            {"day_of_week": 0, "is_24h": True, "open_time": "09:00:00", "close_time": "18:00:00"},
+            {"day_of_week": 7},
+            {"day_of_week": 0, "notes": "x"},
+        ],
+    )
+    async def test_an_impossible_day_is_refused(
+        self, api: AsyncClient, admin: dict[str, str], day: dict[str, Any]
+    ) -> None:
+        response = await api.put(self.URL, json={"days": [day]}, headers=admin)
+
+        assert response.status_code == 422
+
+    async def test_a_day_given_twice_is_refused(
+        self, api: AsyncClient, admin: dict[str, str]
+    ) -> None:
+        response = await api.put(
+            self.URL,
+            json={"days": [{"day_of_week": 2}, {"day_of_week": 2, "is_24h": True}]},
+            headers=admin,
+        )
+
+        assert response.status_code == 422
+
+    async def test_changing_needs_settings_update(
+        self, api: AsyncClient, reader: dict[str, str]
+    ) -> None:
+        response = await api.put(self.URL, json=self.WEEK, headers=reader)
+
+        assert response.status_code == 403
+
+    async def test_no_token_is_401(self, api: AsyncClient) -> None:
+        assert (await api.get(self.URL)).status_code == 401
+        assert (await api.put(self.URL, json=self.WEEK)).status_code == 401
+
+    async def test_another_hospitals_hours_are_its_own(
+        self,
+        api: AsyncClient,
+        admin: dict[str, str],
+        db_session: AsyncSession,
+        other_hospital_id: uuid.UUID,
+    ) -> None:
+        await api.put(self.URL, json=self.WEEK, headers=admin)
+        other = _auth_header(
+            await _make_user(db_session, other_hospital_id, ["settings.read", "settings.update"]),
+            other_hospital_id,
+        )
+
+        theirs = await api.get(self.URL, headers=other)
+        assert theirs.json()["data"] == []
+        # And replacing theirs leaves ours alone.
+        await api.put(self.URL, json={"days": []}, headers=other)
+        ours = await api.get(self.URL, headers=admin)
+        assert len(ours.json()["data"]) == 4

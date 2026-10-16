@@ -36,6 +36,7 @@ from app.repositories import (
     DepartmentRepository,
     DoctorRepository,
     HospitalRepository,
+    HospitalWorkingHoursRepository,
     InventoryPurchaseOrderRepository,
     InventoryRepository,
     InvoiceNumberSequenceRepository,
@@ -77,6 +78,11 @@ def get_audit_log_repository(session: DbSession) -> AuditLogRepository:
 def get_hospital_repository(session: DbSession) -> HospitalRepository:
     """Provide a :class:`HospitalRepository` bound to the request session."""
     return HospitalRepository(session)
+
+
+def get_hospital_working_hours_repository(session: DbSession) -> HospitalWorkingHoursRepository:
+    """Provide a :class:`HospitalWorkingHoursRepository` bound to the request session."""
+    return HospitalWorkingHoursRepository(session)
 
 
 def get_user_repository(session: DbSession) -> UserRepository:

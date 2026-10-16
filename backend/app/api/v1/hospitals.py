@@ -32,7 +32,9 @@ from app.schemas.hospital import (
     FeatureFlagsResponse,
     HospitalPublicResponse,
     HospitalSettingsResponse,
+    SetWorkingHoursRequest,
     UpdateHospitalSettingsRequest,
+    WorkingHoursDayResponse,
 )
 from app.services.hospital_service import HospitalService
 
@@ -156,4 +158,56 @@ async def update_current_hospital(
     data = HospitalSettingsResponse.model_validate(hospital)
     return SuccessResponse[HospitalSettingsResponse](
         message="Hospital settings updated.", data=data
+    )
+
+
+@router.get(
+    "/current/working-hours",
+    response_model=SuccessResponse[list[WorkingHoursDayResponse]],
+    summary="Get my hospital's opening hours",
+    description=(
+        "One entry per day that has one, Monday (0) first: open between two "
+        "wall-clock times, open all day (`is_24h`), or closed (no times). A day "
+        "with no entry has not been set. Any signed-in member of the hospital "
+        "may read it."
+    ),
+    responses={200: {"description": "Opening hours returned."}, **_COMMON_RESPONSES},
+)
+async def get_working_hours(
+    current_user: User = Depends(get_current_user),
+    service: HospitalService = Depends(get_hospital_service),
+) -> SuccessResponse[list[WorkingHoursDayResponse]]:
+    """Read the caller's hospital's opening hours (module spec §9)."""
+    rows = await service.get_working_hours(_tenant_of(current_user))
+    return SuccessResponse[list[WorkingHoursDayResponse]](
+        message="Working hours retrieved.",
+        data=[WorkingHoursDayResponse.model_validate(row) for row in rows],
+    )
+
+
+@router.put(
+    "/current/working-hours",
+    response_model=SuccessResponse[list[WorkingHoursDayResponse]],
+    summary="Replace my hospital's opening hours",
+    description=(
+        "Replace the whole week (module spec §9): what is sent becomes the "
+        "complete set of entries, and a day left out has none. Each day is open "
+        "between two times (`close_time` after `open_time`), open all day "
+        "(`is_24h` with no times) or closed (no times); a day may appear once. "
+        "Recorded in the audit trail with the week before and after."
+    ),
+    responses={200: {"description": "Opening hours replaced."}, **_COMMON_RESPONSES},
+)
+async def set_working_hours(
+    payload: SetWorkingHoursRequest,
+    current_user: User = Depends(require_permission("settings.update")),
+    service: HospitalService = Depends(get_hospital_service),
+) -> SuccessResponse[list[WorkingHoursDayResponse]]:
+    """Replace the caller's hospital's opening hours (module spec §9)."""
+    rows = await service.set_working_hours(
+        _tenant_of(current_user), payload, actor_id=current_user.id
+    )
+    return SuccessResponse[list[WorkingHoursDayResponse]](
+        message="Working hours updated.",
+        data=[WorkingHoursDayResponse.model_validate(row) for row in rows],
     )

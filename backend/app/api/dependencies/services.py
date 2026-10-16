@@ -48,6 +48,7 @@ from app.api.dependencies.repositories import (  # noqa: F401
     get_department_repository,
     get_doctor_repository,
     get_hospital_repository,
+    get_hospital_working_hours_repository,
     get_inventory_po_repository,
     get_inventory_repository,
     get_invoice_number_sequence_repository,
@@ -80,6 +81,7 @@ from app.repositories import (
     DepartmentRepository,
     DoctorRepository,
     HospitalRepository,
+    HospitalWorkingHoursRepository,
     InventoryPurchaseOrderRepository,
     InventoryRepository,
     InvoiceNumberSequenceRepository,
@@ -203,13 +205,18 @@ def get_notifier(
 # ── Hospital settings module ─────────────────────────────────────────────────
 def get_hospital_service(
     hospitals: HospitalRepository = Depends(get_hospital_repository),
+    working_hours: HospitalWorkingHoursRepository = Depends(get_hospital_working_hours_repository),
     uow: UnitOfWork = Depends(get_unit_of_work),
     audit: AuditSink = Depends(get_audit_sink),
     runtime: AIRuntime = Depends(provide_ai_runtime),
 ) -> HospitalService:
     """Provide a :class:`HospitalService` composed with its dependencies."""
     return HospitalService(
-        hospitals=hospitals, uow=uow, audit=audit, ai_configured=runtime.status.configured
+        hospitals=hospitals,
+        uow=uow,
+        audit=audit,
+        ai_configured=runtime.status.configured,
+        working_hours=working_hours,
     )
 
 

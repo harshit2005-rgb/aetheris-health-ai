@@ -18,8 +18,12 @@ from app.schemas.hospital import FeatureFlagsResponse, FeatureFlagState
 if TYPE_CHECKING:
     from app.database.unit_of_work import UnitOfWork
     from app.models.hospital import Hospital
+    from app.models.hospital_working_hours import HospitalWorkingHours
     from app.repositories.hospital_repository import HospitalRepository
-    from app.schemas.hospital import UpdateHospitalSettingsRequest
+    from app.repositories.hospital_working_hours_repository import (
+        HospitalWorkingHoursRepository,
+    )
+    from app.schemas.hospital import SetWorkingHoursRequest, UpdateHospitalSettingsRequest
 
 __all__ = ["HospitalService"]
 
@@ -34,6 +38,8 @@ class HospitalService:
     :param ai_configured: Whether this server is configured to serve AI
         features. Decides, with the hospital's flag, what the capability read
         reports.
+    :param working_hours: The hospital's opening hours. Needed only by the
+        working-hours methods.
     """
 
     def __init__(
@@ -43,11 +49,13 @@ class HospitalService:
         audit: AuditSink,
         *,
         ai_configured: bool = False,
+        working_hours: HospitalWorkingHoursRepository | None = None,
     ) -> None:
         self._hospitals = hospitals
         self._uow = uow
         self._audit = audit
         self._ai_configured = ai_configured
+        self._working_hours = working_hours
 
     async def get_current(self, hospital_id: uuid.UUID) -> Hospital:
         """Return the caller's hospital.
@@ -144,3 +152,71 @@ class HospitalService:
         )
         await self._uow.commit()
         return hospital
+
+    # ── Working hours (§8, §9) ─────────────────────────────────────────────────
+
+    def _hours(self) -> HospitalWorkingHoursRepository:
+        if self._working_hours is None:  # pragma: no cover — wiring error, not a request error
+            msg = "HospitalService was built without a working-hours repository."
+            raise RuntimeError(msg)
+        return self._working_hours
+
+    async def get_working_hours(self, hospital_id: uuid.UUID) -> list[HospitalWorkingHours]:
+        """The caller's hospital's opening hours, Monday first.
+
+        :param hospital_id: Tenant to read.
+        :returns: One row per day that has an entry.
+        :raises NotFoundError: If the hospital does not exist or is inactive.
+        """
+        await self.get_current(hospital_id)
+        return await self._hours().list_for_hospital(hospital_id)
+
+    async def set_working_hours(
+        self,
+        hospital_id: uuid.UUID,
+        payload: SetWorkingHoursRequest,
+        *,
+        actor_id: uuid.UUID,
+    ) -> list[HospitalWorkingHours]:
+        """Replace the caller's hospital's week of opening hours (§9).
+
+        Atomic with its audit entry, which carries the week before and after.
+
+        :param hospital_id: Tenant to update.
+        :param payload: The whole week, validated.
+        :param actor_id: User making the change.
+        :returns: The stored week, Monday first.
+        :raises NotFoundError: If the hospital does not exist or is inactive.
+        """
+        await self.get_current(hospital_id)
+        repository = self._hours()
+        before = [_describe_day(row) for row in await repository.list_for_hospital(hospital_id)]
+        rows = await repository.replace_for_hospital(
+            hospital_id,
+            [day.model_dump() for day in sorted(payload.days, key=lambda day: day.day_of_week)],
+            actor_id=actor_id,
+        )
+        after = [_describe_day(row) for row in rows]
+        if before != after:
+            await self._audit.record(
+                AuditEvent(
+                    action="settings.working_hours_updated",
+                    hospital_id=hospital_id,
+                    target_type="hospital",
+                    target_id=hospital_id,
+                    actor_id=actor_id,
+                    changes={"working_hours": {"before": before, "after": after}},
+                )
+            )
+        await self._uow.commit()
+        return rows
+
+
+def _describe_day(row: HospitalWorkingHours) -> dict[str, object]:
+    """One day as plain JSON for the audit trail."""
+    return {
+        "day_of_week": row.day_of_week,
+        "is_24h": row.is_24h,
+        "open_time": row.open_time.isoformat() if row.open_time else None,
+        "close_time": row.close_time.isoformat() if row.close_time else None,
+    }

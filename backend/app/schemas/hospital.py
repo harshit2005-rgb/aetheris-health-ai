@@ -12,7 +12,7 @@ from __future__ import annotations
 
 # NOTE: ``datetime``/``UUID`` must be imported at runtime, not under
 # TYPE_CHECKING — Pydantic resolves annotations against the module globals.
-from datetime import datetime  # noqa: TC003
+from datetime import datetime, time  # noqa: TC003
 from typing import Any, Self  # noqa: TC003
 from uuid import UUID  # noqa: TC003
 
@@ -23,7 +23,10 @@ __all__ = [
     "FeatureFlagsResponse",
     "HospitalPublicResponse",
     "HospitalSettingsResponse",
+    "SetWorkingHoursRequest",
     "UpdateHospitalSettingsRequest",
+    "WorkingHoursDay",
+    "WorkingHoursDayResponse",
 ]
 
 #: Update fields whose columns are ``NOT NULL``. Declared optional so a PATCH
@@ -188,3 +191,80 @@ class FeatureFlagsResponse(BaseModel):
     flags: dict[str, FeatureFlagState] = Field(
         description="Only the well-known flag keys; never other hospital settings."
     )
+
+
+# ── Working hours (§8 ``hospital_working_hours``, §9, §11) ───────────────────
+
+
+class WorkingHoursDay(BaseModel):
+    """One day of the hospital's week: open between two times, open all day, or closed.
+
+    ``is_24h`` with no times is open all day; no times and not ``is_24h`` is
+    closed; otherwise both times are given and ``close_time`` is after
+    ``open_time`` (§11). Times are the hospital's wall clock.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    day_of_week: int = Field(ge=0, le=6, description="0=Monday .. 6=Sunday.")
+    is_24h: bool = Field(default=False, description="Open all day.")
+    open_time: time | None = Field(
+        default=None, description="Opening time. Null when closed or all day."
+    )
+    close_time: time | None = Field(
+        default=None, description="Closing time. Null when closed or all day."
+    )
+
+    @model_validator(mode="after")
+    def _check_shape(self) -> Self:
+        """Enforce the three shapes the table allows (§11)."""
+        times = (self.open_time, self.close_time)
+        if self.is_24h:
+            if times != (None, None):
+                msg = "A day open all day has no opening or closing time."
+                raise ValueError(msg)
+        elif (self.open_time is None) != (self.close_time is None):
+            msg = "Give both an opening and a closing time, or neither for a closed day."
+            raise ValueError(msg)
+        elif (
+            self.open_time is not None
+            and self.close_time is not None
+            and self.close_time <= self.open_time
+        ):
+            msg = "close_time must be after open_time."
+            raise ValueError(msg)
+        return self
+
+
+class SetWorkingHoursRequest(BaseModel):
+    """Body of ``PUT /hospitals/current/working-hours``: the whole week, replacing what is stored.
+
+    A day left out has no entry, which the app shows as "not set"; send it
+    with no times to mark it closed.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    days: list[WorkingHoursDay] = Field(
+        default_factory=list, max_length=7, description="Up to one entry per day."
+    )
+
+    @model_validator(mode="after")
+    def _one_entry_per_day(self) -> Self:
+        """Refuse a day given twice: the table holds one row per day."""
+        seen = [day.day_of_week for day in self.days]
+        if len(seen) != len(set(seen)):
+            msg = "Each day of the week may appear only once."
+            raise ValueError(msg)
+        return self
+
+
+class WorkingHoursDayResponse(BaseModel):
+    """One stored day of the hospital's week."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    day_of_week: int = Field(description="0=Monday .. 6=Sunday.")
+    is_24h: bool = Field(description="Open all day.")
+    open_time: time | None = Field(description="Opening time, or null.")
+    close_time: time | None = Field(description="Closing time, or null.")
