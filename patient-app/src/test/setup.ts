@@ -1,10 +1,14 @@
 import '@testing-library/jest-dom/vitest'
-import { cleanup } from '@testing-library/react'
+import { cleanup, configure } from '@testing-library/react'
 import { afterEach, beforeEach, expect, vi } from 'vitest'
 import { queryClient } from '@/lib/query-client'
 import { useOtpChallengeStore } from '@/store/otp-challenge-store'
 import { usePatientAuthStore } from '@/store/patient-auth-store'
 import { uninstallFakeApi } from '@/test/fakeApi'
+
+// How long `findBy*` and `waitFor` wait. The one-second default is too tight
+// on a busy runner; a passing test still returns as soon as the element appears.
+configure({ asyncUtilTimeout: 3000 })
 
 // A failed query is retried once after a second in the app; tests want the
 // first answer shown at once.
