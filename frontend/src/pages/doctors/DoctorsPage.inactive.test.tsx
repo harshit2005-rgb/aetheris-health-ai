@@ -200,6 +200,22 @@ describe('inactive doctors in the directory', () => {
     expect(await screen.findByText('No matches')).toBeInTheDocument()
   })
 
+  it('keeps the page a "Next" click chose straight after loading', async () => {
+    // The search box waits 300 ms before it searches. That wait also runs once
+    // on mount, with nothing typed, and used to send the patient back to page 1.
+    totalPages = 3
+    const user = userEvent.setup()
+    renderDirectory(ADMIN)
+    await row('Priya Sharma')
+
+    await user.click(screen.getByRole('button', { name: 'Next' }))
+    expect(await screen.findByText('Page 2 of 3')).toBeInTheDocument()
+    await new Promise((resolve) => setTimeout(resolve, 400))
+
+    expect(screen.getByText('Page 2 of 3')).toBeInTheDocument()
+    expect(lastList()?.params).toEqual({ page: 2, page_size: 25 })
+  })
+
   it('goes back to the first page when the control is switched, either way', async () => {
     totalPages = 3
     const user = userEvent.setup()

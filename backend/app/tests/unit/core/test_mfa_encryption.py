@@ -265,7 +265,13 @@ class TestKeyConfiguration:
 
     @pytest.mark.parametrize(
         "bad_key",
-        ["too-short", "x" * 44, Fernet.generate_key().decode()[:-2], "not base64 at all !!"],
+        [
+            "too-short",
+            "x" * 44,
+            # Random each run: a stable id keeps the test name the same in every xdist worker.
+            pytest.param(Fernet.generate_key().decode()[:-2], id="truncated-fernet-key"),
+            "not base64 at all !!",
+        ],
     )
     def test_a_malformed_key_is_rejected_at_startup(self, bad_key: str) -> None:
         with pytest.raises(ValidationError, match="MFA_ENCRYPTION_KEY must be a Fernet key"):

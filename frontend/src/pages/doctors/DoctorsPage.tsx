@@ -17,10 +17,12 @@ const ALL = 'all'
 
 export default function DoctorsPage() {
   const [searchInput, setSearchInput] = useState('')
-  const [q, setQ] = useState('')
+  // The term and the page change together: a new term starts at page 1 in the
+  // same request, as on the Medicines and Items pages.
+  const [{ q, page }, setQuery] = useState({ q: '', page: 1 })
   const [department, setDepartment] = useState<string>(ALL)
   const [includeInactive, setIncludeInactive] = useState(false)
-  const [page, setPage] = useState(1)
+  const setPage = (next: number) => setQuery((current) => ({ ...current, page: next }))
   const { can } = usePermissions()
   // A deactivated doctor is left out of the directory. Only someone who can
   // reactivate or otherwise manage doctors has a reason to look for one.
@@ -28,8 +30,11 @@ export default function DoctorsPage() {
 
   useEffect(() => {
     const t = setTimeout(() => {
-      setQ(searchInput.trim())
-      setPage(1)
+      const term = searchInput.trim()
+      // Only a new term goes back to page 1. The timer also fires once on
+      // mount with nothing typed: resetting the page then sent a "Next" click
+      // made in the first 300 ms straight back to page 1.
+      setQuery((current) => (current.q === term ? current : { q: term, page: 1 }))
     }, 300)
     return () => clearTimeout(t)
   }, [searchInput])
