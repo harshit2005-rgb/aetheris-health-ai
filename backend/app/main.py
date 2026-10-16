@@ -20,6 +20,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import DBAPIError
 
 from app.api.v1 import (
+    admin_hospital_router,
     appointment_router,
     audit_router,
     auth_router,
@@ -206,6 +207,12 @@ def _register_routers(app: FastAPI) -> None:
     # Hospital settings routes (Hospital Settings module §9)
     app.include_router(
         hospital_router,
+        prefix=API_V1_PREFIX,
+    )
+
+    # Platform: provisioning hospitals (Hospital Settings module §5)
+    app.include_router(
+        admin_hospital_router,
         prefix=API_V1_PREFIX,
     )
 

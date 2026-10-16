@@ -5,7 +5,7 @@
 # npm (Hospital frontend, Patient App). Run `make help` for the full list.
 # ──────────────────────────────────────────────────────────────────────────────
 
-.PHONY: help up down logs migrate seed test lint format dev \
+.PHONY: help up down logs migrate seed provision-hospital test lint format dev \
         frontend-dev frontend-test frontend-lint frontend-build backend-test \
         backend-lint patient-dev patient-test patient-lint patient-build
 
@@ -29,6 +29,17 @@ migrate: ## Apply all pending Alembic migrations
 
 seed: ## Seed the database with demo data (hospital, admin, sample users)
 	cd backend && uv run python -m app.seeds.seed
+
+# Onboard a clinic: make provision-hospital name="City Care Clinic" slug=city-care \
+#   admin_email=owner@citycare.in admin_first=Asha admin_last=Rao [city=Hyderabad state=Telangana ...]
+provision-hospital: ## Create a hospital and email its first admin an invitation
+	cd backend && uv run python -m app.cli.provision_hospital \
+		--name "$(name)" --slug "$(slug)" \
+		--admin-email "$(admin_email)" --admin-first "$(admin_first)" --admin-last "$(admin_last)" \
+		$(if $(email),--email "$(email)") $(if $(phone),--phone "$(phone)") \
+		$(if $(line1),--line1 "$(line1)") $(if $(city),--city "$(city)") \
+		$(if $(state),--state "$(state)") $(if $(postal_code),--postal-code "$(postal_code)") \
+		$(if $(timezone),--timezone "$(timezone)") $(if $(currency),--currency "$(currency)")
 
 # ── Backend ──────────────────────────────────────────────────────────────────
 

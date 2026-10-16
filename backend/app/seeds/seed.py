@@ -184,6 +184,8 @@ PERMISSION_DEFINITIONS: list[tuple[str, str, str]] = [
     ("doctor.availability.update", "doctor", "Set doctor availability"),
     ("doctor.leave.create", "doctor", "Record doctor leave"),
     ("doctor.leave.delete", "doctor", "Cancel doctor leave"),
+    # Platform (docs/modules/14-hospital-settings.md §10): Super Admin only.
+    ("platform.hospital.provision", "platform", "Create new hospitals"),
 ]
 
 # ── System Role Definitions ─────────────────────────────────────────────────
@@ -194,6 +196,9 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
         "Super Admin",
         "Platform-wide access. Created per-hospital for local management.",
         [
+            # Creating hospitals crosses tenants, so it is a platform code that
+            # no hospital role holds, and so no hospital admin can grant it.
+            "platform.hospital.provision",
             # Every role reads its own notifications (module spec 11 §3).
             "notification.read.own",
             "notification.preference.update.own",

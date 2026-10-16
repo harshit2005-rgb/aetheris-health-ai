@@ -120,6 +120,7 @@ from app.services.doctor_service import (
     DoctorDepartmentUsageSource,
     DoctorService,
 )
+from app.services.hospital_provisioning_service import HospitalProvisioningService
 from app.services.hospital_service import HospitalService
 from app.services.inventory_po_service import InventoryPurchaseOrderService
 from app.services.inventory_service import InventoryService
@@ -269,6 +270,16 @@ def get_user_service(
         password_reset_repo=password_reset_repo,
         notifier=notifier,
     )
+
+
+def get_hospital_provisioning_service(
+    hospitals: HospitalRepository = Depends(get_hospital_repository),
+    roles: RoleRepository = Depends(get_role_repository),
+    users: UserService = Depends(get_user_service),
+    audit: AuditSink = Depends(get_audit_sink),
+) -> HospitalProvisioningService:
+    """Provide a :class:`HospitalProvisioningService` composed with its dependencies."""
+    return HospitalProvisioningService(hospitals=hospitals, roles=roles, users=users, audit=audit)
 
 
 # ── Roles & Permissions module ────────────────────────────────────────────────

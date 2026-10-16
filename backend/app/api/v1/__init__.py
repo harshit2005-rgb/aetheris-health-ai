@@ -4,6 +4,7 @@ Versioned via URL prefix ``/api/v1``.
 See :mod:`app.main` for router registration.
 """
 
+from app.api.v1.admin_hospitals import router as admin_hospital_router
 from app.api.v1.appointments import router as appointment_router
 from app.api.v1.audit import router as audit_router
 from app.api.v1.auth import router as auth_router
@@ -37,6 +38,7 @@ __all__ = [
     "department_router",
     "doctor_router",
     "health_router",
+    "admin_hospital_router",
     "hospital_router",
     "inventory_router",
     "invoice_router",

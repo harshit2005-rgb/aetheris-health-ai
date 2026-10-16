@@ -176,6 +176,8 @@ export type Permission =
   // Audit
   | 'audit.read'
   | 'audit.export'
+  // Platform (Super Admin only): creating hospitals
+  | 'platform.hospital.provision'
   // Client-only pseudo-code (see docstring above)
   | 'dashboard.view'
 
@@ -225,6 +227,7 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'settings.read', 'settings.update',
     'department.read', 'department.create', 'department.update', 'department.delete',
     'audit.read', 'audit.export',
+    'platform.hospital.provision',
   ],
   hospital_admin: [
     'notification.read.own', 'notification.preference.update.own',
