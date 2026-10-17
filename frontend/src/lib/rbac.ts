@@ -124,6 +124,9 @@ export type Permission =
   | 'lab.order.amend'
   | 'lab.report.download'
   | 'lab.ai_explain'
+  // Data import & export (docs/modules/17-data-import-export.md §10)
+  | 'data.import'
+  | 'data.export'
   // Pharmacy
   | 'pharmacy.medicine.read'
   | 'pharmacy.medicine.create'
@@ -210,6 +213,7 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'lab.order.read', 'lab.order.create', 'lab.order.cancel', 'lab.order.collect_sample',
     'lab.order.enter_results', 'lab.order.release', 'lab.order.amend',
     'lab.report.download', 'lab.ai_explain',
+    'data.import', 'data.export',
     'pharmacy.medicine.read', 'pharmacy.medicine.create', 'pharmacy.medicine.update',
     'pharmacy.batch.read', 'pharmacy.batch.create', 'pharmacy.batch.update',
     'pharmacy.prescription.read', 'pharmacy.prescription.create', 'pharmacy.dispense.execute',
@@ -250,6 +254,7 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'lab.order.read', 'lab.order.create', 'lab.order.cancel', 'lab.order.collect_sample',
     'lab.order.enter_results', 'lab.order.release', 'lab.order.amend',
     'lab.report.download', 'lab.ai_explain',
+    'data.import', 'data.export',
     'pharmacy.medicine.read', 'pharmacy.medicine.create', 'pharmacy.medicine.update',
     'pharmacy.batch.read', 'pharmacy.batch.create', 'pharmacy.batch.update',
     'pharmacy.prescription.read', 'pharmacy.prescription.create', 'pharmacy.dispense.execute',

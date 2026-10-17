@@ -1,4 +1,4 @@
-import { FileClock, Hospital, Settings as SettingsIcon } from 'lucide-react'
+import { Database, FileClock, Hospital, Settings as SettingsIcon } from 'lucide-react'
 import PageHeader from '@/components/layout/PageHeader'
 import { EmptyState } from '@/components/ui/empty-state'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -6,6 +6,7 @@ import { usePermissions } from '@/hooks/usePermissions'
 import { HospitalSettingsTab } from './HospitalSettingsTab'
 import { WorkingHoursCard } from './WorkingHoursCard'
 import { AuditLogTab } from './AuditLogTab'
+import { DataImportCard } from './DataImportCard'
 
 /**
  * Settings shell (module 14 §12, module 12 §12).
@@ -19,6 +20,8 @@ export default function SettingsPage() {
   const { can } = usePermissions()
   const showHospital = can('settings.read')
   const showAudit = can('audit.read')
+  // Data tab: import (docs/modules/17-data-import-export.md §12). Admins only.
+  const showData = showHospital && can('data.import')
 
   return (
     <div className="w-full">
@@ -44,6 +47,11 @@ export default function SettingsPage() {
                 <Hospital className="size-4" /> Hospital
               </TabsTrigger>
             )}
+            {showData && (
+              <TabsTrigger value="data">
+                <Database className="size-4" /> Data
+              </TabsTrigger>
+            )}
             {showAudit && (
               <TabsTrigger value="audit">
                 <FileClock className="size-4" /> Audit log
@@ -55,6 +63,11 @@ export default function SettingsPage() {
             <TabsContent value="hospital" className="space-y-6">
               <HospitalSettingsTab />
               <WorkingHoursCard />
+            </TabsContent>
+          )}
+          {showData && (
+            <TabsContent value="data" className="space-y-6">
+              <DataImportCard />
             </TabsContent>
           )}
           {showAudit && (

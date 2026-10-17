@@ -29,6 +29,7 @@ from app.api.v1 import (
     doctor_router,
     health_router,
     hospital_router,
+    import_router,
     inventory_router,
     invoice_router,
     lab_order_router,
@@ -243,6 +244,9 @@ def _register_routers(app: FastAPI) -> None:
         invoice_router,
         prefix=API_V1_PREFIX,
     )
+
+    # Data import — spreadsheets into patients and the catalogs
+    app.include_router(import_router, prefix=API_V1_PREFIX)
 
     # Laboratory routes — test catalog and lab orders
     app.include_router(
