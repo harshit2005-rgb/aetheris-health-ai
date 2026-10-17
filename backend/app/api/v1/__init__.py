@@ -8,6 +8,8 @@ from app.api.v1.admin_hospitals import router as admin_hospital_router
 from app.api.v1.appointments import router as appointment_router
 from app.api.v1.audit import router as audit_router
 from app.api.v1.auth import router as auth_router
+from app.api.v1.consultations import appointment_router as consultation_appointment_router
+from app.api.v1.consultations import router as consultation_router
 from app.api.v1.departments import router as department_router
 from app.api.v1.doctors import router as doctor_router
 from app.api.v1.health import router as health_router
@@ -34,6 +36,8 @@ __all__ = [
     "appointment_router",
     "audit_router",
     "auth_router",
+    "consultation_appointment_router",
+    "consultation_router",
     "dashboard_router",
     "department_router",
     "doctor_router",

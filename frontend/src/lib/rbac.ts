@@ -124,6 +124,10 @@ export type Permission =
   | 'lab.order.amend'
   | 'lab.report.download'
   | 'lab.ai_explain'
+  // Consultation (docs/modules/16-consultation.md §10)
+  | 'consultation.read'
+  | 'consultation.write'
+  | 'consultation.vitals.record'
   // Pharmacy
   | 'pharmacy.medicine.read'
   | 'pharmacy.medicine.create'
@@ -210,6 +214,8 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'lab.order.read', 'lab.order.create', 'lab.order.cancel', 'lab.order.collect_sample',
     'lab.order.enter_results', 'lab.order.release', 'lab.order.amend',
     'lab.report.download', 'lab.ai_explain',
+    // Holding write lets an admin grant the Doctor role; only the visit's own doctor can write a note.
+    'consultation.read', 'consultation.write', 'consultation.vitals.record',
     'pharmacy.medicine.read', 'pharmacy.medicine.create', 'pharmacy.medicine.update',
     'pharmacy.batch.read', 'pharmacy.batch.create', 'pharmacy.batch.update',
     'pharmacy.prescription.read', 'pharmacy.prescription.create', 'pharmacy.dispense.execute',
@@ -250,6 +256,8 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'lab.order.read', 'lab.order.create', 'lab.order.cancel', 'lab.order.collect_sample',
     'lab.order.enter_results', 'lab.order.release', 'lab.order.amend',
     'lab.report.download', 'lab.ai_explain',
+    // Holding write lets an admin grant the Doctor role; only the visit's own doctor can write a note.
+    'consultation.read', 'consultation.write', 'consultation.vitals.record',
     'pharmacy.medicine.read', 'pharmacy.medicine.create', 'pharmacy.medicine.update',
     'pharmacy.batch.read', 'pharmacy.batch.create', 'pharmacy.batch.update',
     'pharmacy.prescription.read', 'pharmacy.prescription.create', 'pharmacy.dispense.execute',
@@ -291,6 +299,7 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'invoice.read.own',
     'lab.test.read', 'lab.order.read', 'lab.order.create', 'lab.order.cancel',
     'pharmacy.medicine.read', 'pharmacy.prescription.read', 'pharmacy.prescription.create',
+    'consultation.read', 'consultation.write', 'consultation.vitals.record',
     // The doctor's own dashboard only; it opens no report.
     'report.doctor.read',
     'department.read', 'doctor.read', 'doctor.availability.read', 'doctor.availability.update',
@@ -302,6 +311,7 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'patient.read', 'patient.update',
     'appointment.read', 'appointment.check_in',
     'lab.order.read',
+    'consultation.read', 'consultation.vitals.record',
     // Module spec 09 §3: ward staff view local stock and record what they use.
     'inventory.item.read', 'inventory.location.read', 'inventory.stock.read', 'inventory.consume',
     'department.read', 'doctor.read', 'doctor.availability.read',

@@ -33,6 +33,7 @@ from app.repositories import (
     AppointmentRepository,
     AuditLogRepository,
     AuthThrottleRepository,
+    ConsultationRepository,
     DepartmentRepository,
     DoctorRepository,
     HospitalRepository,
@@ -200,6 +201,11 @@ def get_invoice_number_sequence_repository(
 def get_lab_test_repository(session: DbSession) -> LabTestRepository:
     """Provide a :class:`LabTestRepository` bound to the request session."""
     return LabTestRepository(session)
+
+
+def get_consultation_repository(session: DbSession) -> ConsultationRepository:
+    """Provide a :class:`ConsultationRepository` bound to the request session."""
+    return ConsultationRepository(session)
 
 
 def get_lab_order_repository(session: DbSession) -> LabOrderRepository:

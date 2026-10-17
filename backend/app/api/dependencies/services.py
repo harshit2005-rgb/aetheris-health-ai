@@ -45,6 +45,7 @@ from app.api.dependencies.repositories import (  # noqa: F401
     get_appointment_repository,
     get_audit_log_repository,
     get_auth_throttle_repository,
+    get_consultation_repository,
     get_department_repository,
     get_doctor_repository,
     get_hospital_repository,
@@ -78,6 +79,7 @@ from app.repositories import (
     AppointmentRepository,
     AuditLogRepository,
     AuthThrottleRepository,
+    ConsultationRepository,
     DepartmentRepository,
     DoctorRepository,
     HospitalRepository,
@@ -113,6 +115,7 @@ from app.services.audit_service import AuditService
 from app.services.auth_service import AuthService
 from app.services.auth_throttle import AuthThrottle
 from app.services.billing_service import BillingInvoiceDraftSink, BillingService
+from app.services.consultation_service import ConsultationService
 from app.services.department_service import DepartmentService, DepartmentUsageSource
 from app.services.dispensing_service import DispensingService
 from app.services.doctor_service import (
@@ -461,6 +464,22 @@ def get_lab_service(
     """Provide a :class:`LabService` bound to the request session."""
     return LabService(
         orders, tests, appointments, session, audit, charges=charges, notifier=notifier
+    )
+
+
+# ── Consultation module ─────────────────────────────────────────────────────
+def get_consultation_service(
+    consultations: ConsultationRepository = Depends(get_consultation_repository),
+    appointments: AppointmentRepository = Depends(get_appointment_repository),
+    prescriptions: PrescriptionRepository = Depends(get_prescription_repository),
+    lab_orders: LabOrderRepository = Depends(get_lab_order_repository),
+    hospitals: HospitalRepository = Depends(get_hospital_repository),
+    session: AsyncSession = Depends(get_db_session),
+    audit: AuditSink = Depends(get_audit_sink),
+) -> ConsultationService:
+    """Provide a :class:`ConsultationService` bound to the request session."""
+    return ConsultationService(
+        consultations, appointments, prescriptions, lab_orders, hospitals, session, audit
     )
 
 

@@ -24,6 +24,8 @@ from app.api.v1 import (
     appointment_router,
     audit_router,
     auth_router,
+    consultation_appointment_router,
+    consultation_router,
     dashboard_router,
     department_router,
     doctor_router,
@@ -243,6 +245,10 @@ def _register_routers(app: FastAPI) -> None:
         invoice_router,
         prefix=API_V1_PREFIX,
     )
+
+    # Consultation (EMR) routes — the doctor's note for each visit
+    app.include_router(consultation_router, prefix=API_V1_PREFIX)
+    app.include_router(consultation_appointment_router, prefix=API_V1_PREFIX)
 
     # Laboratory routes — test catalog and lab orders
     app.include_router(

@@ -1,6 +1,7 @@
 import { useRef } from 'react'
 import { toast } from 'sonner'
-import { FlaskConical, Loader2, Pill } from 'lucide-react'
+import { Link } from 'react-router-dom'
+import { FlaskConical, Loader2, Pill, Stethoscope } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useAppointmentTransition, type AppointmentSummary } from '@/api/appointments'
 import { usePermissions } from '@/hooks/usePermissions'
@@ -12,6 +13,8 @@ import { CancelAppointmentDialog } from './CancelAppointmentDialog'
 import { MarkNoShowDialog } from './MarkNoShowDialog'
 import { RescheduleAppointmentDialog } from './RescheduleAppointmentDialog'
 import { CANCELLABLE, NEXT_STEP, NO_SHOWABLE, RESCHEDULABLE, lifecycleErrorMessage } from './lifecycle'
+
+const CONSULTABLE = new Set<AppointmentSummary['status']>(['checked_in', 'in_progress', 'completed'])
 
 /**
  * The lifecycle actions for one queue row: the next step for its status, plus
@@ -45,7 +48,10 @@ export function AppointmentActions({ appointment }: { appointment: AppointmentSu
     canPrescribeFor(appointment.status) &&
     can('pharmacy.prescription.create') &&
     can('pharmacy.medicine.read')
-  if (!next && !canCancel && !canReschedule && !canMarkNoShow && !canOrderTests && !canPrescribe) return null
+  // The doctor's note for the visit, once the patient is checked in (docs/modules/16-consultation.md §12).
+  const canConsult = CONSULTABLE.has(appointment.status) && can('consultation.read')
+  if (!next && !canCancel && !canReschedule && !canMarkNoShow && !canOrderTests && !canPrescribe && !canConsult)
+    return null
 
   async function run() {
     if (!next || busy.current) return
@@ -74,6 +80,16 @@ export function AppointmentActions({ appointment }: { appointment: AppointmentSu
         >
           {transition.isPending ? <Loader2 className="size-4 animate-spin" /> : <Icon className="size-4" />}
           {transition.isPending ? next.pendingLabel : next.label}
+        </Button>
+      )}
+      {canConsult && (
+        <Button variant="ghost" size="sm" asChild>
+          <Link
+            to={`/appointments/${appointment.id}/consultation`}
+            aria-label={`Open consultation for ${appointment.patient_name}`}
+          >
+            <Stethoscope className="size-4" /> Consultation
+          </Link>
         </Button>
       )}
       {canOrderTests && (

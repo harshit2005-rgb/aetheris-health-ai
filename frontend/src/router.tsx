@@ -32,6 +32,7 @@ const RevenueReportPage = lazy(() => import('@/pages/reports/RevenueReportPage')
 const OutstandingReportPage = lazy(() => import('@/pages/reports/OutstandingReportPage'))
 const LabOrdersPage = lazy(() => import('@/pages/laboratory/LabOrdersPage'))
 const LabOrderDetailPage = lazy(() => import('@/pages/laboratory/LabOrderDetailPage'))
+const ConsultationPage = lazy(() => import('@/pages/consultations/ConsultationPage'))
 const LabCatalogPage = lazy(() => import('@/pages/laboratory/LabCatalogPage'))
 const PharmacyIndexPage = lazy(() => import('@/pages/pharmacy/PharmacyIndexPage'))
 const PrescriptionsPage = lazy(() => import('@/pages/pharmacy/PrescriptionsPage'))
@@ -155,6 +156,14 @@ export const router = createBrowserRouter([
             ),
           },
           // Orders are listed on the worklist; a typed or shortened address lands there.
+          {
+            path: '/appointments/:appointmentId/consultation',
+            element: (
+              <RequirePermission permission="consultation.read">
+                <ConsultationPage />
+              </RequirePermission>
+            ),
+          },
           { path: '/laboratory/orders', element: <Navigate to="/laboratory" replace /> },
           {
             path: '/laboratory/orders/:orderId',
