@@ -119,6 +119,9 @@ PERMISSION_DEFINITIONS: list[tuple[str, str, str]] = [
     ("lab.order.release", "lab", "Release lab results"),
     ("lab.order.amend", "lab", "Correct a released lab result"),
     ("lab.report.download", "lab", "Download lab report PDFs"),
+    # Data import & export — docs/modules/17-data-import-export.md §10
+    ("data.import", "data", "Import patients and catalogs from spreadsheets"),
+    ("data.export", "data", "Export all of the hospital's data"),
     ("lab.ai_explain", "lab", "Request an AI explanation of lab results"),
     # Pharmacy
     ("pharmacy.medicine.read", "pharmacy", "View the medicine catalog"),
@@ -309,6 +312,8 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "doctor.leave.delete",
             "audit.read",
             "audit.export",
+            "data.import",
+            "data.export",
         ],
     ),
     (
@@ -429,6 +434,8 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "doctor.leave.create",
             "doctor.leave.delete",
             "audit.read",
+            "data.import",
+            "data.export",
         ],
     ),
     (

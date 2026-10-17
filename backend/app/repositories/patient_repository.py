@@ -331,6 +331,33 @@ class PatientRepository(BaseRepository[Patient]):
         result = await self._session.execute(stmt)
         return list(result.unique().scalars().all())
 
+    async def find_same_person(
+        self, hospital_id: uuid.UUID, *, first_name: str, last_name: str, date_of_birth: date
+    ) -> Patient | None:
+        """A patient with this name (ignoring case) and date of birth, if any.
+
+        How an import recognises someone already registered
+        (``docs/modules/17-data-import-export.md`` §4 rule 4). Deactivated
+        patients count: re-importing them would create a second record.
+
+        :param hospital_id: The tenant to scope to.
+        :param first_name: Given name.
+        :param last_name: Family name.
+        :param date_of_birth: Date of birth.
+        :returns: The first match, or ``None``.
+        """
+        stmt = (
+            self._scoped(hospital_id, include_deleted=True)
+            .where(
+                func.lower(Patient.first_name) == first_name.strip().lower(),
+                func.lower(Patient.last_name) == last_name.strip().lower(),
+                Patient.date_of_birth == date_of_birth,
+            )
+            .limit(1)
+        )
+        result = await self._session.execute(stmt)
+        return result.unique().scalars().first()
+
     async def search_patients(
         self,
         hospital_id: uuid.UUID,

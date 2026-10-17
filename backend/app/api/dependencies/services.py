@@ -122,6 +122,7 @@ from app.services.doctor_service import (
 )
 from app.services.hospital_provisioning_service import HospitalProvisioningService
 from app.services.hospital_service import HospitalService
+from app.services.import_service import ImportService
 from app.services.inventory_po_service import InventoryPurchaseOrderService
 from app.services.inventory_service import InventoryService
 from app.services.lab_catalog_service import LabCatalogService
@@ -464,7 +465,6 @@ def get_lab_service(
     )
 
 
-# ── Pharmacy module ─────────────────────────────────────────────────────────
 def get_pharmacy_catalog_service(
     medicines: MedicineRepository = Depends(get_medicine_repository),
     hospitals: HospitalRepository = Depends(get_hospital_repository),
@@ -657,3 +657,34 @@ __all__ = [
     "get_booked_interval_source",
     "get_doctor_service",
 ]
+
+
+# ── Data import ─────────────────────────────────────────────────────────────
+def get_import_service(
+    patients: PatientService = Depends(get_patient_service),
+    services: ServiceCatalogService = Depends(get_service_catalog_service),
+    medicines: PharmacyCatalogService = Depends(get_pharmacy_catalog_service),
+    lab_tests: LabCatalogService = Depends(get_lab_catalog_service),
+    patient_lookup: PatientRepository = Depends(get_patient_repository),
+    service_lookup: ServiceCatalogRepository = Depends(get_service_catalog_repository),
+    medicine_lookup: MedicineRepository = Depends(get_medicine_repository),
+    lab_test_lookup: LabTestRepository = Depends(get_lab_test_repository),
+    session: AsyncSession = Depends(get_db_session),
+    audit: AuditSink = Depends(get_audit_sink),
+) -> ImportService:
+    """Provide an :class:`ImportService` over the modules' own services."""
+    return ImportService(
+        patients=patients,
+        services=services,
+        medicines=medicines,
+        lab_tests=lab_tests,
+        patient_lookup=patient_lookup,
+        service_lookup=service_lookup,
+        medicine_lookup=medicine_lookup,
+        lab_test_lookup=lab_test_lookup,
+        session=session,
+        audit=audit,
+    )
+
+
+# ── Pharmacy module ─────────────────────────────────────────────────────────
