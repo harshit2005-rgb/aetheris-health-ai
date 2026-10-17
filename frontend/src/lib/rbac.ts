@@ -214,7 +214,8 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'lab.order.read', 'lab.order.create', 'lab.order.cancel', 'lab.order.collect_sample',
     'lab.order.enter_results', 'lab.order.release', 'lab.order.amend',
     'lab.report.download', 'lab.ai_explain',
-    'consultation.read',
+    // Holding write lets an admin grant the Doctor role; only the visit's own doctor can write a note.
+    'consultation.read', 'consultation.write', 'consultation.vitals.record',
     'pharmacy.medicine.read', 'pharmacy.medicine.create', 'pharmacy.medicine.update',
     'pharmacy.batch.read', 'pharmacy.batch.create', 'pharmacy.batch.update',
     'pharmacy.prescription.read', 'pharmacy.prescription.create', 'pharmacy.dispense.execute',
@@ -255,7 +256,8 @@ export const MOCK_PERMISSIONS_BY_ROLE: Record<Role, Permission[]> = {
     'lab.order.read', 'lab.order.create', 'lab.order.cancel', 'lab.order.collect_sample',
     'lab.order.enter_results', 'lab.order.release', 'lab.order.amend',
     'lab.report.download', 'lab.ai_explain',
-    'consultation.read',
+    // Holding write lets an admin grant the Doctor role; only the visit's own doctor can write a note.
+    'consultation.read', 'consultation.write', 'consultation.vitals.record',
     'pharmacy.medicine.read', 'pharmacy.medicine.create', 'pharmacy.medicine.update',
     'pharmacy.batch.read', 'pharmacy.batch.create', 'pharmacy.batch.update',
     'pharmacy.prescription.read', 'pharmacy.prescription.create', 'pharmacy.dispense.execute',

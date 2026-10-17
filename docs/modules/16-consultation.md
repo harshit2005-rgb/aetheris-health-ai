@@ -42,8 +42,8 @@ note, so a hospital can run its OPD on Atheris rather than on paper.
 |---|---|---|
 | Doctor | Create, edit, finalize and add addenda to notes for **their own** appointments; record vitals; read all notes in the hospital | Edit another doctor's note; edit a finalized note |
 | Nurse | Record vitals on a draft note (creating it if needed); read notes | Write clinical sections, finalize, add addenda |
-| Hospital Admin | Read notes | Write clinical content (clinical documentation is the doctor's) |
-| Super Admin | Read notes | — |
+| Hospital Admin | Read notes; record vitals. Holds `consultation.write` so they can grant the Doctor role (an admin may only grant what they hold) | Write clinical content: rule 3 limits writing to the visit's own doctor |
+| Super Admin | As Hospital Admin | — |
 | Others | Nothing | — |
 
 ## 4. Business Rules
@@ -177,7 +177,7 @@ N/A for this release — AI-drafted SOAP notes (feature 8.5) belong to Module 13
 
 ## 18. Rollout Plan
 
-Ships with v2.1 for all hospitals; permissions added to the seeded Doctor, Nurse, Hospital Admin and Super Admin roles.
+Ships with v2.1 for all hospitals; permissions added to the seeded Doctor and Nurse roles, and all three to Hospital Admin and Super Admin (who must hold a permission to grant a role that has it).
 
 ## 19. Future Scope
 

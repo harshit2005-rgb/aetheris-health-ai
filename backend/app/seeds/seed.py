@@ -314,6 +314,8 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "audit.read",
             "audit.export",
             "consultation.read",
+            "consultation.write",
+            "consultation.vitals.record",
         ],
     ),
     (
@@ -435,6 +437,8 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "doctor.leave.delete",
             "audit.read",
             "consultation.read",
+            "consultation.write",
+            "consultation.vitals.record",
         ],
     ),
     (
