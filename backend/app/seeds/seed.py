@@ -119,6 +119,10 @@ PERMISSION_DEFINITIONS: list[tuple[str, str, str]] = [
     ("lab.order.release", "lab", "Release lab results"),
     ("lab.order.amend", "lab", "Correct a released lab result"),
     ("lab.report.download", "lab", "Download lab report PDFs"),
+    # Consultation (EMR) — docs/modules/16-consultation.md §10
+    ("consultation.read", "consultation", "Read consultation notes"),
+    ("consultation.write", "consultation", "Write, finalize and add to own consultation notes"),
+    ("consultation.vitals.record", "consultation", "Record a visit's vitals"),
     ("lab.ai_explain", "lab", "Request an AI explanation of lab results"),
     # Pharmacy
     ("pharmacy.medicine.read", "pharmacy", "View the medicine catalog"),
@@ -309,6 +313,7 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "doctor.leave.delete",
             "audit.read",
             "audit.export",
+            "consultation.read",
         ],
     ),
     (
@@ -429,6 +434,7 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "doctor.leave.create",
             "doctor.leave.delete",
             "audit.read",
+            "consultation.read",
         ],
     ),
     (
@@ -463,6 +469,9 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "doctor.availability.update",
             "doctor.leave.create",
             "doctor.leave.delete",
+            "consultation.read",
+            "consultation.write",
+            "consultation.vitals.record",
         ],
     ),
     (
@@ -484,6 +493,8 @@ SYSTEM_ROLES: list[tuple[str, str, list[str]]] = [
             "department.read",
             "doctor.read",
             "doctor.availability.read",
+            "consultation.read",
+            "consultation.vitals.record",
         ],
     ),
     (

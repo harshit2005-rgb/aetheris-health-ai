@@ -35,6 +35,7 @@ from app.models.billing import (
     Refund,
     Service,
 )
+from app.models.consultation import Consultation, ConsultationAddendum, ConsultationStatus
 from app.models.department import Department, DepartmentStatus
 from app.models.doctor import (
     Doctor,
@@ -219,4 +220,8 @@ __all__ = [
     "DoctorLeave",
     "DoctorStatus",
     "SlotStatus",
+    # Consultation
+    "Consultation",
+    "ConsultationAddendum",
+    "ConsultationStatus",
 ]

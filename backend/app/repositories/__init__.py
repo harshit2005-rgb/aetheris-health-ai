@@ -26,6 +26,7 @@ from app.repositories.auth_throttle_repository import (
     TrustedDeviceRepository,
 )
 from app.repositories.base import BaseRepository
+from app.repositories.consultation_repository import ConsultationRepository
 from app.repositories.department_repository import DepartmentRepository
 from app.repositories.doctor_repository import DoctorRepository
 from app.repositories.hospital_repository import HospitalRepository
@@ -58,6 +59,7 @@ from app.repositories.service_catalog_repository import ServiceCatalogRepository
 from app.repositories.user_repository import UserRepository
 
 __all__ = [
+    "ConsultationRepository",
     "AuthThrottleRepository",
     "TrustedDeviceRepository",
     "AppointmentRepository",
